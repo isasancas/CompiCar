@@ -1,0 +1,153 @@
+package com.compicar.reserva;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import com.compicar.checkin.Checkin;
+import com.compicar.pago.Pago;
+import com.compicar.parada.Parada;
+import com.compicar.persona.Persona;
+import com.compicar.viaje.Viaje;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "reserva")
+public abstract class Reserva {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private EstadoReserva estado;
+
+    @Column(nullable = false)
+    private LocalDateTime fechaHoraReserva;
+
+    @ManyToOne
+    @JoinColumn(name = "persona_id", nullable = false)
+    private Persona persona;
+
+    @ManyToOne
+    @JoinColumn(name = "parada_subida_id", nullable = false)
+    private Parada paradaSubida;
+
+    @ManyToOne
+    @JoinColumn(name = "parada_bajada_id", nullable = false)
+    private Parada paradaBajada;
+
+    @OneToMany(mappedBy = "reserva")
+    private List<Checkin> checkins;
+
+    @OneToOne(mappedBy = "reserva")
+    private Pago pago;
+
+    @ManyToOne
+    @JoinColumn(name = "viaje_id", nullable = false)
+    private Viaje viaje;
+
+    // Constructores
+    public Reserva() {
+    }
+
+    public Reserva(EstadoReserva estado, LocalDateTime fechaHoraReserva, Persona persona, Parada paradaSubida,
+            Parada paradaBajada, Viaje viaje) {
+        this.estado = estado;
+        this.fechaHoraReserva = fechaHoraReserva;
+        this.persona = persona;
+        this.paradaSubida = paradaSubida;
+        this.paradaBajada = paradaBajada;
+        this.viaje = viaje;
+    }
+
+    // Getters
+    public Long getId() {
+        return id;
+    }
+
+    public EstadoReserva getEstado() {
+        return estado;
+    }
+
+    public LocalDateTime getFechaHoraReserva() {
+        return fechaHoraReserva;
+    }
+
+    public Persona getPersona() {
+        return persona;
+    }
+
+    public Parada getParadaSubida() {
+        return paradaSubida;
+    }
+
+    public Parada getParadaBajada() {
+        return paradaBajada;
+    }
+
+    public List<Checkin> getCheckins() {
+        return checkins;
+    }
+
+    public Pago getPago() {
+        return pago;
+    }
+
+    public Viaje getViaje() {
+        return viaje;
+    }
+
+    // Setters
+    public void setEstado(EstadoReserva estado) {
+        this.estado = estado;
+    }
+
+    public void setFechaHoraReserva(LocalDateTime fechaHoraReserva) {
+        this.fechaHoraReserva = fechaHoraReserva;
+    }
+
+    public void setPersona(Persona persona) {
+        this.persona = persona;
+    }
+
+    public void setParadaSubida(Parada paradaSubida) {
+        this.paradaSubida = paradaSubida;
+    }
+
+    public void setParadaBajada(Parada paradaBajada) {
+        this.paradaBajada = paradaBajada;
+    }
+
+    public void setCheckins(List<Checkin> checkins) {
+        this.checkins = checkins;
+    }
+
+    public void setPago(Pago pago) {
+        this.pago = pago;
+    }
+
+    public void setViaje(Viaje viaje) {
+        this.viaje = viaje;
+    }
+
+    @Override
+    public String toString() {
+        return "Reserva{id=" + id + ", estado=" + estado + ", fechaHoraReserva=" + fechaHoraReserva
+                + ", persona=" + persona.getId() + ", paradaSubida=" + paradaSubida.getId() + ", paradaBajada="
+                + paradaBajada.getId() + ", viaje=" + viaje.getId() + "}";
+    }
+
+}
