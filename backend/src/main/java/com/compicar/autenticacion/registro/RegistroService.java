@@ -91,9 +91,6 @@ public class RegistroService {
         String contrasenaEncriptada = passwordEncoder.encode(registro.getContrasena());
         nuevaPersona.setContrasena(contrasenaEncriptada);
         
-        // Inicializar reputación
-        nuevaPersona.setReputacion(0.0);
-        
         return nuevaPersona;
     }
 }

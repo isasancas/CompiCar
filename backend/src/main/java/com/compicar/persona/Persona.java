@@ -40,8 +40,6 @@ public class Persona {
     @Column(unique = true)
     private String telefono;
 
-    private Double reputacion;
-
     @OneToMany(mappedBy = "persona")
     private List<Vehiculo> vehiculos;
 
@@ -56,6 +54,18 @@ public class Persona {
 
     @OneToMany(mappedBy = "valorado")
     private List<Valoracion> valoracionesRecibidas;
+
+    // Atributo derivado
+    public Double getReputacion() {
+        if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
+            return 0.0;
+        }
+
+        return valoracionesRecibidas.stream()
+                           .mapToDouble(Valoracion::getPuntuacion)
+                           .average()
+                           .orElse(0.0);
+    }
 
     // Constructores
     public Persona() {
@@ -72,7 +82,7 @@ public class Persona {
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
-            String telefono, Double reputacion, List<Vehiculo> vehiculos, List<Reserva> reservas, List<Viaje> viajes,
+            String telefono, List<Vehiculo> vehiculos, List<Reserva> reservas, List<Viaje> viajes,
             List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
@@ -80,7 +90,6 @@ public class Persona {
         this.contrasena = contrasena;
         this.email = email;
         this.telefono = telefono;
-        this.reputacion = reputacion;
         this.vehiculos = vehiculos;
         this.reservas = reservas;
         this.viajes = viajes;
@@ -115,10 +124,6 @@ public class Persona {
 
     public String getTelefono() {
         return telefono;
-    }
-
-    public Double getReputacion() {
-        return reputacion;
     }
 
     public List<Vehiculo> getVehiculos() {
@@ -166,10 +171,6 @@ public class Persona {
         this.telefono = telefono;
     }
 
-    public void setReputacion(Double reputacion) {
-        this.reputacion = reputacion;
-    }
-
     public void setVehiculos(List<Vehiculo> vehiculos) {
         this.vehiculos = vehiculos;
     }
@@ -194,6 +195,6 @@ public class Persona {
     public String toString() {
         return "Persona{id=" + id + ", nombre='" + nombre + "', primerApellido='" + primerApellido
                 + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono
-                + "', reputacion=" + reputacion + "}";
+                + "', reputacion=" + getReputacion() + "}";
     }
 }
