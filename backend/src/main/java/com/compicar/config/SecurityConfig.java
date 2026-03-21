@@ -50,9 +50,11 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(authz -> authz
                 // Permitir acceso al endpoint de registro sin autenticación
-                .requestMatchers("/registro/**").permitAll()
+                .requestMatchers("/api/registro/**").permitAll()
                 // Permitir acceso al endpoint de login sin autenticación
-                .requestMatchers("/login/**").permitAll()
+                .requestMatchers("/api/login/**").permitAll()
+                // Permitir acceso a los endpoints de personas sin autenticación (se modificara mas adelante)
+                .requestMatchers("/api/personas/**").permitAll()
                 // Las demás peticiones requieren autenticación
                 .anyRequest().authenticated()
             )

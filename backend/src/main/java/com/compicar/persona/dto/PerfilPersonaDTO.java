@@ -1,5 +1,7 @@
 package com.compicar.persona.dto;
 
+import com.compicar.persona.Persona;
+
 public class PerfilPersonaDTO {
 
     private Long id;
@@ -11,6 +13,16 @@ public class PerfilPersonaDTO {
     private Double reputacion;
 
     public PerfilPersonaDTO() {
+    }
+
+    public PerfilPersonaDTO(Persona persona) {
+        this.id = persona.getId();
+        this.nombre = persona.getNombre();
+        this.primerApellido = persona.getPrimerApellido();
+        this.segundoApellido = persona.getSegundoApellido();
+        this.email = persona.getEmail();
+        this.telefono = persona.getTelefono();
+        this.reputacion = persona.getReputacion();
     }
 
     public PerfilPersonaDTO(Long id, String nombre, String primerApellido, String segundoApellido, String email,

@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/registro")
+@RequestMapping("/api/registro")
 public class RegistroController {
 
     private final RegistroService registroService;

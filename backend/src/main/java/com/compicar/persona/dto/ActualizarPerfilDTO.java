@@ -1,5 +1,7 @@
 package com.compicar.persona.dto;
 
+import com.compicar.persona.Persona;
+
 public class ActualizarPerfilDTO {
     
     private String nombre;
@@ -9,6 +11,14 @@ public class ActualizarPerfilDTO {
     private String telefono;
 
     public ActualizarPerfilDTO() {
+    }
+
+    public ActualizarPerfilDTO(Persona persona) {
+        this.nombre = persona.getNombre();
+        this.primerApellido = persona.getPrimerApellido();
+        this.segundoApellido = persona.getSegundoApellido();
+        this.email = persona.getEmail();
+        this.telefono = persona.getTelefono();
     }
 
     public ActualizarPerfilDTO(String nombre, String primerApellido, String segundoApellido, String email,
