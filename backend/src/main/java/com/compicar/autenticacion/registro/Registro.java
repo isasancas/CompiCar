@@ -18,12 +18,11 @@ public class Registro {
     String nombre;
     
     @NotBlank(message = "El primer apellido no puede estar vacío")
-    String apellido1;
+    String primerApellido;
 
-    String apellido2;
+    String segundoApellido;
     
     @NotBlank(message = "El email no puede estar vacío")
-    @UniqueElements(message = "El email ya está registrado")
     @Email(message = "El email no es válido")
     String email;
     
@@ -54,20 +53,20 @@ public class Registro {
         this.nombre = nombre;
     }
 
-    public String getApellido1() {
-        return apellido1;
+    public String getPrimerApellido() {
+        return primerApellido;
     }
 
-    public void setApellido1(String apellido1) {
-        this.apellido1 = apellido1;
+    public void setPrimerApellido(String primerApellido) {
+        this.primerApellido = primerApellido;
     }
 
-    public String getApellido2() {
-        return apellido2;
+    public String getSegundoApellido() {
+        return segundoApellido;
     }
 
-    public void setApellido2(String apellido2) {
-        this.apellido2 = apellido2;
+    public void setSegundoApellido(String segundoApellido) {
+        this.segundoApellido = segundoApellido;
     }
 
     public String getEmail() {

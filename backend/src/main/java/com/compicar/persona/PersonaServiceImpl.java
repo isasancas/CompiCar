@@ -33,8 +33,8 @@ public class PersonaServiceImpl implements PersonaService {
 
         Persona persona = new Persona();
         persona.setNombre(registro.getNombre());
-        persona.setPrimerApellido(registro.getApellido1());
-        persona.setSegundoApellido(registro.getApellido2());
+        persona.setPrimerApellido(registro.getPrimerApellido());
+        persona.setSegundoApellido(registro.getSegundoApellido());
         persona.setEmail(registro.getEmail());
         persona.setTelefono(registro.getNumTelefono());
 
