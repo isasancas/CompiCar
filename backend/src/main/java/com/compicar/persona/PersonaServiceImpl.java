@@ -1,8 +1,11 @@
 package com.compicar.persona;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
@@ -57,26 +60,34 @@ public class PersonaServiceImpl implements PersonaService {
 
     @Override
     public ActualizarPerfilDTO actualizarPerfil(Long personaId, ActualizarPerfilDTO perfilActualizado) {
-        Persona persona = personaRepository.findById(personaId)
-                .orElseThrow(() -> new IllegalArgumentException("Persona no encontrada"));
-        
-        persona.setNombre(perfilActualizado.getNombre());
-        persona.setPrimerApellido(perfilActualizado.getPrimerApellido());
-        persona.setSegundoApellido(perfilActualizado.getSegundoApellido());
-        persona.setTelefono(perfilActualizado.getTelefono());
 
-        if (!persona.getEmail().equals(perfilActualizado.getEmail())) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+
+        Persona personaAutenticada = personaRepository.findByEmail(email)
+        .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        if (!personaAutenticada.getId().equals(personaId)) {
+            throw new AccessDeniedException("No puedes modificar el perfil de otro usuario");
+        }
+        
+        personaAutenticada.setNombre(perfilActualizado.getNombre());
+        personaAutenticada.setPrimerApellido(perfilActualizado.getPrimerApellido());
+        personaAutenticada.setSegundoApellido(perfilActualizado.getSegundoApellido());
+        personaAutenticada.setTelefono(perfilActualizado.getTelefono());
+
+        if (!personaAutenticada.getEmail().equals(perfilActualizado.getEmail())) {
             if (personaRepository.existsByEmail(perfilActualizado.getEmail())) {
                 throw new IllegalArgumentException("El email ya está registrado");
             }
-            if (!passwordEncoder.matches(perfilActualizado.getContrasenaActual(), persona.getContrasena())) {
+            if (!passwordEncoder.matches(perfilActualizado.getContrasenaActual(), personaAutenticada.getContrasena())) {
                 throw new IllegalArgumentException("La contraseña actual es incorrecta");
             } else {
-                persona.setEmail(perfilActualizado.getEmail());
+                personaAutenticada.setEmail(perfilActualizado.getEmail());
             }
         }
         
-        Persona personaActualizada = personaRepository.save(persona);
+        Persona personaActualizada = personaRepository.save(personaAutenticada);
         return new ActualizarPerfilDTO(personaActualizada);
     }
 
