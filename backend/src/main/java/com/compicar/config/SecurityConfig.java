@@ -52,7 +52,7 @@ public class SecurityConfig {
                 // Permitir acceso al endpoint de registro sin autenticación
                 .requestMatchers("/registro/**").permitAll()
                 // Permitir acceso al endpoint de login sin autenticación
-                .requestMatchers("/login/**").permitAll()
+                .requestMatchers("/login/**", "/api/login").permitAll()
                 // Las demás peticiones requieren autenticación
                 .anyRequest().authenticated()
             )

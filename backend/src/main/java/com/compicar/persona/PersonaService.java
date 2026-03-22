@@ -7,4 +7,8 @@ public interface PersonaService {
 
     Persona crearPersonaDesdeRegistro(Registro registro, PasswordEncoder passwordEncoder);
 
+    Persona obtenerPersonaPorEmail(String email);
+
+    Persona obtenerPersonaPorNombrePersona(String username);
+
 }
