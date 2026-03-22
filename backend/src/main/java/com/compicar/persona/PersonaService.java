@@ -10,9 +10,7 @@ public interface PersonaService {
     PerfilPersonaDTO obtenerPerfil(Long personaId);
     ActualizarPerfilDTO actualizarPerfil(Long personaId, ActualizarPerfilDTO perfilActualizado);
     Persona crearPersonaDesdeRegistro(Registro registro, PasswordEncoder passwordEncoder);
-
     Persona obtenerPersonaPorEmail(String email);
-
     Persona obtenerPersonaPorNombrePersona(String username);
 
 }

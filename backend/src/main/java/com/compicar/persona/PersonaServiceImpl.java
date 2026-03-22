@@ -91,6 +91,7 @@ public class PersonaServiceImpl implements PersonaService {
         return new ActualizarPerfilDTO(personaActualizada);
     }
 
+    @Override
     public Persona obtenerPersonaPorNombrePersona(String username) {
        Persona persona = personaRepository.findByNombre(username);
          if (persona == null) {
