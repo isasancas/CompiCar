@@ -44,4 +44,24 @@ public class PersonaServiceImpl implements PersonaService {
         return personaRepository.save(persona);
     }
 
+    @Override
+    public Persona obtenerPersonaPorNombrePersona(String username) {
+       Persona persona = personaRepository.findByNombre(username);
+         if (persona == null) {
+              throw new RuntimeException("Usuario no encontrado");
+         }
+        return persona;
+    }
+
+    @Override
+    public Persona obtenerPersonaPorEmail(String email) {
+        Persona persona = personaRepository.findByEmail(email);
+        if (persona == null) {
+            throw new RuntimeException("Usuario no encontrado");
+        }
+        return persona;
+    }
+
+    
+
 }

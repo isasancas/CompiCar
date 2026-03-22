@@ -15,6 +15,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
     /**
      * Define el bean PasswordEncoder para encriptar contraseñas
      * Usa BCrypt que es el estándar de seguridad recomendado
@@ -49,15 +55,27 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(authz -> authz
-                // Permitir acceso al endpoint de registro sin autenticación
+                // Permitir acceso a registro y login sin autenticación
                 .requestMatchers("/registro/**").permitAll()
-                // Permitir acceso al endpoint de login sin autenticación
-                .requestMatchers("/login/**").permitAll()
+                .requestMatchers("/api/login").permitAll()
+                // El logout acepta token bearer, pero no obliga a ser logueado por defecto
+                .requestMatchers("/api/logout").permitAll()
                 // Las demás peticiones requieren autenticación
                 .anyRequest().authenticated()
             )
-            .csrf(csrf -> csrf.disable()); // Deshabilitar CSRF para APIs REST
+            .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
+            .csrf(csrf -> csrf.disable())
+            .httpBasic(httpBasic -> httpBasic.disable())
+            .formLogin(form -> form.disable()); // Deshabilitar CSRF y login clásico para APIs REST
 
         return http.build();
     }
+
+    @Bean
+    public org.springframework.security.core.userdetails.UserDetailsService userDetailsService() {
+        return username -> {
+            throw new org.springframework.security.core.userdetails.UsernameNotFoundException("No user details service for JWT auth");
+        };
+    }
 }
+
