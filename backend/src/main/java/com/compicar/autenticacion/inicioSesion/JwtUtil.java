@@ -22,7 +22,15 @@ public class JwtUtil {
     private long jwtExpirationMs;
 
     private Key getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        byte[] keyBytes;
+        try {
+            keyBytes = Decoders.BASE64.decode(jwtSecret);
+        } catch (Exception e) {
+            keyBytes = Decoders.BASE64URL.decode(jwtSecret);
+        }
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException("La clave JWT debe ser de al menos 256 bits (32 bytes)");
+        }
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
