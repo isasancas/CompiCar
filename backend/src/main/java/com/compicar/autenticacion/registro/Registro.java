@@ -6,9 +6,6 @@ import jakarta.validation.constraints.Pattern;
 
 public class Registro {
     
-    @NotBlank(message = "El username no puede estar vacío")
-    String username;
-    
     @NotBlank(message = "La contraseña no puede estar vacía")
     String contrasena;
     
@@ -26,14 +23,6 @@ public class Registro {
     
     @Pattern(regexp = "^\\+?[0-9]{7,15}$", message = "El teléfono no es válido")
     String numTelefono;
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
 
     public String getContrasena() {
         return contrasena;
