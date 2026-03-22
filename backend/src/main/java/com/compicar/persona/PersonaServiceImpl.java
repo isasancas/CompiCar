@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
 import com.compicar.autenticacion.registro.Registro;
 
@@ -14,10 +15,12 @@ import jakarta.transaction.Transactional;
 public class PersonaServiceImpl implements PersonaService {
 
     private final PersonaRepository personaRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public PersonaServiceImpl(PersonaRepository personaRepository) {
+    public PersonaServiceImpl(PersonaRepository personaRepository, PasswordEncoder passwordEncoder) {
         this.personaRepository = personaRepository;
+        this.passwordEncoder = passwordEncoder;
     }
     
     @Override
@@ -53,7 +56,7 @@ public class PersonaServiceImpl implements PersonaService {
     }
 
     @Override
-    public PerfilPersonaDTO actualizarPerfil(Long personaId, PerfilPersonaDTO perfilActualizado) {
+    public ActualizarPerfilDTO actualizarPerfil(Long personaId, ActualizarPerfilDTO perfilActualizado) {
         Persona persona = personaRepository.findById(personaId)
                 .orElseThrow(() -> new IllegalArgumentException("Persona no encontrada"));
         
@@ -61,9 +64,20 @@ public class PersonaServiceImpl implements PersonaService {
         persona.setPrimerApellido(perfilActualizado.getPrimerApellido());
         persona.setSegundoApellido(perfilActualizado.getSegundoApellido());
         persona.setTelefono(perfilActualizado.getTelefono());
+
+        if (!persona.getEmail().equals(perfilActualizado.getEmail())) {
+            if (personaRepository.existsByEmail(perfilActualizado.getEmail())) {
+                throw new IllegalArgumentException("El email ya está registrado");
+            }
+            if (!passwordEncoder.matches(perfilActualizado.getContrasenaActual(), persona.getContrasena())) {
+                throw new IllegalArgumentException("La contraseña actual es incorrecta");
+            } else {
+                persona.setEmail(perfilActualizado.getEmail());
+            }
+        }
         
         Persona personaActualizada = personaRepository.save(persona);
-        return new PerfilPersonaDTO(personaActualizada);
+        return new ActualizarPerfilDTO(personaActualizada);
     }
 
 }

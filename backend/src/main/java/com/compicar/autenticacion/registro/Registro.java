@@ -1,7 +1,5 @@
 package com.compicar.autenticacion.registro;
 
-import org.hibernate.validator.constraints.UniqueElements;
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

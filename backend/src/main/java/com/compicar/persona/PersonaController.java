@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
 
 @RestController
@@ -31,10 +32,10 @@ public class PersonaController {
 
 
     @PutMapping("/{personaId}/perfil")
-    public ResponseEntity<PerfilPersonaDTO> actualizarPerfil(
+    public ResponseEntity<ActualizarPerfilDTO> actualizarPerfil(
             @PathVariable Long personaId,
-            @RequestBody PerfilPersonaDTO perfilActualizado) {
-        PerfilPersonaDTO perfil = personaService.actualizarPerfil(personaId, perfilActualizado);
+            @RequestBody ActualizarPerfilDTO perfilActualizado) {
+        ActualizarPerfilDTO perfil = personaService.actualizarPerfil(personaId, perfilActualizado);
         return ResponseEntity.ok(perfil);
     }
     
