@@ -15,6 +15,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
     /**
      * Define el bean PasswordEncoder para encriptar contraseñas
      * Usa BCrypt que es el estándar de seguridad recomendado
@@ -53,13 +59,25 @@ public class SecurityConfig {
                 .requestMatchers("/api/registro/**").permitAll()
                 // Permitir acceso al endpoint de login sin autenticación
                 .requestMatchers("/api/login/**").permitAll()
+                .requestMatchers("/api/logout").authenticated()
                 // Permitir acceso a los endpoints de personas sin autenticación (se modificara mas adelante)
                 .requestMatchers("/api/personas/**").authenticated()
                 // Las demás peticiones requieren autenticación
                 .anyRequest().authenticated()
             )
-            .csrf(csrf -> csrf.disable()); // Deshabilitar CSRF para APIs REST
+            .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
+            .csrf(csrf -> csrf.disable())
+            .httpBasic(httpBasic -> httpBasic.disable())
+            .formLogin(form -> form.disable()); // Deshabilitar CSRF y login clásico para APIs REST
 
         return http.build();
     }
+
+    @Bean
+    public org.springframework.security.core.userdetails.UserDetailsService userDetailsService() {
+        return username -> {
+            throw new org.springframework.security.core.userdetails.UsernameNotFoundException("No user details service for JWT auth");
+        };
+    }
 }
+

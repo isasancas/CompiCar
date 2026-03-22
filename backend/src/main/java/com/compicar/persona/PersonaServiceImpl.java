@@ -91,4 +91,18 @@ public class PersonaServiceImpl implements PersonaService {
         return new ActualizarPerfilDTO(personaActualizada);
     }
 
+    public Persona obtenerPersonaPorNombrePersona(String username) {
+       Persona persona = personaRepository.findByNombre(username);
+         if (persona == null) {
+              throw new RuntimeException("Usuario no encontrado");
+         }
+        return persona;
+    }
+
+    @Override
+    public Persona obtenerPersonaPorEmail(String email) {
+        Persona persona = personaRepository.findByEmail(email)
+        .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        return persona;
+    }
 }

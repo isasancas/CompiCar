@@ -23,7 +23,6 @@ public class PersonaController {
         this.personaService = personaService;
     }
 
-
     @GetMapping("/{personaId}/perfil")
     public ResponseEntity<PerfilPersonaDTO> obtenerPerfil(@PathVariable Long personaId) {
         PerfilPersonaDTO perfil = personaService.obtenerPerfil(personaId);
@@ -38,5 +37,15 @@ public class PersonaController {
         ActualizarPerfilDTO perfil = personaService.actualizarPerfil(personaId, perfilActualizado);
         return ResponseEntity.ok(perfil);
     }
+
+    @RequestMapping("/obtenerPorNombrePersona?username={username}")
+    public Persona obtenerPersonaPorNomPersona(String username) {
+        return personaService.obtenerPersonaPorNombrePersona(username);
+    }
+
+    @RequestMapping("/obtenerPorEmail?email={email}")
+    public Persona obtenerPersonaPorEmail(String email) {
+        return personaService.obtenerPersonaPorEmail(email);
+    }    
     
 }
