@@ -16,9 +16,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private final com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
-    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter, CustomAccessDeniedHandler customAccessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.customAccessDeniedHandler = customAccessDeniedHandler;
     }
 
     /**
@@ -66,6 +68,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
+            .exceptionHandling(exception -> exception.accessDeniedHandler(customAccessDeniedHandler))
             .csrf(csrf -> csrf.disable())
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(form -> form.disable()); // Deshabilitar CSRF y login clásico para APIs REST
