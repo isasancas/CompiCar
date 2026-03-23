@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/registro")
+@RequestMapping("/api/registro")
 public class RegistroController {
 
     private final RegistroService registroService;

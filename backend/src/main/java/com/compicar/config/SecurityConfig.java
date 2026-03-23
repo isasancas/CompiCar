@@ -16,9 +16,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private final com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
-    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter, CustomAccessDeniedHandler customAccessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.customAccessDeniedHandler = customAccessDeniedHandler;
     }
 
     /**
@@ -55,15 +57,18 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(authz -> authz
-                // Permitir acceso a registro y login sin autenticación
-                .requestMatchers("/registro/**").permitAll()
-                .requestMatchers("/api/login").permitAll()
-                // El logout acepta token bearer, pero no obliga a ser logueado por defecto
-                .requestMatchers("/api/logout").permitAll()
+                // Permitir acceso al endpoint de registro sin autenticación
+                .requestMatchers("/api/registro/**").permitAll()
+                // Permitir acceso al endpoint de login sin autenticación
+                .requestMatchers("/api/login/**").permitAll()
+                .requestMatchers("/api/logout").authenticated()
+                // Permitir acceso a los endpoints de personas sin autenticación (se modificara mas adelante)
+                .requestMatchers("/api/personas/**").authenticated()
                 // Las demás peticiones requieren autenticación
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
+            .exceptionHandling(exception -> exception.accessDeniedHandler(customAccessDeniedHandler))
             .csrf(csrf -> csrf.disable())
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(form -> form.disable()); // Deshabilitar CSRF y login clásico para APIs REST

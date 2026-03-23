@@ -1,5 +1,7 @@
 package com.compicar.persona;
 
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -13,10 +15,10 @@ public interface PersonaRepository extends JpaRepository<Persona, Long> {
     boolean existsByTelefono(String telefono);
     
     @Query("SELECT p FROM Persona p WHERE p.email = ?1")
-    Persona findByEmail(String email);
+    Optional<Persona> findByEmail(String email);
 
     @Query("SELECT p FROM Persona p WHERE p.telefono = ?1")
-    Persona findByTelefono(String telefono);
+    Optional<Persona> findByTelefono(String telefono);
 
     @Query("SELECT p FROM Persona p WHERE p.nombre = ?1")
     Persona findByNombre(String nombre);
