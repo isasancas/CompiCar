@@ -20,7 +20,7 @@ import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaService;
 
 @ExtendWith(MockitoExtension.class)
-class InicioSesionServiceTests {
+public class InicioSesionServiceTests {
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -49,7 +49,7 @@ class InicioSesionServiceTests {
 
     @Test
     void testIniciarSesion_devuelve200() {
-        // Arrange
+        // Given
         InicioSesion request = new InicioSesion();
         request.setEmail(persona.getEmail());
         request.setContrasena(persona.getContrasena());
@@ -58,24 +58,24 @@ class InicioSesionServiceTests {
         when(passwordEncoder.matches(request.getContrasena(), persona.getContrasena())).thenReturn(true);
         when(jwtUtil.generateToken(persona.getEmail())).thenReturn("token123");
         
-        //Act
+        // When
         String token = inicioSesionService.iniciarSesion(request);
         
-        // Assert
+        // Then
         assertNotNull(token);
         assertEquals("token123", token);
     }
 
     @Test
     void testIniciarSesion_usuarioNoEncontrado() {
-        // Arrange
+        // Given
         InicioSesion request = new InicioSesion();
         request.setEmail(persona.getEmail());
         request.setContrasena(persona.getContrasena());
 
         when(personaService.obtenerPersonaPorEmail(persona.getEmail())).thenReturn(null);
         
-        // Act & Assert
+        // When & Then
         assertThatThrownBy(() -> inicioSesionService.iniciarSesion(request))
             .isInstanceOf(RuntimeException.class)
             .hasMessage("Usuario no encontrado");
@@ -83,7 +83,7 @@ class InicioSesionServiceTests {
 
     @Test
     void testIniciarSesion_contrasenaIncorrecta() {
-        // Arrange
+        // Given
         InicioSesion request = new InicioSesion();
         request.setEmail(persona.getEmail());
         request.setContrasena(persona.getContrasena());
@@ -91,7 +91,7 @@ class InicioSesionServiceTests {
         when(personaService.obtenerPersonaPorEmail(persona.getEmail())).thenReturn(persona);
         when(passwordEncoder.matches(request.getContrasena(), persona.getContrasena())).thenReturn(false);
 
-        // Act & Assert
+        // When & Then
         assertThatThrownBy(() -> inicioSesionService.iniciarSesion(request))
             .isInstanceOf(RuntimeException.class)
             .hasMessage("Contraseña incorrecta");
