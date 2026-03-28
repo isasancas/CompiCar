@@ -28,10 +28,10 @@ jobs:
 
     - name: Install Koyeb CLI
       run: |
-        wget https://github.com/koyeb/koyeb-cli/releases/latest/download/koyeb-cli_linux_amd64.tar.gz
-        tar -xzf koyeb-cli_linux_amd64.tar.gz
-        chmod +x koyeb
-        sudo mv koyeb /usr/local/bin/
+        wget https://github.com/koyeb/koyeb-cli/releases/latest/download/koyeb-cli_Linux_x86_64.tar.gz
+        tar -xzf koyeb-cli_Linux_x86_64.tar.gz
+        chmod +x koyeb-cli
+        sudo mv koyeb-cli /usr/local/bin/koyeb
 
     - name: Deploy to Koyeb
       run: koyeb services update ${{ secrets.KOYEB_SERVICE_NAME }} --app ${{ secrets.KOYEB_APP_NAME }} --jar backend/target/*.jar --port 8080
