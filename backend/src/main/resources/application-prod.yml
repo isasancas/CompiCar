@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    # Usamos variables de entorno para que no haya contraseñas en GitHub
+    # El ?sslmode=require es OBLIGATORIO para Neon
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}?sslmode=require
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  
+  jpa:
+    show-sql: false # En producción mejor no llenar los logs de SQL
+    hibernate:
+      ddl-auto: validate
