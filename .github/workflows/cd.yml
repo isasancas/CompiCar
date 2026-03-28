@@ -27,7 +27,9 @@ jobs:
       working-directory: backend
 
     - name: Install Koyeb CLI
-      run: curl -fsSL https://github.com/koyeb/koyeb-cli/releases/latest/download/install.sh | sh
+      run: |
+        curl -fsSL https://github.com/koyeb/koyeb-cli/releases/latest/download/install.sh | sh
+        echo "$HOME/.koyeb/bin" >> $GITHUB_PATH
 
     - name: Deploy to Koyeb
       run: koyeb services update ${{ secrets.KOYEB_SERVICE_NAME }} --app ${{ secrets.KOYEB_APP_NAME }} --jar backend/target/*.jar --port 8080
