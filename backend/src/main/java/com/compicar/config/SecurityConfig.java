@@ -56,22 +56,28 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .csrf(csrf -> csrf.disable()) // Deshabilitado para APIs JWT
             .authorizeHttpRequests(authz -> authz
-                // Permitir acceso al endpoint de registro sin autenticación
+                // 1. PERMITIR FRONTEND (Recursos estáticos)
+                // Esto permite que cualquiera vea la web antes de loguearse
+                .requestMatchers("/", "/index.html", "/static/**", "/assets/**", 
+                                "/*.js", "/*.css", "/*.png", "/*.ico", "/*.svg").permitAll()
+
+                // 2. PERMITIR ENDPOINTS PÚBLICOS DE LA API
                 .requestMatchers("/api/registro/**").permitAll()
-                // Permitir acceso al endpoint de login sin autenticación
                 .requestMatchers("/api/login/**").permitAll()
+                
+                // 3. RESTRINGIR EL RESTO
                 .requestMatchers("/api/logout").authenticated()
-                // Permitir acceso a los endpoints de personas sin autenticación (se modificara mas adelante)
                 .requestMatchers("/api/personas/**").authenticated()
-                // Las demás peticiones requieren autenticación
+                
+                // Cualquier otra ruta de la API o endpoint nuevo requiere login
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(exception -> exception.accessDeniedHandler(customAccessDeniedHandler))
-            .csrf(csrf -> csrf.disable())
             .httpBasic(httpBasic -> httpBasic.disable())
-            .formLogin(form -> form.disable()); // Deshabilitar CSRF y login clásico para APIs REST
+            .formLogin(form -> form.disable());
 
         return http.build();
     }
