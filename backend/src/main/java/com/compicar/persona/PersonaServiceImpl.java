@@ -32,8 +32,13 @@ public class PersonaServiceImpl implements PersonaService {
             throw new IllegalArgumentException("El email ya está registrado");
         }
 
-        if (registro.getNumTelefono() != null && !registro.getNumTelefono().isEmpty()) {
-            if (personaRepository.existsByTelefono(registro.getNumTelefono())) {
+        String tel = registro.getNumTelefono();
+        if (tel != null && !tel.isEmpty()) {
+            if (!tel.matches("^\\+?[0-9]{7,15}$")) {
+                throw new IllegalArgumentException("El formato del teléfono es inválido");
+            }
+            
+            if (personaRepository.existsByTelefono(tel)) {
                 throw new IllegalArgumentException("El teléfono ya está registrado");
             }
         }
