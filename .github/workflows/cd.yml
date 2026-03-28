@@ -26,10 +26,12 @@ jobs:
       run: mvn clean package -DskipTests
       working-directory: backend
 
-    - name: Deploy to Heroku
-      uses: akhileshns/heroku-deploy@v3.13.15
+    - name: Deploy to Koyeb
+      uses: koyeb/action-deploy@v1
       with:
-        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-        heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
-        heroku_email: ${{ secrets.HEROKU_EMAIL }}
-        warfile: backend/target/*.jar  # Ajusta si es JAR, no WAR
+        api-token: ${{ secrets.KOYEB_API_TOKEN }}
+        app-name: ${{ secrets.KOYEB_APP_NAME }}
+        service-name: ${{ secrets.KOYEB_SERVICE_NAME }}
+        type: jar
+        jar-path: backend/target/*.jar
+        port: 8080
