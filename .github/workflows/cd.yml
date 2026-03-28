@@ -26,12 +26,10 @@ jobs:
       run: mvn clean package -DskipTests
       working-directory: backend
 
+    - name: Install Koyeb CLI
+      run: curl -fsSL https://github.com/koyeb/koyeb-cli/releases/latest/download/install.sh | sh
+
     - name: Deploy to Koyeb
-      uses: koyeb/action-deploy@v1
-      with:
-        api-token: ${{ secrets.KOYEB_API_TOKEN }}
-        app-name: ${{ secrets.KOYEB_APP_NAME }}
-        service-name: ${{ secrets.KOYEB_SERVICE_NAME }}
-        type: jar
-        jar-path: backend/target/*.jar
-        port: 8080
+      run: koyeb services update ${{ secrets.KOYEB_SERVICE_NAME }} --app ${{ secrets.KOYEB_APP_NAME }} --jar backend/target/*.jar --port 8080
+      env:
+        KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
