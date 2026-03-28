@@ -16,22 +16,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v5
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v5
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-
-    - name: Build with Maven
-      run: mvn clean package -DskipTests
-      working-directory: backend
-
     - name: Install Koyeb CLI
-      run: |
-        curl -fsSL https://github.com/koyeb/koyeb-cli/releases/latest/download/install.sh | sh
-        echo "$HOME/.koyeb/bin" >> $GITHUB_PATH
+      # Usamos la acción oficial que ya configura el PATH correctamente
+      uses: koyeb-community/install-koyeb-cli@v2
+      with:
+        api_token: ${{ secrets.KOYEB_API_TOKEN }}
 
     - name: Deploy to Koyeb
-      run: koyeb services update ${{ secrets.KOYEB_SERVICE_NAME }} --app ${{ secrets.KOYEB_APP_NAME }} --jar backend/target/*.jar --port 8080
-      env:
-        KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
+      # IMPORTANTE: Usamos 'redeploy' o 'update --git-branch' 
+      # para que Koyeb use el Dockerfile con el Frontend + Backend
+      run: |
+        koyeb service update ${{ secrets.KOYEB_APP_NAME }}/${{ secrets.KOYEB_SERVICE_NAME }} --git-branch main
