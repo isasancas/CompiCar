@@ -25,4 +25,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleInvalidFormat(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest().body(Map.of("error", "Formato de JSON inválido"));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleIllegalArgumentException(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+    }
 }
