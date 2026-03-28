@@ -39,7 +39,7 @@ public class PersonaControllerTest {
         ResponseEntity<PerfilPersonaDTO> respuesta = personaController.obtenerPerfil(1L);
 
         assertNotNull(respuesta);
-        assertEquals(200, respuesta.getStatusCode().value());
+        assertEquals(300, respuesta.getStatusCode().value());
         assertNotNull(respuesta.getBody());
         assertEquals(1L, respuesta.getBody().getId());
         assertEquals("Juan", respuesta.getBody().getNombre());
