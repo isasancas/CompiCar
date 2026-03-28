@@ -1,0 +1,29 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Install Koyeb CLI
+      # Usamos la acción oficial que ya configura el PATH correctamente
+      uses: koyeb-community/install-koyeb-cli@v2
+      with:
+        api_token: ${{ secrets.KOYEB_API_TOKEN }}
+
+    - name: Deploy to Koyeb
+      # IMPORTANTE: Usamos 'redeploy' o 'update --git-branch' 
+      # para que Koyeb use el Dockerfile con el Frontend + Backend
+      run: |
+        koyeb service update ${{ secrets.KOYEB_APP_NAME }}/${{ secrets.KOYEB_SERVICE_NAME }} --git-branch main
