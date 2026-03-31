@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PrivacyModal from '../components/PrivacyModal';
+import TermsModal from '../components/TermsModal';
 
 const Registro: React.FC = () => {
   const navigate = useNavigate();
@@ -12,10 +14,17 @@ const Registro: React.FC = () => {
     password: '',
     confirmPassword: ''
   });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
     setFormData(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleTermsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAcceptedTerms(e.target.checked);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,6 +33,11 @@ const Registro: React.FC = () => {
     // Validar campos requeridos
     if (!formData.nombre || !formData.primerApellido || !formData.email || !formData.password || !formData.telefono) {
       alert('Por favor, rellena todos los campos requeridos.');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      alert('Por favor, acepta los términos y políticas para poder registrarte.');
       return;
     }
 
@@ -179,6 +193,38 @@ const Registro: React.FC = () => {
               onChange={handleChange}
             />
           </div>
+          <div className="mb-4">
+            <label className="inline-flex items-start">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={handleTermsChange}
+                className="form-checkbox h-5 w-5 text-blue-600 mt-1"
+              />
+              <span className="ml-2 text-gray-700 text-sm">
+                He leído y acepto los{' '}
+                <button
+                  type="button"
+                  onClick={() => setIsTermsOpen(true)}
+                  className="text-blue-600 hover:underline"
+                >
+                  términos y condiciones
+                </button>{' '}
+                y la{' '}
+                <button
+                  type="button"
+                  onClick={() => setIsPrivacyOpen(true)}
+                  className="text-blue-600 hover:underline"
+                >
+                  política de privacidad
+                </button>
+                .
+              </span>
+            </label>
+          </div>
+
+          <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
+          <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
           <div className="flex items-center justify-between">
             <button
               className="bg-gradient-compi hover:opacity-90 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
