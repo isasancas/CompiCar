@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -38,13 +39,13 @@ public class PersonaController {
         return ResponseEntity.ok(perfil);
     }
 
-    @RequestMapping("/obtenerPorNombrePersona?username={username}")
-    public Persona obtenerPersonaPorNomPersona(String username) {
+    @RequestMapping("/obtenerPorNombrePersona")
+    public Persona obtenerPersonaPorNomPersona(@RequestParam String username) {
         return personaService.obtenerPersonaPorNombrePersona(username);
     }
 
-    @RequestMapping("/obtenerPorEmail?email={email}")
-    public Persona obtenerPersonaPorEmail(String email) {
+    @RequestMapping("/obtenerPorEmail")
+    public Persona obtenerPersonaPorEmail(@RequestParam String email) {
         return personaService.obtenerPersonaPorEmail(email);
     }    
     

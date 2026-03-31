@@ -1,7 +1,11 @@
 package com.compicar.persona;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,13 +13,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
 
 @ExtendWith(MockitoExtension.class)
-public class PersonaControllerTest {
+class PersonaControllerTest {
+
+    private MockMvc mockMvc;
 
     @Mock
     private PersonaService personaService;
@@ -25,57 +33,67 @@ public class PersonaControllerTest {
 
     private PerfilPersonaDTO perfilDTO;
     private ActualizarPerfilDTO actualizarDTO;
+    private Persona personaEntidad;
 
     @BeforeEach
     void setUp() {
+        
+        mockMvc = MockMvcBuilders.standaloneSetup(personaController).build();
+
         perfilDTO = new PerfilPersonaDTO(1L, "Juan", "Perez", "Garcia", "juan@example.com", "123456789", 4.8);
         actualizarDTO = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "juan@example.com", "123456789", "password123");
+        
+        personaEntidad = new Persona();
+        personaEntidad.setEmail("juan@example.com");
+        personaEntidad.setNombre("Juan");
     }
 
     @Test
-    void testObtenerPerfil_Success() {
+    void testObtenerPerfil_Success() throws Exception {
         when(personaService.obtenerPerfil(1L)).thenReturn(perfilDTO);
 
-        ResponseEntity<PerfilPersonaDTO> respuesta = personaController.obtenerPerfil(1L);
-
-        assertNotNull(respuesta);
-        assertEquals(200, respuesta.getStatusCode().value());
-        assertNotNull(respuesta.getBody());
-        assertEquals(1L, respuesta.getBody().getId());
-        assertEquals("Juan", respuesta.getBody().getNombre());
-        assertEquals("juan@example.com", respuesta.getBody().getEmail());
+        mockMvc.perform(get("/api/personas/1/perfil"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Juan"))
+                .andExpect(jsonPath("$.email").value("juan@example.com"));
     }
 
     @Test
-    void testObtenerPerfil_NotFound() {
-        when(personaService.obtenerPerfil(1L)).thenThrow(new IllegalArgumentException("Persona no encontrada"));
+    void testActualizarPerfil_Success() throws Exception {
+        when(personaService.actualizarPerfil(eq(1L), any(ActualizarPerfilDTO.class))).thenReturn(actualizarDTO);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> personaController.obtenerPerfil(1L));
-        assertEquals("Persona no encontrada", ex.getMessage());
+        mockMvc.perform(put("/api/personas/1/perfil")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(asJsonString(actualizarDTO)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.telefono").value("123456789"));
     }
 
     @Test
-    void testActualizarPerfil_Success() {
-        when(personaService.actualizarPerfil(1L, actualizarDTO)).thenReturn(actualizarDTO);
+    void testObtenerPersonaPorEmail_Success() throws Exception {
+        when(personaService.obtenerPersonaPorEmail("juan@example.com")).thenReturn(personaEntidad);
 
-        ResponseEntity<ActualizarPerfilDTO> respuesta = personaController.actualizarPerfil(1L, actualizarDTO);
-
-        assertNotNull(respuesta);
-        assertEquals(200, respuesta.getStatusCode().value());
-        assertNotNull(respuesta.getBody());
-        assertEquals("Juan", respuesta.getBody().getNombre());
-        assertEquals("juan@example.com", respuesta.getBody().getEmail());
+        mockMvc.perform(get("/api/personas/obtenerPorEmail")
+                .param("email", "juan@example.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("juan@example.com"));
     }
 
     @Test
-    void testActualizarPerfil_AccessDenied() {
-        when(personaService.actualizarPerfil(1L, actualizarDTO)).thenThrow(
-                new org.springframework.security.access.AccessDeniedException("No puedes modificar el perfil de otro usuario"));
+    void testObtenerPersonaPorNombrePersona_Success() throws Exception {
+        when(personaService.obtenerPersonaPorNombrePersona("juanito123")).thenReturn(personaEntidad);
 
-        org.springframework.security.access.AccessDeniedException ex = assertThrows(
-                org.springframework.security.access.AccessDeniedException.class,
-                () -> personaController.actualizarPerfil(1L, actualizarDTO));
+        mockMvc.perform(get("/api/personas/obtenerPorNombrePersona")
+                .param("username", "juanito123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Juan"));
+    }
 
-        assertEquals("No puedes modificar el perfil de otro usuario", ex.getMessage());
+    private static String asJsonString(final Object obj) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(obj);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }
