@@ -30,7 +30,7 @@ const Navbar: React.FC = () => {
       {/* LOGO: Aumentamos la altura de h-9 a h-12 para que se vea mucho mejor */}
       <div className="flex items-center">
         <Link to="/">
-          <img src="images/LogoCompleto.png" alt="CompiCar" className="h-12 w-auto object-contain cursor-pointer" />
+          <img src="/images/LogoCompleto.png" alt="CompiCar" className="h-12 w-auto object-contain cursor-pointer" />
         </Link>
       </div>
 
