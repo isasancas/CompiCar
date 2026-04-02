@@ -20,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.compicar.autenticacion.registro.Registro;
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
 import com.compicar.valoracion.Valoracion;
@@ -54,6 +55,85 @@ public class PersonaServiceTest {
         persona.setEmail("juan@example.com");
         persona.setTelefono("123456789");
         persona.setContrasena("encodedPassword");
+    }
+
+    @Test
+    void testCrearPersonaDesdeRegistro_Success() {
+        // Given
+        Registro registro = new Registro();
+        registro.setNombre("Ana");
+        registro.setPrimerApellido("Lopez");
+        registro.setEmail("ana@example.com");
+        registro.setNumTelefono("987654321");
+        registro.setContrasena("password123");
+
+        when(personaRepository.existsByEmail(anyString())).thenReturn(false);
+        when(personaRepository.existsByTelefono(anyString())).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded_pass");
+        when(personaRepository.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        Persona result = personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
+
+        // Then
+        assertNotNull(result);
+        assertEquals("ana@example.com", result.getEmail());
+        assertEquals("encoded_pass", result.getContrasena());
+        verify(personaRepository).save(any(Persona.class));
+        verify(passwordEncoder).encode("password123");
+    }
+
+    @Test
+    void testCrearPersonaDesdeRegistro_EmailYaExiste() {
+        // Given
+        Registro registro = new Registro();
+        registro.setEmail(persona.getEmail());
+
+        when(personaRepository.existsByEmail(persona.getEmail())).thenReturn(true);
+
+        // When & Then
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
+        });
+
+        assertEquals("El email ya está registrado", exception.getMessage());
+        verify(personaRepository, never()).save(any());
+    }
+
+    @Test
+    void testCrearPersonaDesdeRegistro_TelefonoYaExiste() {
+        // Given
+        Registro registro = new Registro();
+        registro.setEmail("nuevo_email@example.com"); // Email libre
+        registro.setNumTelefono(persona.getTelefono()); // Teléfono ocupado
+
+        when(personaRepository.existsByEmail("nuevo_email@example.com")).thenReturn(false);
+        when(personaRepository.existsByTelefono(persona.getTelefono())).thenReturn(true);
+
+        // When & Then
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
+        });
+
+        assertEquals("El teléfono ya está registrado", exception.getMessage());
+    }
+
+    @Test
+    void testCrearPersonaDesdeRegistro_TelefonoFormatoInvalido() {
+        // Given
+        Registro registro = new Registro();
+        registro.setEmail("test@example.com");
+        registro.setNumTelefono("123"); // Demasiado corto, no cumple el patrón
+
+        when(personaRepository.existsByEmail(anyString())).thenReturn(false);
+
+        // When & Then
+        // Suponiendo que lanzas IllegalArgumentException por formato inválido
+        assertThrows(IllegalArgumentException.class, () -> {
+            personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
+        });
+        
+        verify(personaRepository, never()).save(any(Persona.class));
     }
 
     @Test

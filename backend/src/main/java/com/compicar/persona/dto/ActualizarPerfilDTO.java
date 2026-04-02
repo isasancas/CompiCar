@@ -22,7 +22,6 @@ public class ActualizarPerfilDTO {
     @Pattern(regexp = "^\\+?[0-9]{7,15}$", message = "El teléfono no es válido")
     private String telefono;
 
-    @NotBlank(message = "La contraseña actual no puede estar vacía")
     private String contrasenaActual;
 
     public ActualizarPerfilDTO() {
