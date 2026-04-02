@@ -1,12 +1,11 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import HeroCarpooling from './components/HeroCarpooling';
 import HowItWorks from './components/HowItWorks';
 import Footer from './components/Footer';
-import Registro from './autenticacion/Registro';
-import InicioSesion from './autenticacion/InicioSesion';
-import Perfil from './autenticacion/Perfil';
+import Registro from './components/autenticacion/Registro';
+import InicioSesion from './components/autenticacion/InicioSesion';
+import Perfil from './components/autenticacion/Perfil';
 
 // import './App.css' // Puedes borrar este import si usas Tailwind puro
 

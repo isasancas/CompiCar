@@ -80,6 +80,9 @@ public class PersonaServiceImpl implements PersonaService {
             if (personaRepository.existsByEmail(perfilActualizado.getEmail())) {
                 throw new IllegalArgumentException("El email ya está registrado");
             }
+            if (perfilActualizado.getContrasenaActual() == null || perfilActualizado.getContrasenaActual().isBlank()) {
+                throw new IllegalArgumentException("Debes introducir tu contraseña actual para cambiar el email");
+            }
             if (!passwordEncoder.matches(perfilActualizado.getContrasenaActual(), personaAutenticada.getContrasena())) {
                 throw new IllegalArgumentException("La contraseña actual es incorrecta");
             } else {

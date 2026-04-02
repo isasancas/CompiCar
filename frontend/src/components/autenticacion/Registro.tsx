@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import PrivacyModal from '../components/PrivacyModal';
-import TermsModal from '../components/TermsModal';
+import PrivacyModal from '../PrivacyModal';
+import TermsModal from '../TermsModal';
 
 const Registro: React.FC = () => {
   const navigate = useNavigate();
@@ -17,43 +17,158 @@ const Registro: React.FC = () => {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [generalError, setGeneralError] = useState('');
+  const [termsError, setTermsError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({
+    nombre: '',
+    primerApellido: '',
+    segundoApellido: '',
+    telefono: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
+
+  const resetFieldErrors = () => ({
+    nombre: '',
+    primerApellido: '',
+    segundoApellido: '',
+    telefono: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
     setFormData(prev => ({ ...prev, [id]: value }));
+    setGeneralError('');
+    setFieldErrors(prev => ({ ...prev, [id]: '' }));
   };
 
   const handleTermsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setAcceptedTerms(e.target.checked);
+    if (e.target.checked) {
+      setTermsError('');
+    }
+  };
+
+  const mapBackendErrorToFields = (errorMsg: string) => {
+    const nextErrors = resetFieldErrors();
+    let fallbackError = '';
+
+    errorMsg
+      .split(';')
+      .map(msg => msg.trim())
+      .filter(Boolean)
+      .forEach((msg) => {
+        const normalized = msg.toLowerCase();
+
+        if (normalized.includes('primer apellido')) {
+          nextErrors.primerApellido = msg;
+          return;
+        }
+
+        if (normalized.includes('nombre')) {
+          nextErrors.nombre = msg;
+          return;
+        }
+
+        if (normalized.includes('email')) {
+          nextErrors.email = msg;
+          return;
+        }
+
+        if (normalized.includes('teléfono') || normalized.includes('telefono')) {
+          nextErrors.telefono = msg;
+          return;
+        }
+
+        if (normalized.includes('contraseña') || normalized.includes('contrasena')) {
+          nextErrors.password = msg;
+          return;
+        }
+
+        fallbackError = fallbackError || msg;
+      });
+
+    setFieldErrors(nextErrors);
+    setGeneralError(fallbackError);
+  };
+
+  const validateClient = () => {
+    const nextErrors = resetFieldErrors();
+    let hasError = false;
+
+    if (!formData.nombre.trim()) {
+      nextErrors.nombre = 'El nombre no puede estar vacío';
+      hasError = true;
+    }
+
+    if (!formData.primerApellido.trim()) {
+      nextErrors.primerApellido = 'El primer apellido no puede estar vacío';
+      hasError = true;
+    }
+
+    if (!formData.email.trim()) {
+      nextErrors.email = 'El email no puede estar vacío';
+      hasError = true;
+    } else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
+      nextErrors.email = 'El email no es válido';
+      hasError = true;
+    }
+
+    if (!formData.telefono.trim()) {
+      nextErrors.telefono = 'El teléfono no puede estar vacío';
+      hasError = true;
+    } else if (!/^\+?[0-9]{7,15}$/.test(formData.telefono.trim())) {
+      nextErrors.telefono = 'El teléfono no es válido';
+      hasError = true;
+    }
+
+    if (!formData.password) {
+      nextErrors.password = 'La contraseña no puede estar vacía';
+      hasError = true;
+    }
+
+    if (!formData.confirmPassword) {
+      nextErrors.confirmPassword = 'Debes confirmar la contraseña';
+      hasError = true;
+    } else if (formData.password !== formData.confirmPassword) {
+      nextErrors.confirmPassword = 'Las contraseñas no coinciden';
+      hasError = true;
+    }
+
+    if (!acceptedTerms) {
+      setTermsError('Por favor, acepta los términos y la política de privacidad.');
+      hasError = true;
+    } else {
+      setTermsError('');
+    }
+
+    setFieldErrors(nextErrors);
+    return !hasError;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validar campos requeridos
-    if (!formData.nombre || !formData.primerApellido || !formData.email || !formData.password || !formData.telefono) {
-      alert('Por favor, rellena todos los campos requeridos.');
+    setGeneralError('');
+    if (!validateClient()) {
       return;
     }
 
-    if (!acceptedTerms) {
-      alert('Por favor, acepta los términos y políticas para poder registrarte.');
-      return;
-    }
+    setIsSubmitting(true);
 
-    if (formData.password !== formData.confirmPassword) {
-      alert('Las contraseñas no coinciden.');
-      return;
-    }
-
-    // Preparar datos para el POST
     const dataToSend = {
-      nombre: formData.nombre,
-      primerApellido: formData.primerApellido,
-      segundoApellido: formData.segundoApellido || null,
-      email: formData.email,
+      nombre: formData.nombre.trim(),
+      primerApellido: formData.primerApellido.trim(),
+      segundoApellido: formData.segundoApellido.trim() || null,
+      email: formData.email.trim(),
       contrasena: formData.password,
-      numTelefono: formData.telefono
+      numTelefono: formData.telefono.trim()
     };
 
     try {
@@ -66,9 +181,8 @@ const Registro: React.FC = () => {
       });
 
       if (response.ok) {
-        // Después del registro, hacer login automáticamente
         const loginData = {
-          email: formData.email,
+          email: formData.email.trim(),
           contrasena: formData.password
         };
 
@@ -82,18 +196,36 @@ const Registro: React.FC = () => {
 
         if (loginResponse.ok) {
           const loginResult = await loginResponse.json();
-          localStorage.setItem('token', loginResult.token);
+          const token = typeof loginResult?.token === 'string' ? loginResult.token.trim() : '';
+          if (!token) {
+            setGeneralError('Registro exitoso, pero no se recibió un token válido. Inicia sesión manualmente.');
+            return;
+          }
+
+          localStorage.setItem('token', token);
           window.dispatchEvent(new Event('authChange'));
-          navigate('/perfil');
+          setShowSuccessModal(true);
         } else {
-          alert('Registro exitoso, pero error en el inicio de sesión automático');
+          localStorage.removeItem('token');
+          window.dispatchEvent(new Event('authChange'));
+          setGeneralError('Registro exitoso, pero error en el inicio de sesión automático.');
         }
       } else {
-        alert('Error al registrar usuario');
+        let backendError = 'Error al registrar usuario';
+        try {
+          const errorBody = await response.json();
+          backendError = typeof errorBody?.error === 'string' ? errorBody.error : backendError;
+        } catch {
+          // Si no viene JSON válido, dejamos el mensaje por defecto.
+        }
+
+        mapBackendErrorToFields(backendError);
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error de conexión');
+      setGeneralError('Error de conexión');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -101,6 +233,11 @@ const Registro: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
         <h2 className="text-2xl font-bold text-center mb-6">Registro</h2>
+        {generalError && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {generalError}
+          </div>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="nombre">
@@ -114,6 +251,7 @@ const Registro: React.FC = () => {
               value={formData.nombre}
               onChange={handleChange}
             />
+            {fieldErrors.nombre && <p className="mt-1 text-sm text-red-600">{fieldErrors.nombre}</p>}
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="primerApellido">
@@ -127,6 +265,7 @@ const Registro: React.FC = () => {
               value={formData.primerApellido}
               onChange={handleChange}
             />
+            {fieldErrors.primerApellido && <p className="mt-1 text-sm text-red-600">{fieldErrors.primerApellido}</p>}
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="segundoApellido">
@@ -140,6 +279,7 @@ const Registro: React.FC = () => {
               value={formData.segundoApellido}
               onChange={handleChange}
             />
+            {fieldErrors.segundoApellido && <p className="mt-1 text-sm text-red-600">{fieldErrors.segundoApellido}</p>}
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="telefono">
@@ -153,6 +293,7 @@ const Registro: React.FC = () => {
               value={formData.telefono}
               onChange={handleChange}
             />
+            {fieldErrors.telefono && <p className="mt-1 text-sm text-red-600">{fieldErrors.telefono}</p>}
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
@@ -166,6 +307,7 @@ const Registro: React.FC = () => {
               value={formData.email}
               onChange={handleChange}
             />
+            {fieldErrors.email && <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>}
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
@@ -179,6 +321,7 @@ const Registro: React.FC = () => {
               value={formData.password}
               onChange={handleChange}
             />
+            {fieldErrors.password && <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>}
           </div>
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirmPassword">
@@ -192,6 +335,7 @@ const Registro: React.FC = () => {
               value={formData.confirmPassword}
               onChange={handleChange}
             />
+            {fieldErrors.confirmPassword && <p className="mt-1 text-sm text-red-600">{fieldErrors.confirmPassword}</p>}
           </div>
           <div className="mb-4">
             <label className="inline-flex items-start">
@@ -221,6 +365,7 @@ const Registro: React.FC = () => {
                 .
               </span>
             </label>
+            {termsError && <p className="mt-2 text-sm text-red-600">{termsError}</p>}
           </div>
 
           <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
@@ -229,12 +374,43 @@ const Registro: React.FC = () => {
             <button
               className="bg-gradient-compi hover:opacity-90 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               type="submit"
+              disabled={isSubmitting}
             >
-              Registrarse
+              {isSubmitting ? 'Registrando...' : 'Registrarse'}
             </button>
           </div>
         </form>
       </div>
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-green-100 bg-white p-6 shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <svg viewBox="0 0 24 24" className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+
+            <h3 className="text-center text-2xl font-extrabold text-slate-900">Registro completado</h3>
+            <p className="mt-2 text-center text-sm text-slate-600">
+              Tu cuenta se ha creado correctamente y tu sesión ya está iniciada.
+            </p>
+
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                className="rounded-full bg-gradient-compi px-6 py-2 text-sm font-bold text-white shadow-md transition hover:opacity-90"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate('/perfil');
+                }}
+              >
+                Ir a mi perfil
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
