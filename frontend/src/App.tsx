@@ -1,35 +1,43 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import HeroCarpooling from './components/HeroCarpooling';
+import HowItWorks from './components/HowItWorks';
+import Footer from './components/Footer';
+import Registro from './components/autenticacion/Registro';
+import InicioSesion from './components/autenticacion/InicioSesion';
+import Perfil from './components/autenticacion/Perfil';
+
+// import './App.css' // Puedes borrar este import si usas Tailwind puro
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <Router>
+      <div className="min-h-screen flex flex-col bg-white font-sans overflow-x-hidden">
+        {/* 1. Barra de Navegación (Fija arriba) */}
+        <Navbar />
+
+        {/* Contenido Scrolleable */}
+        <main className="flex-grow">
+          <Routes>
+            <Route path="/" element={
+              <>
+                {/* 2. Sección Hero (La cabecera con la foto del coche) */}
+                <HeroCarpooling />
+
+                {/* 3. Sección Cómo Funciona (Los tres pasos) */}
+                <HowItWorks />
+              </>
+            } />
+            <Route path="/registro" element={<Registro />} />
+            <Route path="/inicio-sesion" element={<InicioSesion />} />
+            <Route path="/perfil" element={<Perfil />} />
+          </Routes>
+        </main>
+
+        <Footer />
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </Router>
+  );
 }
 
-export default App
+export default App;

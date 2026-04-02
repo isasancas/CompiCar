@@ -1,0 +1,490 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+interface PerfilData {
+  id?: number;
+  nombre: string;
+  primerApellido: string;
+  segundoApellido?: string;
+  email: string;
+  telefono: string;
+  reputacion?: number;
+}
+
+const Perfil: React.FC = () => {
+  const [perfil, setPerfil] = useState<PerfilData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editForm, setEditForm] = useState({
+    nombre: '',
+    primerApellido: '',
+    segundoApellido: '',
+    email: '',
+    telefono: '',
+    contrasenaActual: ''
+  });
+  const navigate = useNavigate();
+
+  const getValidToken = () => {
+    const token = localStorage.getItem('token');
+    if (!token || token === 'undefined' || token === 'null' || token.trim() === '') {
+      return null;
+    }
+
+    return token;
+  };
+
+  const clearLocalSession = useCallback((redirectTo: string) => {
+    localStorage.removeItem('token');
+    window.dispatchEvent(new Event('authChange'));
+    navigate(redirectTo, { replace: true });
+  }, [navigate]);
+
+  useEffect(() => {
+    const fetchPerfil = async () => {
+      const token = getValidToken();
+      if (!token) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:8080/api/personas/perfil', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setPerfil(data);
+        } else if (response.status === 401 || response.status === 403) {
+          clearLocalSession('/inicio-sesion');
+          return;
+        } else {
+          setError('Error al obtener el perfil');
+        }
+      } catch {
+        setError('Error de conexión');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPerfil();
+  }, [clearLocalSession]);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    const token = getValidToken();
+    if (!token) {
+      setIsLoggingOut(false);
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      await fetch('http://localhost:8080/api/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch {
+      // Si el backend falla, cerramos sesión local igualmente para no bloquear al usuario.
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutConfirm(false);
+      clearLocalSession('/');
+    }
+  };
+
+  const openEditModal = () => {
+    if (!perfil) {
+      return;
+    }
+
+    setEditError('');
+    setEditForm({
+      nombre: perfil.nombre || '',
+      primerApellido: perfil.primerApellido || '',
+      segundoApellido: perfil.segundoApellido || '',
+      email: perfil.email || '',
+      telefono: perfil.telefono || '',
+      contrasenaActual: ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditForm((prev) => ({ ...prev, [name]: value }));
+    setEditError('');
+  };
+
+  const isEmailChanged = perfil
+    ? editForm.email.trim().toLowerCase() !== (perfil.email || '').trim().toLowerCase()
+    : false;
+
+  const validateEditForm = () => {
+    if (!editForm.nombre.trim()) {
+      setEditError('El nombre no puede estar vacío.');
+      return false;
+    }
+
+    if (!editForm.primerApellido.trim()) {
+      setEditError('El primer apellido no puede estar vacío.');
+      return false;
+    }
+
+    if (!editForm.email.trim()) {
+      setEditError('El email no puede estar vacío.');
+      return false;
+    }
+
+    if (!/^\S+@\S+\.\S+$/.test(editForm.email.trim())) {
+      setEditError('El email no es válido.');
+      return false;
+    }
+
+    if (!editForm.telefono.trim()) {
+      setEditError('El teléfono no puede estar vacío.');
+      return false;
+    }
+
+    if (!/^\+?[0-9]{7,15}$/.test(editForm.telefono.trim())) {
+      setEditError('El teléfono no es válido.');
+      return false;
+    }
+
+    if (isEmailChanged && !editForm.contrasenaActual) {
+      setEditError('Debes introducir tu contraseña actual para cambiar el email.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSaveProfile = async () => {
+    if (!perfil?.id) {
+      setEditError('No se pudo identificar tu perfil para actualizarlo.');
+      return;
+    }
+
+    if (!validateEditForm()) {
+      return;
+    }
+
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/personas/${perfil.id}/perfil`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nombre: editForm.nombre.trim(),
+          primerApellido: editForm.primerApellido.trim(),
+          segundoApellido: editForm.segundoApellido.trim() || null,
+          email: editForm.email.trim(),
+          telefono: editForm.telefono.trim(),
+          contrasenaActual: isEmailChanged ? editForm.contrasenaActual : null
+        })
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setPerfil((prev) => ({
+          ...(prev || {}),
+          id: prev?.id,
+          nombre: updated.nombre,
+          primerApellido: updated.primerApellido,
+          segundoApellido: updated.segundoApellido,
+          email: updated.email,
+          telefono: updated.telefono,
+          reputacion: prev?.reputacion
+        } as PerfilData));
+        setShowEditModal(false);
+        setEditError('');
+      } else if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+      } else {
+        let backendError = 'No se pudo actualizar el perfil.';
+        try {
+          const body = await response.json();
+          backendError = typeof body?.error === 'string' ? body.error : backendError;
+        } catch {
+          // Si falla parseo JSON, mantenemos el mensaje por defecto.
+        }
+        setEditError(backendError);
+      }
+    } catch {
+      setEditError('Error de conexión al actualizar el perfil.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="bg-white p-6 rounded-lg shadow-md max-w-md w-full text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            type="button"
+            className="bg-gradient-compi hover:opacity-90 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            onClick={() => clearLocalSession('/inicio-sesion')}
+          >
+            Ir a iniciar sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="min-h-screen bg-gray-200 pb-10 pt-4">
+      <div className="mx-auto max-w-6xl px-4">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="rounded-full border border-green-600 px-4 py-1 text-sm text-green-700 transition hover:bg-green-50"
+        >
+          Volver
+        </button>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+          <aside className="rounded-xl bg-transparent p-2">
+            <h2 className="text-4xl font-bold leading-none text-slate-800">Mi perfil</h2>
+
+            <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700">
+              <span>A</span>
+            </div>
+
+            <button
+              type="button"
+              className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow"
+            >
+              Editar foto
+            </button>
+          </aside>
+
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Mis datos</h3>
+              <div className="mt-3 space-y-1 text-lg text-slate-700">
+                <p>Nombre: {perfil ? `${perfil.nombre} ${perfil.primerApellido}` : '-'}</p>
+                <p>Email: {perfil?.email || '-'}</p>
+                <p>Telefono: {perfil?.telefono || '-'}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Mis vehiculos</h3>
+              <div className="mt-3 space-y-1 text-lg text-slate-700">
+                <p>- [Informacion vehiculo]</p>
+                <p>- [Informacion vehiculo]</p>
+              </div>
+              <button
+                type="button"
+                className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow"
+              >
+                Añadir un nuevo vehículo
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Preferencias de viaje</h3>
+              <div className="mt-4 space-y-2 text-lg text-slate-700">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4" readOnly />
+                  Se permite fumar
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4" readOnly />
+                  Se permiten mascotas
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4" readOnly />
+                  Música
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
+              <p className="mt-6 text-xl text-slate-700">
+                Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
+              </p>
+              <button
+                type="button"
+                className="mt-6 rounded-full bg-gradient-compi px-6 py-2 text-sm font-semibold text-white shadow"
+              >
+                Ver que dicen de mí
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
+          <button
+            type="button"
+            className="rounded-full bg-gradient-compi px-9 py-2 text-base font-semibold text-white shadow"
+            onClick={openEditModal}
+          >
+            Editar perfil
+          </button>
+          <button
+            type="button"
+            className="rounded-full bg-red-500 px-9 py-2 text-base font-semibold text-white shadow hover:bg-red-600"
+            onClick={() => setShowLogoutConfirm(true)}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-center text-2xl font-bold text-slate-900">Editar perfil</h3>
+
+            {editError && (
+              <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {editError}
+              </div>
+            )}
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <input
+                name="nombre"
+                type="text"
+                placeholder="Nombre"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={editForm.nombre}
+                onChange={handleEditChange}
+              />
+              <input
+                name="primerApellido"
+                type="text"
+                placeholder="Primer apellido"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={editForm.primerApellido}
+                onChange={handleEditChange}
+              />
+              <input
+                name="segundoApellido"
+                type="text"
+                placeholder="Segundo apellido (opcional)"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={editForm.segundoApellido}
+                onChange={handleEditChange}
+              />
+              <input
+                name="telefono"
+                type="text"
+                placeholder="Teléfono"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={editForm.telefono}
+                onChange={handleEditChange}
+              />
+              <input
+                name="email"
+                type="email"
+                placeholder="Email"
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2"
+                value={editForm.email}
+                onChange={handleEditChange}
+              />
+              {isEmailChanged && (
+                <input
+                  name="contrasenaActual"
+                  type="password"
+                  placeholder="Contraseña actual (necesaria para cambiar email)"
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2"
+                  value={editForm.contrasenaActual}
+                  onChange={handleEditChange}
+                  autoComplete="new-password"
+                />
+              )}
+            </div>
+
+            <p className="mt-3 text-xs text-slate-500">
+              La contraseña no se puede cambiar desde este formulario.
+            </p>
+
+            <div className="mt-6 flex justify-center gap-3">
+              <button
+                type="button"
+                className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={() => setShowEditModal(false)}
+                disabled={isSavingProfile}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={handleSaveProfile}
+                disabled={isSavingProfile}
+              >
+                {isSavingProfile ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-center text-2xl font-bold text-slate-900">Confirmar cierre de sesión</h3>
+            <p className="mt-2 text-center text-sm text-slate-600">
+              ¿Seguro que quieres cerrar tu sesión actual?
+            </p>
+
+            <div className="mt-6 flex justify-center gap-3">
+              <button
+                type="button"
+                className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={() => setShowLogoutConfirm(false)}
+                disabled={isLoggingOut}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-red-500 px-5 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? 'Cerrando...' : 'Sí, cerrar sesión'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+  );
+};
+
+export default Perfil;
