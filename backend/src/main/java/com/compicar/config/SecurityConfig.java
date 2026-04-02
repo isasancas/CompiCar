@@ -61,6 +61,7 @@ public class SecurityConfig {
                 // 1. PERMITIR FRONTEND (Recursos estáticos)
                 // Esto permite que cualquiera vea la web antes de loguearse
                 .requestMatchers("/", "/index.html", "/static/**", "/assets/**", 
+                                "/images/**",
                                 "/*.js", "/*.css", "/*.png", "/*.ico", "/*.svg").permitAll()
 
                 // 2. PERMITIR ENDPOINTS PÚBLICOS DE LA API
