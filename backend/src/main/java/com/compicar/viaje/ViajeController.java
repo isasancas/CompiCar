@@ -1,6 +1,10 @@
 package com.compicar.viaje;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -15,4 +19,14 @@ public class ViajeController {
         this.viajeService = viajeService;
     }
     
+    @PostMapping("/crear")
+    public Viaje crearViaje(@RequestBody Viaje viaje) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.crearViaje(usuarioEmail, viaje);
+    }
 }

@@ -9,6 +9,7 @@ import com.compicar.persona.Persona;
 import com.compicar.reserva.Reserva;
 import com.compicar.vehiculo.Vehiculo;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -105,6 +106,10 @@ public class Viaje {
 
     public List<Parada> getParadas() {
         return paradas;
+    }
+
+    public void setParadas(List<Parada> paradas) {
+        this.paradas = paradas;
     }
 
     // Setters
