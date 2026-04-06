@@ -145,13 +145,16 @@ npm run dev
 
 ```bash
 cd backend
-.\mvnw.cmd -Dtest=*E2ETest test
+.\mvnw.cmd -Pe2e test
 ```
+
+Por defecto (`.\\mvnw.cmd test`) los E2E quedan excluidos para no romper CI.
 
 Si quieres ejecutar todos los tests (unitarios + E2E), usa:
 
 ```bash
 cd backend
 .\mvnw.cmd test
+.\mvnw.cmd -Pe2e test
 ```
 
