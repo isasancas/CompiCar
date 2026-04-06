@@ -263,7 +263,7 @@ const Perfil: React.FC = () => {
     );
   }
   return (
-    <div className="min-h-screen bg-gray-200 pb-10 pt-4">
+    <div data-testid="perfil-page" className="min-h-screen bg-gray-200 pb-10 pt-4">
       <div className="mx-auto max-w-6xl px-4">
         <button
           type="button"

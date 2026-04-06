@@ -120,3 +120,38 @@ La aplicación estará disponible en: http://localhost:5173
 
 > Ambas terminales deben estar corriendo al mismo tiempo.
 
+---
+
+## Tests E2E con Selenium
+
+El proyecto incluye una base de tests E2E en Java (JUnit 5 + Selenium) en:
+
+- `backend/src/test/java/com/compicar/e2e`
+
+### Requisitos para ejecutar E2E
+
+1. Tener backend y frontend levantados:
+```bash
+# Terminal 1
+cd backend
+.\mvnw.cmd spring-boot:run
+
+# Terminal 2
+cd frontend
+npm run dev
+```
+
+2. Ejecutar solo la suite E2E:
+
+```bash
+cd backend
+.\mvnw.cmd -Dtest=*E2ETest test
+```
+
+Si quieres ejecutar todos los tests (unitarios + E2E), usa:
+
+```bash
+cd backend
+.\mvnw.cmd test
+```
+
