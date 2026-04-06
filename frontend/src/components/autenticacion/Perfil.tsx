@@ -299,10 +299,10 @@ const Perfil: React.FC = () => {
             </div>
 
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
-              <h3 className="text-3xl font-semibold text-slate-800">Mis vehiculos</h3>
+              <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
               <div className="mt-3 space-y-1 text-lg text-slate-700">
-                <p>- [Informacion vehiculo]</p>
-                <p>- [Informacion vehiculo]</p>
+                <p>- [Información vehículo]</p>
+                <p>- [Información vehículo]</p>
               </div>
               <button
                 type="button"
