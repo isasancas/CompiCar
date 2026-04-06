@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl } from '../../apiConfig';
 
 interface PerfilData {
   id?: number;
@@ -54,7 +55,7 @@ const Perfil: React.FC = () => {
       }
 
       try {
-        const response = await fetch('http://localhost:8080/api/personas/perfil', {
+        const response = await fetch(buildApiUrl('/api/personas/perfil'), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -91,7 +92,7 @@ const Perfil: React.FC = () => {
     }
 
     try {
-      await fetch('http://localhost:8080/api/logout', {
+      await fetch(buildApiUrl('/api/logout'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -192,7 +193,7 @@ const Perfil: React.FC = () => {
     setIsSavingProfile(true);
 
     try {
-      const response = await fetch(`http://localhost:8080/api/personas/${perfil.id}/perfil`, {
+      const response = await fetch(buildApiUrl(`/api/personas/${perfil.id}/perfil`), {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,

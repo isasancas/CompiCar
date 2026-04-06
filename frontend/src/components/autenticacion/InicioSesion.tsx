@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl } from '../../apiConfig';
 
 const InicioSesion: React.FC = () => {
   const navigate = useNavigate();
@@ -83,7 +84,7 @@ const InicioSesion: React.FC = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:8080/api/login', {
+      const response = await fetch(buildApiUrl('/api/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
