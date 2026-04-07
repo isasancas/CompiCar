@@ -263,7 +263,7 @@ const Perfil: React.FC = () => {
     );
   }
   return (
-    <div className="min-h-screen bg-gray-200 pb-10 pt-4">
+    <div data-testid="perfil-page" className="min-h-screen bg-gray-200 pb-10 pt-4">
       <div className="mx-auto max-w-6xl px-4">
         <button
           type="button"
@@ -295,7 +295,7 @@ const Perfil: React.FC = () => {
               <div className="mt-3 space-y-1 text-lg text-slate-700">
                 <p>Nombre: {perfil ? `${perfil.nombre} ${perfil.primerApellido}` : '-'}</p>
                 <p>Email: {perfil?.email || '-'}</p>
-                <p>Telefono: {perfil?.telefono || '-'}</p>
+                <p>Teléfono: {perfil?.telefono || '-'}</p>
               </div>
             </div>
 
