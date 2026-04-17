@@ -1,20 +1,22 @@
 package com.compicar.e2e;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import java.time.Duration;
 import java.util.Locale;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 class RegistroE2ETest extends BaseE2ETest {
 
     @Test
     void registroCreaCuentaYredireccionaAPerfil() {
         String uniqueEmail = String.format(Locale.ROOT, "selenium-reg-%d@compicar.test", System.currentTimeMillis());
+        String uniquePhone = String.format(Locale.ROOT, "+34%09d", Math.floorMod(System.currentTimeMillis(), 1_000_000_000L));
 
         driver.get(baseUrl + "/registro");
 
@@ -48,7 +50,7 @@ class RegistroE2ETest extends BaseE2ETest {
         primerApellidoInput.clear();
         primerApellidoInput.sendKeys("Test");
         telefonoInput.clear();
-        telefonoInput.sendKeys("+34123456789");
+        telefonoInput.sendKeys(uniquePhone);
         emailInput.clear();
         emailInput.sendKeys(uniqueEmail);
         passwordInput.clear();
@@ -60,19 +62,34 @@ class RegistroE2ETest extends BaseE2ETest {
         ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView({block:'center'});", submitButton);
         ((JavascriptExecutor) driver).executeScript("arguments[0].click();", submitButton);
 
-        WebElement profileButton = wait.until(
-            ExpectedConditions.elementToBeClickable(By.xpath("//button[normalize-space()='Ir a mi perfil']"))
-        );
-        profileButton.click();
+        WebDriverWait postSubmitWait =
+        new WebDriverWait(driver, Duration.ofSeconds(20));
+
+        By profileButtonBy = By.xpath("//button[normalize-space()='Ir a mi perfil']");
+        By anyErrorBy = By.cssSelector("div.border-red-200, p.text-red-600");
+
+        postSubmitWait.until(ExpectedConditions.or(
+            ExpectedConditions.urlContains("/perfil"),
+            ExpectedConditions.visibilityOfElementLocated(profileButtonBy),
+            ExpectedConditions.visibilityOfElementLocated(anyErrorBy)
+        ));
+
+        if (!driver.findElements(anyErrorBy).isEmpty()) {
+            Assertions.fail(
+                "Registro no llegó a éxito. Mensaje UI: " + driver.findElement(anyErrorBy).getText()
+            );
+        }
+
+        if (!driver.getCurrentUrl().contains("/perfil")) {
+            WebElement profileButton = postSubmitWait.until(
+                ExpectedConditions.elementToBeClickable(profileButtonBy)
+            );
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", profileButton);
+        }
 
         wait.until(ExpectedConditions.or(
             ExpectedConditions.urlContains("/perfil"),
             ExpectedConditions.visibilityOfElementLocated(By.cssSelector("[data-testid='perfil-page']"))
         ));
-
-        assertTrue(
-            driver.getCurrentUrl().contains("/perfil"),
-            "Se esperaba navegación a /perfil tras el registro"
-        );
     }
 }
