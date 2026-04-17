@@ -2,6 +2,8 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -9,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.parada.Parada;
+import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.vehiculo.Vehiculo;
@@ -52,6 +56,10 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje debe incluir un vehículo válido");
         }
 
+        if (viaje.getParadas() == null || viaje.getParadas().size() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar al menos origen y destino");
+        }
+
         Vehiculo vehiculo = vehiculoRepository.findById(viaje.getVehiculo().getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehículo no existe"));
 
@@ -63,9 +71,21 @@ public class ViajeServiceImpl implements ViajeService {
         viaje.setVehiculo(vehiculo);
 
         if (viaje.getParadas() != null) {
-            viaje.getParadas().forEach(parada -> parada.setViaje(viaje));
+            for (int i = 0; i < viaje.getParadas().size(); i++) {
+                Parada parada = viaje.getParadas().get(i);
+                parada.setViaje(viaje);
+
+                if (parada.getFechaHora() == null) {
+                    parada.setFechaHora(viaje.getFechaHoraSalida());
+                }
+
+                if (parada.getOrden() == null) {
+                    parada.setOrden(i + 1);
+                }
+            }
         }
 
+        validarParadas(viaje);
         return viajeRepository.save(viaje);
     }
 
@@ -151,5 +171,33 @@ public class ViajeServiceImpl implements ViajeService {
         - Estimar el precio actual por litro del combustible principal de ese vehiculo.
         - Si no estas seguro del combustible exacto, usa una estimacion razonable de turismos en Espana.
         """.formatted(v.getMarca(), v.getModelo(), v.getTipo().name(), v.getAnio());
+    }
+
+    private void validarParadas(Viaje viaje) {
+        if (viaje.getParadas() == null || viaje.getParadas().size() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar al menos origen y destino");
+        }
+
+        long origenes = viaje.getParadas().stream().filter(p -> p.getTipo() == TipoParada.ORIGEN).count();
+        long destinos = viaje.getParadas().stream().filter(p -> p.getTipo() == TipoParada.DESTINO).count();
+
+        if (origenes != 1 || destinos != 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe haber exactamente un ORIGEN y un DESTINO");
+        }
+
+        Set<Integer> ordenes = new HashSet<>();
+        for (Parada parada : viaje.getParadas()) {
+            if (parada.getLocalizacion() == null || parada.getLocalizacion().trim().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Todas las paradas deben tener localizacion");
+            }
+
+            if (parada.getOrden() == null || parada.getOrden() < 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Todas las paradas deben tener orden valido");
+            }
+
+            if (!ordenes.add(parada.getOrden())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puede haber dos paradas con el mismo orden");
+            }
+        }
     }
 }

@@ -20,6 +20,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 @Entity
@@ -54,7 +55,8 @@ public class Viaje {
     @OneToMany(mappedBy = "viaje")
     private List<Reserva> reservas;
 
-    @OneToMany(mappedBy = "viaje")
+    @OneToMany(mappedBy = "viaje", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orden ASC")
     private List<Parada> paradas;
 
     // Constructores
