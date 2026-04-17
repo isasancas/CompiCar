@@ -1,6 +1,7 @@
 package com.compicar.vehiculo;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,5 +14,8 @@ public interface VehiculoRepository extends JpaRepository<Vehiculo, Long> {
     List<Vehiculo> findByPersonaId(Long personaId);
 
     @Query("SELECT v FROM Vehiculo v WHERE v.id = :id AND v.persona.id = :personaId")
-    Vehiculo findByIdAndPersonaId(Long id, Long personaId); 
+    Optional<Vehiculo> findByIdAndPersonaId(Long id, Long personaId);
+
+    boolean existsByMatricula(String matricula);
+    boolean existsByMatriculaAndIdNot(String matricula, Long id);
 }
