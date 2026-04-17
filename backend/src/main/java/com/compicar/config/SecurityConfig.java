@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -30,6 +31,18 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers(
+            "/images/**",
+            "/static/**",
+            "/assets/**",
+            "/*.png",
+            "/*.ico",
+            "/*.svg"
+        );
     }
 
     /**
@@ -61,6 +74,7 @@ public class SecurityConfig {
                 // 1. PERMITIR FRONTEND (Recursos estáticos)
                 // Esto permite que cualquiera vea la web antes de loguearse
                 .requestMatchers("/", "/index.html", "/static/**", "/assets/**", 
+                                "/images/**",
                                 "/*.js", "/*.css", "/*.png", "/*.ico", "/*.svg").permitAll()
 
                 // 2. PERMITIR ENDPOINTS PÚBLICOS DE LA API

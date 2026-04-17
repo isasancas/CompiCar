@@ -30,7 +30,7 @@ const Navbar: React.FC = () => {
       {/* LOGO: Aumentamos la altura de h-9 a h-12 para que se vea mucho mejor */}
       <div className="flex items-center">
         <Link to="/">
-          <img src="images/LogoCompleto.png" alt="CompiCar" className="h-12 w-auto object-contain cursor-pointer" />
+          <img src="/images/LogoCompleto.png" alt="CompiCar" className="h-12 w-auto object-contain cursor-pointer" />
         </Link>
       </div>
 
@@ -47,7 +47,10 @@ const Navbar: React.FC = () => {
         <span className="text-gray-500 hover:text-gray-900 cursor-pointer text-xl">🔍</span>
         {isLoggedIn ? (
           <Link to="/perfil">
-            <button className="rounded-full border border-gray-500 px-5 py-2 text-base font-bold text-gray-600 hover:border-gray-700 hover:text-gray-900 transition-colors">
+            <button
+              data-testid="nav-profile-button"
+              className="rounded-full border border-gray-500 px-5 py-2 text-base font-bold text-gray-600 hover:border-gray-700 hover:text-gray-900 transition-colors"
+            >
               Mi perfil
             </button>
           </Link>

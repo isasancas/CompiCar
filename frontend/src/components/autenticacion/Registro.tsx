@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl } from '../../apiConfig';
 import PrivacyModal from '../PrivacyModal';
 import TermsModal from '../TermsModal';
 
@@ -172,7 +173,7 @@ const Registro: React.FC = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:8080/api/registro', {
+      const response = await fetch(buildApiUrl('/api/registro'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -186,7 +187,7 @@ const Registro: React.FC = () => {
           contrasena: formData.password
         };
 
-        const loginResponse = await fetch('http://localhost:8080/api/login', {
+        const loginResponse = await fetch(buildApiUrl('/api/login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

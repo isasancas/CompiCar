@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { buildApiUrl } from '../../apiConfig';
 
 interface PerfilData {
   id?: number;
@@ -54,7 +55,7 @@ const Perfil: React.FC = () => {
       }
 
       try {
-        const response = await fetch('http://localhost:8080/api/personas/perfil', {
+        const response = await fetch(buildApiUrl('/api/personas/perfil'), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -91,7 +92,7 @@ const Perfil: React.FC = () => {
     }
 
     try {
-      await fetch('http://localhost:8080/api/logout', {
+      await fetch(buildApiUrl('/api/logout'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -192,7 +193,7 @@ const Perfil: React.FC = () => {
     setIsSavingProfile(true);
 
     try {
-      const response = await fetch(`http://localhost:8080/api/personas/${perfil.id}/perfil`, {
+      const response = await fetch(buildApiUrl(`/api/personas/${perfil.id}/perfil`), {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -262,7 +263,7 @@ const Perfil: React.FC = () => {
     );
   }
   return (
-    <div className="min-h-screen bg-gray-200 pb-10 pt-4">
+    <div data-testid="perfil-page" className="min-h-screen bg-gray-200 pb-10 pt-4">
       <div className="mx-auto max-w-6xl px-4">
         <button
           type="button"
@@ -294,15 +295,15 @@ const Perfil: React.FC = () => {
               <div className="mt-3 space-y-1 text-lg text-slate-700">
                 <p>Nombre: {perfil ? `${perfil.nombre} ${perfil.primerApellido}` : '-'}</p>
                 <p>Email: {perfil?.email || '-'}</p>
-                <p>Telefono: {perfil?.telefono || '-'}</p>
+                <p>Teléfono: {perfil?.telefono || '-'}</p>
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
-              <h3 className="text-3xl font-semibold text-slate-800">Mis vehiculos</h3>
+              <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
               <div className="mt-3 space-y-1 text-lg text-slate-700">
-                <p>- [Informacion vehiculo]</p>
-                <p>- [Informacion vehiculo]</p>
+                <p>- [Información vehículo]</p>
+                <p>- [Información vehículo]</p>
               </div>
               <button
                 type="button"
