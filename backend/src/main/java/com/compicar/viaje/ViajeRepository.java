@@ -12,4 +12,6 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
     @Query("SELECT v FROM Viaje v")
     List<Viaje> findAllViajes();
 
+    boolean existsByVehiculoId(Long vehiculoId);
+
 }
