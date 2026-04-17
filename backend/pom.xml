@@ -171,6 +171,9 @@
 							<includes>
 								<include>**/*E2ETest.java</include>
 							</includes>
+							<parallel>classes</parallel> 
+							<threadCount>2</threadCount> 
+							<reuseForks>true</reuseForks>
 						</configuration>
 					</plugin>
 				</plugins>

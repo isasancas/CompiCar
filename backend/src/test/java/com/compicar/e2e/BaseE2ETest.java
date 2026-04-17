@@ -2,8 +2,12 @@ package com.compicar.e2e;
 
 import java.time.Duration;
 
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestInstance.Lifecycle;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -12,26 +16,35 @@ import org.openqa.selenium.edge.EdgeDriver;
 import org.openqa.selenium.edge.EdgeOptions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
+@TestInstance(Lifecycle.PER_CLASS)
 public abstract class BaseE2ETest {
 
     protected WebDriver driver;
     protected WebDriverWait wait;
     protected String baseUrl;
 
-    @BeforeEach
+    @BeforeAll
     void setUpDriver() {
         driver = createDriver();
 
-        long timeoutSeconds = getLongEnv("E2E_TIMEOUT_SECONDS", 12L);
+        long timeoutSeconds = getLongEnv("E2E_TIMEOUT_SECONDS", 8L);
         wait = new WebDriverWait(driver, Duration.ofSeconds(timeoutSeconds));
         baseUrl = System.getenv().getOrDefault("E2E_BASE_URL", "http://localhost:5173");
     }
 
-    @AfterEach
+    @AfterAll
     void tearDownDriver() {
         if (driver != null) {
             driver.quit();
         }
+    }
+
+    @BeforeEach
+    void resetSession() {
+        driver.get(baseUrl);
+        ((JavascriptExecutor) driver).executeScript("window.localStorage.clear(); window.sessionStorage.clear();");
+        driver.manage().deleteAllCookies();
+        driver.get("about:blank");
     }
 
     private WebDriver createDriver() {
@@ -124,7 +137,7 @@ public abstract class BaseE2ETest {
         if (explicit != null) {
             return Boolean.parseBoolean(explicit);
         }
-        return System.getenv("CI") != null;
+        return true;
     }
 
     private long getLongEnv(String key, long defaultValue) {
