@@ -3,6 +3,7 @@ package com.compicar.viaje;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +20,9 @@ import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
+import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viaje.dto.VehiculoDTO;
+import com.compicar.viaje.dto.ParadaDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -199,5 +203,49 @@ public class ViajeServiceImpl implements ViajeService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puede haber dos paradas con el mismo orden");
             }
         }
+    }
+
+    @Override
+    public List<ViajeDTO> obtenerMisViajes(String email) {
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        List<Viaje> viajes = viajeRepository.findByPersonaId(persona.getId());
+        return viajes.stream().map(this::convertToDTO).toList();
+    }
+
+    @Override
+    public List<ViajeDTO> obtenerViajesParticipados(String email) {
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
+        return viajes.stream().map(this::convertToDTO).toList();
+    }
+
+    private ViajeDTO convertToDTO(Viaje viaje) {
+        VehiculoDTO vehiculoDTO = new VehiculoDTO(
+            viaje.getVehiculo().getId(),
+            viaje.getVehiculo().getMarca(),
+            viaje.getVehiculo().getModelo(),
+            viaje.getVehiculo().getMatricula()
+        );
+
+        List<ParadaDTO> paradasDTO = viaje.getParadas().stream()
+            .map(parada -> new ParadaDTO(
+                parada.getId(),
+                parada.getLocalizacion(),
+                parada.getTipo().toString(),
+                parada.getOrden()
+            ))
+            .toList();
+
+        return new ViajeDTO(
+            viaje.getId(),
+            viaje.getFechaHoraSalida(),
+            viaje.getEstado().toString(),
+            viaje.getPlazasDisponibles(),
+            viaje.getPrecio(),
+            vehiculoDTO,
+            paradasDTO
+        );
     }
 }

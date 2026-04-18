@@ -1,8 +1,11 @@
 package com.compicar.viaje;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
+import com.compicar.viaje.dto.ViajeDTO;
 
 import jakarta.validation.Valid;
 
@@ -47,4 +51,27 @@ public class ViajeController {
         String usuarioEmail = auth.getName();
         return viajeService.calcularPrecioTrayecto(usuarioEmail, request);
     }
+
+    @GetMapping("/mis-viajes")
+    public List<ViajeDTO> obtenerMisViajes() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.obtenerMisViajes(usuarioEmail);
+    }
+
+    @GetMapping("/participados")
+    public List<ViajeDTO> obtenerViajesParticipados() {
+       Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.obtenerViajesParticipados(usuarioEmail);
+    }
+
 }

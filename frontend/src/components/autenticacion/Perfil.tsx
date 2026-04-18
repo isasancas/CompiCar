@@ -592,8 +592,9 @@ const Perfil: React.FC = () => {
               <button
                 type="button"
                 className="mt-6 rounded-full bg-gradient-compi px-6 py-2 text-sm font-semibold text-white shadow"
+                onClick={() => navigate('/mis-viajes')}
               >
-                Ver que dicen de mí
+                Mis viajes
               </button>
             </div>
           </section>

@@ -59,6 +59,7 @@ const Navbar: React.FC = () => {
           <button
             type="button"
             className="text-base font-semibold text-slate-800 hover:text-slate-950 transition-colors"
+            onClick={() => navigate('/mis-viajes')}
           >
             Mis viajes
           </button>
