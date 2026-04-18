@@ -9,6 +9,7 @@ import InicioSesion from './components/autenticacion/InicioSesion';
 import Perfil from './components/autenticacion/Perfil';
 import OfrecerTrayecto from './components/ofrecerTrayecto/OfrecerTrayecto';
 import HomeLoggedIn from './components/HomeLoggedIn';
+import NuevoVehiculo from './components/vehiculos/NuevoVehiculo';
 
 const hasValidToken = () => {
   const token = localStorage.getItem('token');
@@ -52,6 +53,7 @@ function App() {
             <Route path="/registro" element={<Registro />} />
             <Route path="/inicio-sesion" element={<InicioSesion />} />
             <Route path="/perfil" element={<Perfil />} />
+            <Route path="/vehiculos/nuevo" element={<NuevoVehiculo />} />
             <Route path="/ofrecer-trayecto" element={<OfrecerTrayecto />} />
           </Routes>
         </main>
