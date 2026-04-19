@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildApiUrl } from '../../apiConfig';
 
@@ -22,6 +22,19 @@ interface VehiculoData {
   anio: number;
   tipo: string;
 }
+
+type ViajeActividad = {
+  id: number;
+  fechaHoraSalida: string;
+  estado: string;
+};
+
+type ResumenActividad = {
+  ofrecidosMes: number;
+  completados: number;
+  cancelados: number;
+  tendenciaPct: number;
+};
 
 const Perfil: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilData | null>(null);
@@ -56,6 +69,29 @@ const Perfil: React.FC = () => {
     anio: '',
     tipo: 'COCHE'
   });
+  const [resumenActividad, setResumenActividad] = useState<ResumenActividad>({
+    ofrecidosMes: 0,
+    completados: 0,
+    cancelados: 0,
+    tendenciaPct: 0
+  });
+
+  const misDatosRef = useRef<HTMLDivElement | null>(null);
+  const [misDatosHeight, setMisDatosHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const updateHeight = () => {
+      if (misDatosRef.current) {
+        setMisDatosHeight(misDatosRef.current.offsetHeight);
+      }
+    };
+
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, [perfil, resumenActividad]);
   const navigate = useNavigate();
 
   const getValidToken = () => {
@@ -133,13 +169,84 @@ const Perfil: React.FC = () => {
     }
   }, [clearLocalSession]);
 
+  const fetchResumenActividad = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (!response.ok) {
+        return;
+      }
+
+      const viajes = (await response.json()) as ViajeActividad[];
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
+      const prevMonth = prevMonthDate.getMonth();
+      const prevYear = prevMonthDate.getFullYear();
+
+      const offeredCurrent = viajes.filter((v) => {
+        const d = new Date(v.fechaHoraSalida);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      }).length;
+
+      const offeredPrev = viajes.filter((v) => {
+        const d = new Date(v.fechaHoraSalida);
+        return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+      }).length;
+
+      const completados = viajes.filter((v) =>
+        ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
+      ).length;
+
+      const cancelados = viajes.filter((v) =>
+        ['CANCELADO', 'CANCELADA'].includes((v.estado || '').toUpperCase())
+      ).length;
+
+      const tendenciaPct =
+        offeredPrev === 0
+          ? offeredCurrent > 0
+            ? 100
+            : 0
+          : Math.round(((offeredCurrent - offeredPrev) / offeredPrev) * 100);
+
+      setResumenActividad({
+        ofrecidosMes: offeredCurrent,
+        completados,
+        cancelados,
+        tendenciaPct
+      });
+    } catch {
+      // Si falla, dejamos valores por defecto.
+    }
+  }, [clearLocalSession]);
+
   useEffect(() => {
-    Promise.all([fetchPerfil(), fetchVehiculos()])
+    Promise.all([fetchPerfil(), fetchVehiculos(), fetchResumenActividad()])
       .catch(() => {
         // Errores individuales ya se manejan en cada función.
       })
       .finally(() => setLoading(false));
-  }, [fetchPerfil, fetchVehiculos]);
+  }, [fetchPerfil, fetchVehiculos, fetchResumenActividad]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -506,57 +613,107 @@ const Perfil: React.FC = () => {
             </button>
           </aside>
 
-          <section className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
-              <h3 className="text-3xl font-semibold text-slate-800">Mis datos</h3>
+          <section className="grid gap-4 md:grid-cols-2 items-start">
+            <div ref={misDatosRef} className="self-start rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Mis datos y actividad</h3>
+
               <div className="mt-3 space-y-1 text-lg text-slate-700">
                 <p>Nombre: {perfil ? `${perfil.nombre} ${perfil.primerApellido}` : '-'}</p>
                 <p>Email: {perfil?.email || '-'}</p>
                 <p>Teléfono: {perfil?.telefono || '-'}</p>
               </div>
+
+              <div className="my-4 h-px bg-slate-300" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Este mes</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.ofrecidosMes}</p>
+                  <p className="text-sm text-slate-600">viajes ofrecidos</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Completados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.completados}</p>
+                  <p className="text-sm text-slate-600">histórico</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Cancelados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.cancelados}</p>
+                  <p className="text-sm text-slate-600">histórico</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Tendencia</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {resumenActividad.tendenciaPct > 0 ? '+' : ''}
+                    {resumenActividad.tendenciaPct}%
+                  </p>
+                  <p className="text-sm text-slate-600">vs mes anterior</p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  className="rounded-full bg-gradient-compi px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90"
+                  onClick={() => navigate('/mis-viajes')}
+                >
+                  Ver detalle de mis viajes
+                </button>
+              </div>
             </div>
 
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div
+                className="rounded-xl border border-slate-500 bg-gray-100 p-5 flex flex-col"
+                style={misDatosHeight ? { height: `${misDatosHeight}px` } : undefined}
+              >
               <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
-              <div className="mt-3 space-y-4 text-slate-700">
+
+              <div className="mt-3 flex-1 min-h-0 text-slate-700">
                 {vehiculosError && (
-                  <p className="text-red-600">{vehiculosError}</p>
+                  <p className="mb-3 text-red-600">{vehiculosError}</p>
                 )}
                 {deleteVehiculoError && (
-                  <p className="text-red-600">{deleteVehiculoError}</p>
+                  <p className="mb-3 text-red-600">{deleteVehiculoError}</p>
                 )}
+
                 {vehiculos.length === 0 && !vehiculosError ? (
                   <p>No tienes vehículos registrados aún.</p>
                 ) : (
-                  vehiculos.map((vehiculo) => (
-                    <div key={vehiculo.id} className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
-                      <p className="font-semibold text-slate-900">
-                        {vehiculo.marca} {vehiculo.modelo} ({vehiculo.matricula})
-                      </p>
-                      <p>Tipo: {vehiculo.tipo}</p>
-                      <p>Plazas: {vehiculo.plazas}</p>
-                      <p>Año: {vehiculo.anio}</p>
-                      <p>Consumo: {vehiculo.consumo.toFixed(1)} l/100km</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                          onClick={() => openEditVehiculoModal(vehiculo)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600"
-                          onClick={() => handleDeleteVehiculo(vehiculo.id)}
-                        >
-                          Borrar
-                        </button>
+                  <div className="h-full overflow-y-auto pr-2 space-y-4">
+                    {vehiculos.map((vehiculo) => (
+                      <div key={vehiculo.id} className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
+                        <p className="font-semibold text-slate-900">
+                          {vehiculo.marca} {vehiculo.modelo} ({vehiculo.matricula})
+                        </p>
+                        <p>Tipo: {vehiculo.tipo}</p>
+                        <p>Plazas: {vehiculo.plazas}</p>
+                        <p>Año: {vehiculo.anio}</p>
+                        <p>Consumo: {vehiculo.consumo.toFixed(1)} l/100km</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            onClick={() => openEditVehiculoModal(vehiculo)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600"
+                            onClick={() => handleDeleteVehiculo(vehiculo.id)}
+                          >
+                            Borrar
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
+
               <button
                 type="button"
                 className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow"
@@ -589,13 +746,6 @@ const Perfil: React.FC = () => {
               <p className="mt-6 text-xl text-slate-700">
                 Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
               </p>
-              <button
-                type="button"
-                className="mt-6 rounded-full bg-gradient-compi px-6 py-2 text-sm font-semibold text-white shadow"
-                onClick={() => navigate('/mis-viajes')}
-              >
-                Mis viajes
-              </button>
             </div>
           </section>
         </div>
