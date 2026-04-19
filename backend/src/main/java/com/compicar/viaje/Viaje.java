@@ -59,6 +59,9 @@ public class Viaje {
     @OrderBy("orden ASC")
     private List<Parada> paradas;
 
+    @Column(nullable = false, unique = true, length = 180)
+    private String slug;
+
     // Constructores
     public Viaje() {
     }
@@ -71,6 +74,7 @@ public class Viaje {
         this.precio = precio;
         this.persona = persona;
         this.vehiculo = vehiculo;
+        this.slug = "viaje-" + id;
     }
 
     // Getters
@@ -109,9 +113,9 @@ public class Viaje {
     public List<Parada> getParadas() {
         return paradas;
     }
-
-    public void setParadas(List<Parada> paradas) {
-        this.paradas = paradas;
+    
+    public String getSlug() {
+        return slug;
     }
 
     // Setters
@@ -139,10 +143,18 @@ public class Viaje {
         this.vehiculo = vehiculo;
     }
 
+    public void setParadas(List<Parada> paradas) {
+        this.paradas = paradas;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "Viaje{id=" + id + ", fechaHoraSalida=" + fechaHoraSalida + ", estado=" + estado
-                + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + "}";
+                + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + ", slug=" + slug + "}";
     }
 
 }

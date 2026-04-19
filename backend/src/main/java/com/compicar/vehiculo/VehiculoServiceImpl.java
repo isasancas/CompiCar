@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.config.SlugUtils;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.vehiculo.dto.AltaVehiculoRequestDTO;
@@ -50,6 +51,10 @@ public class VehiculoServiceImpl implements VehiculoService {
         vehiculo.setAnio(request.getAnio());
         vehiculo.setTipo(request.getTipo());
         vehiculo.setPersona(persona);
+        String baseSlug = SlugUtils.toSlug(
+            request.getMarca().trim() + "-" + request.getModelo().trim() + "-" + matriculaNormalizada
+        );
+        vehiculo.setSlug(generarSlugUnico(baseSlug));
 
         Vehiculo guardado = vehiculoRepository.save(vehiculo);
         return VehiculoResponseDTO.fromEntity(guardado);
@@ -108,6 +113,24 @@ public class VehiculoServiceImpl implements VehiculoService {
         }
 
         vehiculoRepository.delete(vehiculo);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public VehiculoResponseDTO obtenerVehiculoPorSlug(String slug) {
+        Vehiculo vehiculo = vehiculoRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehiculo no encontrado"));
+        return VehiculoResponseDTO.fromEntity(vehiculo);
+    }
+
+    private String generarSlugUnico(String baseSlug) {
+        String candidato = baseSlug;
+        int sufijo = 2;
+        while (vehiculoRepository.existsBySlug(candidato)) {
+            candidato = baseSlug + "-" + sufijo;
+            sufijo++;
+        }
+        return candidato;
     }
     
 }

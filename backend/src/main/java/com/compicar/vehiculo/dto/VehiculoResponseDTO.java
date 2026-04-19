@@ -12,6 +12,7 @@ public class VehiculoResponseDTO {
     private Double consumo;
     private Integer anio;
     private TipoVehiculo tipo;
+    private String slug;
 
     public static VehiculoResponseDTO fromEntity(Vehiculo vehiculo) {
         VehiculoResponseDTO dto = new VehiculoResponseDTO();
@@ -23,6 +24,7 @@ public class VehiculoResponseDTO {
         dto.setConsumo(vehiculo.getConsumo());
         dto.setAnio(vehiculo.getAnio());
         dto.setTipo(vehiculo.getTipo());
+        dto.setSlug(vehiculo.getSlug());
         return dto;
     }
 
@@ -32,6 +34,14 @@ public class VehiculoResponseDTO {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public String getMatricula() {

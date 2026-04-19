@@ -12,12 +12,13 @@ public class ViajeDTO {
     private BigDecimal precio;
     private VehiculoDTO vehiculo;
     private List<ParadaDTO> paradas;
+    private String slug;
 
     public ViajeDTO() {
     }
 
     public ViajeDTO(Long id, LocalDateTime fechaHoraSalida, String estado, Integer plazasDisponibles,
-                   BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas) {
+                   BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug) {
         this.id = id;
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
@@ -25,6 +26,7 @@ public class ViajeDTO {
         this.precio = precio;
         this.vehiculo = vehiculo;
         this.paradas = paradas;
+        this.slug = slug;
     }
 
     // Getters and setters
@@ -34,6 +36,14 @@ public class ViajeDTO {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public LocalDateTime getFechaHoraSalida() {

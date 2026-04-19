@@ -62,6 +62,11 @@ public class VehiculoController {
         vehiculoService.borrarVehiculo(email, vehiculoId);
     }
 
+    @GetMapping("/{slug}")
+    public VehiculoResponseDTO obtenerVehiculoPorSlug(@PathVariable String slug) {
+        return vehiculoService.obtenerVehiculoPorSlug(slug);
+    }
+
     private String obtenerEmailAutenticado() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {

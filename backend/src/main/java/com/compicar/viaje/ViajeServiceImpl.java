@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.config.SlugUtils;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
@@ -90,6 +91,8 @@ public class ViajeServiceImpl implements ViajeService {
         }
 
         validarParadas(viaje);
+        String baseSlug = construirBaseSlug(viaje);
+        viaje.setSlug(generarSlugUnico(baseSlug));
         return viajeRepository.save(viaje);
     }
 
@@ -136,6 +139,14 @@ public class ViajeServiceImpl implements ViajeService {
         response.setFuente(fuente);
         response.setDetalle(detalle);
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ViajeDTO obtenerViajePorSlug(String slug) {
+        Viaje viaje = viajeRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+        return convertToDTO(viaje);
     }
 
     private BigDecimal obtenerPrecioLitroConGemini(Vehiculo vehiculo) {
@@ -245,7 +256,39 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPlazasDisponibles(),
             viaje.getPrecio(),
             vehiculoDTO,
-            paradasDTO
+            paradasDTO,
+            viaje.getSlug()
         );
+    }
+
+    private String construirBaseSlug(Viaje viaje) {
+        String origen = viaje.getParadas().stream()
+            .filter(p -> p.getTipo() == TipoParada.ORIGEN)
+            .map(Parada::getLocalizacion)
+            .findFirst()
+            .orElse("origen");
+
+        String destino = viaje.getParadas().stream()
+            .filter(p -> p.getTipo() == TipoParada.DESTINO)
+            .map(Parada::getLocalizacion)
+            .findFirst()
+            .orElse("destino");
+
+        String fecha = viaje.getFechaHoraSalida() != null
+            ? viaje.getFechaHoraSalida().toLocalDate().toString()
+            : "sin-fecha";
+
+        String raw = origen + "-" + destino + "-" + fecha;
+        return SlugUtils.toSlug(raw);
+    }
+
+    private String generarSlugUnico(String baseSlug) {
+        String candidato = baseSlug;
+        int sufijo = 2;
+        while (viajeRepository.existsBySlug(candidato)) {
+            candidato = baseSlug + "-" + sufijo;
+            sufijo++;
+        }
+        return candidato;
     }
 }

@@ -12,5 +12,6 @@ public interface ViajeService {
     PrecioTrayectoResponseDTO calcularPrecioTrayecto(String usuarioEmail, CalcularPrecioTrayectoRequestDTO request);
     List<ViajeDTO> obtenerMisViajes(String email);
     List<ViajeDTO> obtenerViajesParticipados(String email);
+    ViajeDTO obtenerViajePorSlug(String slug);
     
 }

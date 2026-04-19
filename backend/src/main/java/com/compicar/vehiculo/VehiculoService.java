@@ -11,5 +11,6 @@ public interface VehiculoService {
     List<VehiculoResponseDTO> obtenerMisVehiculos(String usuarioEmail);
     VehiculoResponseDTO actualizarVehiculo(String usuarioEmail, Long vehiculoId, AltaVehiculoRequestDTO request);
     void borrarVehiculo(String usuarioEmail, Long vehiculoId);
+    VehiculoResponseDTO obtenerVehiculoPorSlug(String slug);
     
 }

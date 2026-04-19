@@ -57,6 +57,9 @@ function App() {
             <Route path="/vehiculos/nuevo" element={<NuevoVehiculo />} />
             <Route path="/mis-viajes" element={<MisViajes />} />
             <Route path="/ofrecer-trayecto" element={<OfrecerTrayecto />} />
+{/*             <Route path="/viajes/:slug" element={<DetalleViaje />} />
+            <Route path="/vehiculos/:slug" element={<DetalleVehiculo />} />
+            <Route path="/personas/:slug" element={<PerfilPublico />} /> */}
           </Routes>
         </main>
 

@@ -55,6 +55,10 @@ public class Persona {
     @OneToMany(mappedBy = "valorado")
     private List<Valoracion> valoracionesRecibidas;
 
+    @Column(nullable = false, unique = true, length = 180)
+    private String slug;
+
+
     // Atributo derivado
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
@@ -79,6 +83,7 @@ public class Persona {
         this.contrasena = contrasena;
         this.email = email;
         this.telefono = telefono;
+        this.slug = "persona-" + id;
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
@@ -90,6 +95,7 @@ public class Persona {
         this.contrasena = contrasena;
         this.email = email;
         this.telefono = telefono;
+        this.slug = "persona-" + id;
         this.vehiculos = vehiculos;
         this.reservas = reservas;
         this.viajes = viajes;
@@ -146,6 +152,10 @@ public class Persona {
         return valoracionesRecibidas;
     }
 
+    public String getSlug() {
+        return slug;
+    }
+
     //Setters
     public void setNombre(String nombre) {
         this.nombre = nombre;
@@ -191,10 +201,14 @@ public class Persona {
         this.valoracionesRecibidas = valoracionesRecibidas;
     }
 
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "Persona{id=" + id + ", nombre='" + nombre + "', primerApellido='" + primerApellido
                 + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono
-                + "', reputacion=" + getReputacion() + "}";
+                + "', reputacion=" + getReputacion() + ", slug=" + slug + "}";
     }
 }

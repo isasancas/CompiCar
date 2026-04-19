@@ -4,6 +4,7 @@ import { buildApiUrl } from '../../apiConfig';
 
 interface Viaje {
   id: number;
+  slug: string;
   fechaHoraSalida: string;
   estado: string;
   plazasDisponibles: number;
@@ -155,6 +156,13 @@ const MisViajes: React.FC = () => {
                       <p className="text-sm font-medium text-slate-900">
                         {viaje.precio}€
                       </p>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/viajes/' + viaje.slug)}
+                          className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
+                        >
+                          Ver detalle
+                        </button>
                     </div>
                   );
                 })}

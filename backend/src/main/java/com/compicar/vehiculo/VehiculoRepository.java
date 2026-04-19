@@ -18,4 +18,7 @@ public interface VehiculoRepository extends JpaRepository<Vehiculo, Long> {
 
     boolean existsByMatricula(String matricula);
     boolean existsByMatriculaAndIdNot(String matricula, Long id);
+
+    Optional<Vehiculo> findBySlug(String slug);
+    boolean existsBySlug(String slug);
 }

@@ -57,5 +57,11 @@ public class PersonaController {
     public Persona obtenerPersonaPorEmail(@RequestParam String email) {
         return personaService.obtenerPersonaPorEmail(email);
     }    
+
+    @GetMapping("/{slug}/perfil-publico")
+    public ResponseEntity<PerfilPersonaDTO> obtenerPerfilPublicoPorSlug(@PathVariable String slug) {
+        PerfilPersonaDTO perfil = personaService.obtenerPerfilPorSlug(slug);
+        return ResponseEntity.ok(perfil);
+    }
     
 }
