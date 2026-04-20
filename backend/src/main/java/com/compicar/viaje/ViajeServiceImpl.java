@@ -274,6 +274,14 @@ public class ViajeServiceImpl implements ViajeService {
             .findFirst()
             .orElse("destino");
 
+        // Truncar las localizaciones para evitar slugs demasiado largos
+        if (origen.length() > 20) {
+            origen = origen.substring(0, 20);
+        }
+        if (destino.length() > 20) {
+            destino = destino.substring(0, 20);
+        }
+
         String fecha = viaje.getFechaHoraSalida() != null
             ? viaje.getFechaHoraSalida().toLocalDate().toString()
             : "sin-fecha";

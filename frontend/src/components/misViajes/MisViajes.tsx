@@ -86,7 +86,8 @@ const MisViajes: React.FC = () => {
   const getOrigenDestino = (paradas: Viaje['paradas']) => {
     const origen = paradas.find(p => p.tipo === 'ORIGEN')?.localizacion || 'Desconocido';
     const destino = paradas.find(p => p.tipo === 'DESTINO')?.localizacion || 'Desconocido';
-    return { origen, destino };
+    const paradasIntermedias = paradas.filter(p => p.tipo === 'INTERMEDIA').sort((a, b) => a.orden - b.orden).map(p => p.localizacion);
+    return { origen, destino, paradasIntermedias };
   };
 
   if (loading) {
@@ -129,24 +130,46 @@ const MisViajes: React.FC = () => {
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {viajesOfrecidos.map((viaje) => {
-                  const { origen, destino } = getOrigenDestino(viaje.paradas);
+                  const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
                   return (
                     <div key={viaje.id} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-semibold text-slate-900">
                           {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
                         </h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          viaje.estado === 'ACTIVO' ? 'bg-green-100 text-green-800' :
-                          viaje.estado === 'COMPLETADO' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {viaje.estado}
-                        </span>
+                        <div className="flex flex-col items-end space-y-1">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            viaje.estado === 'ACTIVO' ? 'bg-green-100 text-green-800' :
+                            viaje.estado === 'COMPLETADO' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {viaje.estado}
+                          </span>
+                          {paradasIntermedias.length > 0 && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                              Con paradas
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm text-slate-600 mb-1">
-                        {origen} → {destino}
+                        <span className="font-medium text-green-700">Origen:</span> {origen}
                       </p>
+                      <p className="text-sm text-slate-600 mb-1">
+                        <span className="font-medium text-red-700">Destino:</span> {destino}
+                      </p>
+                      {paradasIntermedias.length > 0 && (
+                        <div className="text-sm text-slate-600 mb-1">
+                          <span className="font-medium text-orange-600">Paradas:</span>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {paradasIntermedias.map((p, i) => (
+                              <span key={i} className="inline-block bg-orange-50 px-2 py-1 rounded text-xs border border-orange-200">
+                                {i + 1}. {p}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <p className="text-sm text-slate-600 mb-1">
                         {formatFecha(viaje.fechaHoraSalida)}
                       </p>

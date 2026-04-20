@@ -11,6 +11,7 @@ import OfrecerTrayecto from './components/ofrecerTrayecto/OfrecerTrayecto';
 import HomeLoggedIn from './components/HomeLoggedIn';
 import NuevoVehiculo from './components/vehiculos/NuevoVehiculo';
 import MisViajes from './components/misViajes/MisViajes';
+import DetalleViaje from './components/viajes/DetalleViaje';
 
 const hasValidToken = () => {
   const token = localStorage.getItem('token');
@@ -57,9 +58,7 @@ function App() {
             <Route path="/vehiculos/nuevo" element={<NuevoVehiculo />} />
             <Route path="/mis-viajes" element={<MisViajes />} />
             <Route path="/ofrecer-trayecto" element={<OfrecerTrayecto />} />
-{/*             <Route path="/viajes/:slug" element={<DetalleViaje />} />
-            <Route path="/vehiculos/:slug" element={<DetalleVehiculo />} />
-            <Route path="/personas/:slug" element={<PerfilPublico />} /> */}
+            <Route path="/viajes/:slug" element={<DetalleViaje />} />
           </Routes>
         </main>
 
