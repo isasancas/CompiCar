@@ -123,16 +123,50 @@ const DetalleViaje: React.FC = () => {
         const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
         setMapCenter([centerLat, centerLng]);
 
-        // Crear línea de ruta conectando paradas en orden
-        const ruta: Array<[number, number]> = paradasConCoords
-          .sort((a, b) => a.orden - b.orden)
-          .map((p) => [p.lat!, p.lng!]);
-        setRouteLine(ruta);
+        // Calcular ruta real usando OpenRouteService
+        calcularRutaReal(paradasConCoords);
       }
     };
 
     obtenerCoordenadas();
   }, [viaje]);
+
+  const calcularRutaReal = async (paradas: ParadaConCoordenadas[]) => {
+    if (paradas.length < 2) return;
+
+    const paradasOrdenadas = paradas.sort((a, b) => a.orden - b.orden);
+    const coords = paradasOrdenadas.map((p) => `${p.lng},${p.lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        // Fallback: línea recta si falla la API
+        const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
+        setRouteLine(ruta);
+        return;
+      }
+
+      const data = await response.json();
+      const route = data?.routes?.[0];
+      if (!route?.geometry?.coordinates) {
+        // Fallback: línea recta si no hay geometría
+        const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
+        setRouteLine(ruta);
+        return;
+      }
+
+      // Convertir coordenadas de [lng, lat] a [lat, lng] para Leaflet
+      const routeCoords: Array<[number, number]> = route.geometry.coordinates.map(
+        (pair: [number, number]) => [pair[1], pair[0]]
+      );
+      setRouteLine(routeCoords);
+    } catch {
+      // Fallback: línea recta si hay error
+      const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
+      setRouteLine(ruta);
+    }
+  };
 
   const formatFecha = (fecha: string) => {
     return new Date(fecha).toLocaleString('es-ES', {
