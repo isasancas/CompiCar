@@ -14,7 +14,7 @@ import com.compicar.reserva.Reserva;
 @Repository
 public interface PagoRepository extends JpaRepository<Pago, Long> {
     
-    @Query("SELECT p FROM Pago p WHERE p.persona = :persona")
+    @Query("SELECT p FROM Pago p WHERE p.reserva.persona = :persona")
     List<Pago> findByPersona(@Param("persona") Persona persona);
 
     @Query("SELECT p FROM Pago p WHERE p.reserva = :reserva")
