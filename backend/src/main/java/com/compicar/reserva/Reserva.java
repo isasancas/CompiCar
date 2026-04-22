@@ -59,6 +59,9 @@ public abstract class Reserva {
     @JoinColumn(name = "viaje_id", nullable = false)
     private Viaje viaje;
 
+    @Column(nullable = false, unique = true, length = 180)
+    private String slug;
+
     // Constructores
     public Reserva() {
     }
@@ -71,6 +74,7 @@ public abstract class Reserva {
         this.paradaSubida = paradaSubida;
         this.paradaBajada = paradaBajada;
         this.viaje = viaje;
+        this.slug = "reserva-" + id;
     }
 
     // Getters
@@ -110,6 +114,10 @@ public abstract class Reserva {
         return viaje;
     }
 
+    public String getSlug() {
+        return slug;
+    }
+
     // Setters
     public void setEstado(EstadoReserva estado) {
         this.estado = estado;
@@ -143,11 +151,15 @@ public abstract class Reserva {
         this.viaje = viaje;
     }
 
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "Reserva{id=" + id + ", estado=" + estado + ", fechaHoraReserva=" + fechaHoraReserva
                 + ", persona=" + persona.getId() + ", paradaSubida=" + paradaSubida.getId() + ", paradaBajada="
-                + paradaBajada.getId() + ", viaje=" + viaje.getId() + "}";
+                + paradaBajada.getId() + ", viaje=" + viaje.getId() + ", slug=" + slug + "}";
     }
 
 }

@@ -18,7 +18,7 @@ import com.compicar.autenticacion.inicioSesion.LogoutController;
 import com.compicar.autenticacion.inicioSesion.LogoutService;
 
 @ExtendWith(MockitoExtension.class)
-public class CierreSesionControllerTests {
+public class CierreSesionControllerTest {
 
     private MockMvc mockMvc;
 

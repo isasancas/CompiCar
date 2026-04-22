@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import com.compicar.autenticacion.inicioSesion.TokenBlacklistService;
 
-class TokenBlacklistServiceTests {
+class TokenBlacklistServiceTest {
 
     private TokenBlacklistService tokenBlacklistService;
     private final String testToken = "eyJhbGciOiJIUzI1NiJ9.token.test";

@@ -25,4 +25,7 @@ public interface PersonaRepository extends JpaRepository<Persona, Long> {
 
     @Query("SELECT p FROM Persona p WHERE p.email = ?1")
     Persona findByEmailOrTelefono(String email);
+
+    Optional<Persona> findBySlug(String slug);
+    boolean existsBySlug(String slug);
 }

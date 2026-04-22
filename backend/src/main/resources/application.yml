@@ -19,3 +19,12 @@ spring:
 jwt:
   secret: P5KqM1v1fcIbmujHih5kZQxEvRKc4Q2pw6nd6m1eNUk=
   expiration: 3600000
+
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: gemini-2.5-flash
+  endpoint: https://generativelanguage.googleapis.com/v1beta/models
+
+pricing:
+  fallback:
+    fuel-price-eur-per-liter: 1.65
