@@ -1,6 +1,7 @@
 package com.compicar.vehiculo.dto;
 
 import com.compicar.vehiculo.TipoVehiculo;
+import com.compicar.vehiculo.validaciones.AnioNoFuturo;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -34,7 +35,7 @@ public class AltaVehiculoRequestDTO {
 
     @NotNull(message = "El anio es obligatorio")
     @Min(value = 1950, message = "El anio no es valido")
-    @Max(value = 2100, message = "El anio no es valido")
+    @AnioNoFuturo(message = "El anio no puede ser mayor al actual")
     private Integer anio;
 
     @NotNull(message = "El tipo es obligatorio")
