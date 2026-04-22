@@ -65,10 +65,7 @@ public class Persona {
             return 0.0;
         }
 
-        return valoracionesRecibidas.stream()
-                           .mapToDouble(Valoracion::getPuntuacion)
-                           .average()
-                           .orElse(0.0);
+        return valoracionesRecibidas.stream().mapToDouble(Valoracion::getPuntuacion).average().orElse(0.0);
     }
 
     // Constructores

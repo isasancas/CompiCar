@@ -27,8 +27,8 @@ class AuthIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/registro")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registro)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(registro)))
             .andExpect(status().isOk());
 
         Map<String, Object> login = Map.of(
@@ -37,8 +37,8 @@ class AuthIntegrationTest extends BaseIntegrationTest {
         );
 
         MvcResult result = mockMvc.perform(post("/api/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(login)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(login)))
             .andExpect(status().isOk())
             .andReturn();
 
@@ -62,8 +62,8 @@ class AuthIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/registro")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registro)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(registro)))
             .andExpect(status().isOk());
 
         Map<String, Object> login = Map.of(
@@ -72,8 +72,8 @@ class AuthIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(login)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(login)))
             .andExpect(status().isInternalServerError());
     }
 

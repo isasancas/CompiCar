@@ -24,7 +24,7 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
         String slug = obtenerPrimerViajeSlug(token);
 
         mockMvc.perform(get("/api/viajes/" + slug)
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.slug").value(slug))
             .andExpect(jsonPath("$.vehiculo.id").value(vehiculoId));
@@ -37,7 +37,7 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
         crearViaje(token, vehiculoId);
 
         mockMvc.perform(get("/api/viajes/mis-viajes")
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].vehiculo.id").value(vehiculoId));
     }
@@ -53,9 +53,9 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
         );
 
         MvcResult result = mockMvc.perform(post("/api/viajes/precio/calcular")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.litrosEstimados").exists())
             .andExpect(jsonPath("$.costeTotalCombustible").exists())
@@ -76,9 +76,9 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/viajes/precio/calcular")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isBadRequest());
     }
 

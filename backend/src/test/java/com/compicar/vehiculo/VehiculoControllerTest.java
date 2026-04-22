@@ -24,14 +24,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
@@ -69,21 +71,21 @@ class VehiculoControllerTest {
         when(vehiculoService.crearVehiculo(anyString(), any(AltaVehiculoRequestDTO.class))).thenReturn(resp);
 
         mockMvc.perform(post("/api/vehiculos")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(10))
-                .andExpect(jsonPath("$.matricula").value("1234ABC"));
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(10))
+            .andExpect(jsonPath("$.matricula").value("1234ABC"));
 
-        verify(vehiculoService).crearVehiculo(org.mockito.ArgumentMatchers.eq("driver@compicar.com"), any(AltaVehiculoRequestDTO.class));
+        verify(vehiculoService).crearVehiculo(ArgumentMatchers.eq("driver@compicar.com"), any(AltaVehiculoRequestDTO.class));
     }
 
     @Test
     void crearVehiculo_noAutenticado_401() throws Exception {
         mockMvc.perform(post("/api/vehiculos")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isUnauthorized());
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(requestValido())))
+            .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(vehiculoService);
     }
@@ -96,9 +98,9 @@ class VehiculoControllerTest {
         req.setMatricula("ABC"); // no cumple regex
 
         mockMvc.perform(post("/api/vehiculos")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isBadRequest());
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest());
 
         verifyNoInteractions(vehiculoService);
     }
@@ -108,15 +110,15 @@ class VehiculoControllerTest {
         autenticar("driver@compicar.com");
 
         when(vehiculoService.obtenerMisVehiculos("driver@compicar.com"))
-                .thenReturn(List.of(
-                        responseVehiculo(1L, "1234ABC", "seat-ibiza-1234abc"),
-                        responseVehiculo(2L, "5678DEF", "seat-leon-5678def")
-                ));
+            .thenReturn(List.of(
+                responseVehiculo(1L, "1234ABC", "seat-ibiza-1234abc"),
+                responseVehiculo(2L, "5678DEF", "seat-leon-5678def")
+            ));
 
         mockMvc.perform(get("/api/vehiculos/propios"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].matricula").value("1234ABC"))
-                .andExpect(jsonPath("$[1].slug").value("seat-leon-5678def"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].matricula").value("1234ABC"))
+            .andExpect(jsonPath("$[1].slug").value("seat-leon-5678def"));
     }
 
     @Test
@@ -132,12 +134,12 @@ class VehiculoControllerTest {
 
         req.setMatricula("9999XYZ");
         mockMvc.perform(put("/api/vehiculos/10")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.matricula").value("9999XYZ"));
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.matricula").value("9999XYZ"));
 
-        verify(vehiculoService).actualizarVehiculo(org.mockito.ArgumentMatchers.eq("driver@compicar.com"), org.mockito.ArgumentMatchers.eq(10L), any(AltaVehiculoRequestDTO.class));
+        verify(vehiculoService).actualizarVehiculo(ArgumentMatchers.eq("driver@compicar.com"), ArgumentMatchers.eq(10L), any(AltaVehiculoRequestDTO.class));
     }
 
     @Test
@@ -148,9 +150,9 @@ class VehiculoControllerTest {
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehiculo no encontrado"));
 
         mockMvc.perform(put("/api/vehiculos/77")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(requestValido())))
-                .andExpect(status().isNotFound());
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(requestValido())))
+            .andExpect(status().isNotFound());
     }
 
     @Test
@@ -158,7 +160,7 @@ class VehiculoControllerTest {
         autenticar("driver@compicar.com");
 
         mockMvc.perform(delete("/api/vehiculos/10"))
-                .andExpect(status().isNoContent());
+            .andExpect(status().isNoContent());
 
         verify(vehiculoService).borrarVehiculo("driver@compicar.com", 10L);
     }
@@ -167,35 +169,35 @@ class VehiculoControllerTest {
     void borrarVehiculo_conflicto_409() throws Exception {
         autenticar("driver@compicar.com");
         doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "No se puede borrar"))
-                .when(vehiculoService).borrarVehiculo("driver@compicar.com", 10L);
+            .when(vehiculoService).borrarVehiculo("driver@compicar.com", 10L);
 
         mockMvc.perform(delete("/api/vehiculos/10"))
-                .andExpect(status().isConflict());
+            .andExpect(status().isConflict());
     }
 
     @Test
     void obtenerVehiculoPorSlug_ok() throws Exception {
         when(vehiculoService.obtenerVehiculoPorSlug("seat-ibiza-1234abc"))
-                .thenReturn(responseVehiculo(10L, "1234ABC", "seat-ibiza-1234abc"));
+            .thenReturn(responseVehiculo(10L, "1234ABC", "seat-ibiza-1234abc"));
 
         mockMvc.perform(get("/api/vehiculos/seat-ibiza-1234abc"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(10))
-                .andExpect(jsonPath("$.slug").value("seat-ibiza-1234abc"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(10))
+            .andExpect(jsonPath("$.slug").value("seat-ibiza-1234abc"));
     }
 
     @Test
     void obtenerVehiculoPorSlug_noExiste_404() throws Exception {
         when(vehiculoService.obtenerVehiculoPorSlug("no-existe"))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehiculo no encontrado"));
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehiculo no encontrado"));
 
         mockMvc.perform(get("/api/vehiculos/no-existe"))
-                .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound());
     }
 
     private void autenticar(String email) {
-        SecurityContext context = new org.springframework.security.core.context.SecurityContextImpl();
-        context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken(email, null));
+        SecurityContext context = new SecurityContextImpl();
+        context.setAuthentication(new TestingAuthenticationToken(email, null));
         SecurityContextHolder.setContext(context);
         clearInvocations(vehiculoService);
     }

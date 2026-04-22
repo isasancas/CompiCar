@@ -96,7 +96,7 @@ class VehiculoServiceTest {
         when(personaRepository.findByEmail(persona.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.crearVehiculo(persona.getEmail(), request));
+            () -> vehiculoService.crearVehiculo(persona.getEmail(), request));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no autenticado", ex.getReason());
@@ -108,7 +108,7 @@ class VehiculoServiceTest {
         when(vehiculoRepository.existsByMatricula("1234ABC")).thenReturn(true);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.crearVehiculo(persona.getEmail(), request));
+            () -> vehiculoService.crearVehiculo(persona.getEmail(), request));
 
         assertEquals(409, ex.getStatusCode().value());
         assertEquals("La matricula ya existe", ex.getReason());
@@ -135,7 +135,7 @@ class VehiculoServiceTest {
         when(personaRepository.findByEmail(persona.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.obtenerMisVehiculos(persona.getEmail()));
+            () -> vehiculoService.obtenerMisVehiculos(persona.getEmail()));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no autenticado", ex.getReason());
@@ -163,7 +163,7 @@ class VehiculoServiceTest {
         when(personaRepository.findByEmail(persona.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.actualizarVehiculo(persona.getEmail(), 10L, request));
+            () -> vehiculoService.actualizarVehiculo(persona.getEmail(), 10L, request));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no autenticado", ex.getReason());
@@ -175,7 +175,7 @@ class VehiculoServiceTest {
         when(vehiculoRepository.findByIdAndPersonaId(10L, 1L)).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.actualizarVehiculo(persona.getEmail(), 10L, request));
+            () -> vehiculoService.actualizarVehiculo(persona.getEmail(), 10L, request));
 
         assertEquals(404, ex.getStatusCode().value());
         assertEquals("Vehiculo no encontrado", ex.getReason());
@@ -190,7 +190,7 @@ class VehiculoServiceTest {
         when(vehiculoRepository.existsByMatriculaAndIdNot("1234ABC", 10L)).thenReturn(true);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.actualizarVehiculo(persona.getEmail(), 10L, request));
+            () -> vehiculoService.actualizarVehiculo(persona.getEmail(), 10L, request));
 
         assertEquals(409, ex.getStatusCode().value());
         assertEquals("La matricula ya existe", ex.getReason());
@@ -218,7 +218,7 @@ class VehiculoServiceTest {
         when(viajeRepository.existsByVehiculoId(10L)).thenReturn(true);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.borrarVehiculo(persona.getEmail(), 10L));
+            () -> vehiculoService.borrarVehiculo(persona.getEmail(), 10L));
 
         assertEquals(409, ex.getStatusCode().value());
         assertEquals("No se puede borrar el vehiculo porque tiene viajes asociados", ex.getReason());
@@ -231,7 +231,7 @@ class VehiculoServiceTest {
         when(vehiculoRepository.findByIdAndPersonaId(10L, 1L)).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.borrarVehiculo(persona.getEmail(), 10L));
+            () -> vehiculoService.borrarVehiculo(persona.getEmail(), 10L));
 
         assertEquals(404, ex.getStatusCode().value());
         assertEquals("Vehiculo no encontrado", ex.getReason());
@@ -253,7 +253,7 @@ class VehiculoServiceTest {
         when(vehiculoRepository.findBySlug("no-existe")).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> vehiculoService.obtenerVehiculoPorSlug("no-existe"));
+            () -> vehiculoService.obtenerVehiculoPorSlug("no-existe"));
 
         assertEquals(404, ex.getStatusCode().value());
         assertEquals("Vehiculo no encontrado", ex.getReason());

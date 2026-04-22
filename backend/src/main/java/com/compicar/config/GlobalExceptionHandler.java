@@ -17,8 +17,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidationException(MethodArgumentNotValidException ex) {
         String errorMsg = ex.getBindingResult().getFieldErrors().stream()
-                .map(error -> error.getDefaultMessage())
-                .collect(Collectors.joining("; "));
+            .map(error -> error.getDefaultMessage())
+            .collect(Collectors.joining("; "));
         return ResponseEntity.badRequest().body(Map.of("error", errorMsg));
     }
 
@@ -40,7 +40,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class) // Captura cualquier cosa no especificada antes
     public ResponseEntity<?> handleAllExceptions(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body(Map.of("error", "Ocurrió un error inesperado"));
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Ocurrió un error inesperado"));
     }
 }

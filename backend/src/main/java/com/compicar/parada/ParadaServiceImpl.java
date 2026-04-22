@@ -3,10 +3,11 @@ package com.compicar.parada;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.compicar.checkin.Checkin;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
 
@@ -26,7 +27,7 @@ public class ParadaServiceImpl implements ParadaService {
     @Override
     public Parada crearParada(Long viajeId, Parada parada) {
             Viaje viaje = viajeRepository.findById(viajeId)
-                    .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
     
             parada.setViaje(viaje);
             return paradaRepository.save(parada);   
@@ -35,7 +36,7 @@ public class ParadaServiceImpl implements ParadaService {
     @Override
     public Viaje anadirParadas(Long viajeId, List<Parada> paradas) {
         Viaje viaje = viajeRepository.findById(viajeId)
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
 
         if (viaje.getParadas() == null) {
             viaje.setParadas(new java.util.ArrayList<>());

@@ -24,12 +24,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -70,12 +70,12 @@ class ViajeControllerTest {
         when(viajeService.crearViaje(anyString(), any(Viaje.class))).thenReturn(retorno);
 
         mockMvc.perform(post("/api/viajes/crear")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1));
 
-        verify(viajeService).crearViaje(org.mockito.ArgumentMatchers.eq("driver@compicar.com"), any(Viaje.class));
+        verify(viajeService).crearViaje(ArgumentMatchers.eq("driver@compicar.com"), any(Viaje.class));
     }
 
     @Test
@@ -83,8 +83,8 @@ class ViajeControllerTest {
         SecurityContextHolder.clearContext();
 
         mockMvc.perform(post("/api/viajes/crear")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(viajeService);
@@ -97,8 +97,8 @@ class ViajeControllerTest {
                 .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "No permitido"));
 
         mockMvc.perform(post("/api/viajes/crear")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -115,13 +115,13 @@ class ViajeControllerTest {
         when(viajeService.calcularPrecioTrayecto(anyString(), any(CalcularPrecioTrayectoRequestDTO.class))).thenReturn(dto);
 
         mockMvc.perform(post("/api/viajes/precio/calcular")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"vehiculoId\":10,\"distanciaKm\":100.0}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"vehiculoId\":10,\"distanciaKm\":100.0}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fuente").value("GEMINI"))
                 .andExpect(jsonPath("$.litrosEstimados").value(5.00));
 
-        verify(viajeService).calcularPrecioTrayecto(org.mockito.ArgumentMatchers.eq("driver@compicar.com"), any(CalcularPrecioTrayectoRequestDTO.class));
+        verify(viajeService).calcularPrecioTrayecto(ArgumentMatchers.eq("driver@compicar.com"), any(CalcularPrecioTrayectoRequestDTO.class));
     }
 
     @Test
@@ -129,8 +129,8 @@ class ViajeControllerTest {
         SecurityContextHolder.clearContext();
 
         mockMvc.perform(post("/api/viajes/precio/calcular")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"vehiculoId\":10,\"distanciaKm\":100.0}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"vehiculoId\":10,\"distanciaKm\":100.0}"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(viajeService);
@@ -141,8 +141,8 @@ class ViajeControllerTest {
         autenticar("driver@compicar.com");
 
         mockMvc.perform(post("/api/viajes/precio/calcular")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"vehiculoId\":10,\"distanciaKm\":0.0}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"vehiculoId\":10,\"distanciaKm\":0.0}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(viajeService);

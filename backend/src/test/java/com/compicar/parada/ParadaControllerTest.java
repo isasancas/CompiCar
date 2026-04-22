@@ -26,10 +26,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -77,23 +79,22 @@ class ParadaControllerTest {
         when(paradaService.anadirParadas(org.mockito.ArgumentMatchers.eq(99L), anyList())).thenReturn(retorno);
 
         mockMvc.perform(post("/api/paradas/api/viajes/99/paradas")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(List.of(p1, p2))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].localizacion").value("Sevilla"))
-                .andExpect(jsonPath("$[1].localizacion").value("Cadiz"));
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(List.of(p1, p2))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].localizacion").value("Sevilla"))
+            .andExpect(jsonPath("$[1].localizacion").value("Cadiz"));
 
         verify(paradaService).anadirParadas(
         org.mockito.ArgumentMatchers.eq(99L),
-        argThat(lista ->
-                lista.size() == 2
-                        && "Sevilla".equals(lista.get(0).getLocalizacion())
-                        && TipoParada.ORIGEN == lista.get(0).getTipo()
-                        && Integer.valueOf(1).equals(lista.get(0).getOrden())
-                        && "Cadiz".equals(lista.get(1).getLocalizacion())
-                        && TipoParada.DESTINO == lista.get(1).getTipo()
-                        && Integer.valueOf(2).equals(lista.get(1).getOrden())
-                )
+        argThat(lista -> lista.size() == 2
+                && "Sevilla".equals(lista.get(0).getLocalizacion())
+                && TipoParada.ORIGEN == lista.get(0).getTipo()
+                && Integer.valueOf(1).equals(lista.get(0).getOrden())
+                && "Cadiz".equals(lista.get(1).getLocalizacion())
+                && TipoParada.DESTINO == lista.get(1).getTipo()
+                && Integer.valueOf(2).equals(lista.get(1).getOrden())
+            )
         );
     }
 
@@ -102,25 +103,25 @@ class ParadaControllerTest {
         Viaje retorno = new Viaje();
         retorno.setParadas(List.of());
 
-        when(paradaService.anadirParadas(org.mockito.ArgumentMatchers.eq(99L), anyList())).thenReturn(retorno);
+        when(paradaService.anadirParadas(ArgumentMatchers.eq(99L), anyList())).thenReturn(retorno);
 
         mockMvc.perform(post("/api/paradas/api/viajes/99/paradas")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("[]"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(0));
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("[]"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
     void anadirParadas_errorServicio_404() throws Exception {
-        when(paradaService.anadirParadas(org.mockito.ArgumentMatchers.eq(99L), anyList()))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+        when(paradaService.anadirParadas(ArgumentMatchers.eq(99L), anyList()))
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
 
         mockMvc.perform(post("/api/paradas/api/viajes/99/paradas")
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(List.of(p1, p2))))
-                .andExpect(status().isNotFound());
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(List.of(p1, p2))))
+            .andExpect(status().isNotFound());
     }
 
     @Test
@@ -138,7 +139,7 @@ class ParadaControllerTest {
     @Test
     void crearParada_llamadaDirecta_error404() {
         when(paradaService.crearParada(99L, p1))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+            .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
 
         try {
             paradaController.crearParada(99L, p1);
@@ -154,9 +155,9 @@ class ParadaControllerTest {
         when(paradaService.obtenerParadasPorViaje(viaje)).thenReturn(List.of(p1, p2));
 
         mockMvc.perform(get("/api/paradas/viaje/99"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].localizacion").value("Sevilla"))
-                .andExpect(jsonPath("$[1].tipo").value("DESTINO"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].localizacion").value("Sevilla"))
+            .andExpect(jsonPath("$[1].tipo").value("DESTINO"));
     }
 
     @Test
@@ -164,7 +165,7 @@ class ParadaControllerTest {
         when(viajeRepository.findById(99L)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/paradas/viaje/99"))
-                .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound());
     }
 
     private Parada parada(String localizacion, TipoParada tipo, Integer orden) {

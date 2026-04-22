@@ -23,7 +23,7 @@ class VehiculoIntegrationTest extends BaseIntegrationTest {
         Long vehiculoId = crearVehiculo(token);
 
         mockMvc.perform(get("/api/vehiculos/propios")
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].id").value(vehiculoId));
     }
@@ -43,9 +43,9 @@ class VehiculoIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/vehiculos")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isBadRequest());
     }
 
@@ -65,9 +65,9 @@ class VehiculoIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(put("/api/vehiculos/" + vehiculoId)
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.matricula").value("9999XYZ"))
             .andExpect(jsonPath("$.marca").value("Toyota"));
@@ -79,7 +79,7 @@ class VehiculoIntegrationTest extends BaseIntegrationTest {
         Long vehiculoId = crearVehiculo(token);
 
         mockMvc.perform(delete("/api/vehiculos/" + vehiculoId)
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isNoContent());
     }
 
@@ -98,16 +98,16 @@ class VehiculoIntegrationTest extends BaseIntegrationTest {
         );
 
         MvcResult createResult = mockMvc.perform(post("/api/vehiculos")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isCreated())
             .andReturn();
 
         String slug = JsonPath.read(createResult.getResponse().getContentAsString(), "$.slug");
 
         mockMvc.perform(get("/api/vehiculos/" + slug)
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.slug").value(slug));
     }
@@ -125,8 +125,8 @@ class VehiculoIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/vehiculos")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isForbidden());
     }
 }

@@ -41,9 +41,7 @@ public class PersonaController {
 
 
     @PutMapping("/{personaId}/perfil")
-    public ResponseEntity<ActualizarPerfilDTO> actualizarPerfil(
-            @PathVariable Long personaId,
-            @RequestBody ActualizarPerfilDTO perfilActualizado) {
+    public ResponseEntity<ActualizarPerfilDTO> actualizarPerfil(@PathVariable Long personaId, @RequestBody ActualizarPerfilDTO perfilActualizado) {
         ActualizarPerfilDTO perfil = personaService.actualizarPerfil(personaId, perfilActualizado);
         return ResponseEntity.ok(perfil);
     }

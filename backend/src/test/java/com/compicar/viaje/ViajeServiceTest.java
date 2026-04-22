@@ -142,7 +142,7 @@ class ViajeServiceTest {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no encontrado", ex.getReason());
@@ -154,7 +154,7 @@ class ViajeServiceTest {
         viajeBase.setVehiculo(null);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("El viaje debe incluir un vehículo válido", ex.getReason());
@@ -166,7 +166,7 @@ class ViajeServiceTest {
         viajeBase.setVehiculo(new Vehiculo());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("El viaje debe incluir un vehículo válido", ex.getReason());
@@ -178,7 +178,7 @@ class ViajeServiceTest {
         viajeBase.setParadas(List.of(parada(TipoParada.ORIGEN, "Sevilla", null, 1)));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("Debes indicar al menos origen y destino", ex.getReason());
@@ -190,7 +190,7 @@ class ViajeServiceTest {
         when(vehiculoRepository.findById(vehiculoConductor.getId())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("Vehículo no existe", ex.getReason());
@@ -202,7 +202,7 @@ class ViajeServiceTest {
         when(vehiculoRepository.findById(vehiculoConductor.getId())).thenReturn(Optional.of(vehiculoOtro));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(403, ex.getStatusCode().value());
         assertEquals("El vehículo no pertenece al usuario autenticado", ex.getReason());
@@ -218,7 +218,7 @@ class ViajeServiceTest {
         viajeBase.setParadas(List.of(p1, p2));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("Debe haber exactamente un ORIGEN y un DESTINO", ex.getReason());
@@ -234,7 +234,7 @@ class ViajeServiceTest {
         viajeBase.setParadas(List.of(p1, p2));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("Todas las paradas deben tener localizacion", ex.getReason());
@@ -250,7 +250,7 @@ class ViajeServiceTest {
         viajeBase.setParadas(List.of(p1, p2));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
+            () -> viajeService.crearViaje(conductor.getEmail(), viajeBase));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("No puede haber dos paradas con el mismo orden", ex.getReason());
@@ -265,7 +265,7 @@ class ViajeServiceTest {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
         when(vehiculoRepository.findById(vehiculoConductor.getId())).thenReturn(Optional.of(vehiculoConductor));
         when(calculoPrecioIA.pedirEstimacionJson(anyString()))
-                .thenReturn("{\"precio_combustible_litro\":1.7,\"detalle\":\"ok\"}");
+            .thenReturn("{\"precio_combustible_litro\":1.7,\"detalle\":\"ok\"}");
 
         PrecioTrayectoResponseDTO resp = viajeService.calcularPrecioTrayecto(conductor.getEmail(), req);
 
@@ -286,7 +286,7 @@ class ViajeServiceTest {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
         when(vehiculoRepository.findById(vehiculoConductor.getId())).thenReturn(Optional.of(vehiculoConductor));
         when(calculoPrecioIA.pedirEstimacionJson(anyString()))
-                .thenReturn("{\"precio_combustible_litro\":0.5,\"detalle\":\"too low\"}");
+            .thenReturn("{\"precio_combustible_litro\":0.5,\"detalle\":\"too low\"}");
 
         PrecioTrayectoResponseDTO resp = viajeService.calcularPrecioTrayecto(conductor.getEmail(), req);
 
@@ -320,7 +320,7 @@ class ViajeServiceTest {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.calcularPrecioTrayecto(conductor.getEmail(), req));
+            () -> viajeService.calcularPrecioTrayecto(conductor.getEmail(), req));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no encontrado", ex.getReason());
@@ -336,7 +336,7 @@ class ViajeServiceTest {
         when(vehiculoRepository.findById(vehiculoConductor.getId())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.calcularPrecioTrayecto(conductor.getEmail(), req));
+            () -> viajeService.calcularPrecioTrayecto(conductor.getEmail(), req));
 
         assertEquals(400, ex.getStatusCode().value());
         assertEquals("Vehículo no existe", ex.getReason());
@@ -352,7 +352,7 @@ class ViajeServiceTest {
         when(vehiculoRepository.findById(vehiculoOtro.getId())).thenReturn(Optional.of(vehiculoOtro));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.calcularPrecioTrayecto(conductor.getEmail(), req));
+            () -> viajeService.calcularPrecioTrayecto(conductor.getEmail(), req));
 
         assertEquals(403, ex.getStatusCode().value());
         assertEquals("El vehículo no pertenece al usuario autenticado", ex.getReason());
@@ -378,7 +378,7 @@ class ViajeServiceTest {
         when(viajeRepository.findBySlug("no-existe")).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.obtenerViajePorSlug("no-existe"));
+            () -> viajeService.obtenerViajePorSlug("no-existe"));
 
         assertEquals(404, ex.getStatusCode().value());
         assertEquals("Viaje no encontrado", ex.getReason());
@@ -401,7 +401,7 @@ class ViajeServiceTest {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.obtenerMisViajes(conductor.getEmail()));
+            () -> viajeService.obtenerMisViajes(conductor.getEmail()));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no encontrado", ex.getReason());
@@ -424,7 +424,7 @@ class ViajeServiceTest {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
-                () -> viajeService.obtenerViajesParticipados(conductor.getEmail()));
+            () -> viajeService.obtenerViajesParticipados(conductor.getEmail()));
 
         assertEquals(401, ex.getStatusCode().value());
         assertEquals("Usuario no encontrado", ex.getReason());

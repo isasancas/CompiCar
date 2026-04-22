@@ -11,6 +11,7 @@ import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
@@ -60,8 +61,8 @@ public abstract class BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/registro")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registro)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(registro)))
             .andExpect(status().isOk());
 
         Map<String, Object> login = Map.of(
@@ -70,8 +71,8 @@ public abstract class BaseIntegrationTest {
         );
 
         MvcResult loginResult = mockMvc.perform(post("/api/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(login)))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(login)))
             .andExpect(status().isOk())
             .andReturn();
 
@@ -95,9 +96,9 @@ public abstract class BaseIntegrationTest {
         );
 
         MvcResult result = mockMvc.perform(post("/api/vehiculos")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isCreated())
             .andReturn();
 
@@ -129,32 +130,28 @@ public abstract class BaseIntegrationTest {
         );
 
         return mockMvc.perform(post("/api/viajes/crear")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk())
             .andReturn();
     }
 
     protected Long obtenerPrimerViajeId(String token) throws Exception {
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/viajes/mis-viajes")
-                        .header("Authorization", "Bearer " + token)
-        )
-        .andExpect(status().isOk())
-        .andReturn();
+        MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/viajes/mis-viajes")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
 
         String body = result.getResponse().getContentAsString();
         return ((Number) JsonPath.read(body, "$[0].id")).longValue();
     }
 
     protected String obtenerPrimerViajeSlug(String token) throws Exception {
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/viajes/mis-viajes")
-                        .header("Authorization", "Bearer " + token)
-        )
-        .andExpect(status().isOk())
-        .andReturn();
+        MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get("/api/viajes/mis-viajes")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
 
         String body = result.getResponse().getContentAsString();
         return JsonPath.read(body, "$[0].slug");

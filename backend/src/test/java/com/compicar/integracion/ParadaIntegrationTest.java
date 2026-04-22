@@ -43,9 +43,9 @@ class ParadaIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/paradas/api/viajes/" + viajeId + "/paradas")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(nuevasParadas)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(nuevasParadas)))
             .andExpect(status().isOk());
 
         Viaje viaje = viajeRepository.findById(viajeId).orElseThrow();
@@ -56,7 +56,7 @@ class ParadaIntegrationTest extends BaseIntegrationTest {
         assertTrue(paradas.stream().anyMatch(p -> "Cadiz".equals(p.getLocalizacion())));
 
         mockMvc.perform(get("/api/paradas/viaje/" + viajeId)
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isOk());
     }
 
@@ -74,9 +74,9 @@ class ParadaIntegrationTest extends BaseIntegrationTest {
         );
 
         mockMvc.perform(post("/api/paradas/api/viajes/999999/paradas")
-                .header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(payload)))
+            .header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isNotFound());
     }
 
@@ -85,7 +85,7 @@ class ParadaIntegrationTest extends BaseIntegrationTest {
         String token = registerAndLogin();
 
         mockMvc.perform(get("/api/paradas/viaje/999999")
-                .header("Authorization", "Bearer " + token))
+            .header("Authorization", "Bearer " + token))
             .andExpect(status().isNotFound());
     }
 
