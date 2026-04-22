@@ -34,22 +34,18 @@ public class ViajeServiceImpl implements ViajeService {
     private final ViajeRepository viajeRepository;
     private final PersonaRepository personaRepository;
     private final VehiculoRepository vehiculoRepository;
-    private final GeminiFuelPriceClient geminiFuelPriceClient;
+    private final CalculoPrecioIA calculoPrecioIA;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
 
-    public ViajeServiceImpl(
-        ViajeRepository viajeRepository,
-        PersonaRepository personaRepository,
-        VehiculoRepository vehiculoRepository,
-        GeminiFuelPriceClient geminiFuelPriceClient
-    ) {
+    public ViajeServiceImpl(ViajeRepository viajeRepository,PersonaRepository personaRepository,
+        VehiculoRepository vehiculoRepository,CalculoPrecioIA calculoPrecioIA) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
-        this.geminiFuelPriceClient = geminiFuelPriceClient;
+        this.calculoPrecioIA = calculoPrecioIA;
     }
 
     @Override
@@ -152,7 +148,7 @@ public class ViajeServiceImpl implements ViajeService {
     private BigDecimal obtenerPrecioLitroConGemini(Vehiculo vehiculo) {
         try {
             String prompt = construirPromptPrecio(vehiculo);
-            String json = geminiFuelPriceClient.pedirEstimacionJson(prompt);
+            String json = calculoPrecioIA.pedirEstimacionJson(prompt);
 
             JsonNode node = objectMapper.readTree(json);
             BigDecimal precio = node.path("precio_combustible_litro").decimalValue();
