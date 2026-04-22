@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:compicar;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  flyway:
+    enabled: false
+
+jwt:
+  secret: 6c3J0NfQxkQ2xq8U1mM2oB4rK8fVnY1p3dT7wA9zLqE=
+  expiration: 3600000
+
+gemini:
+  api-key: ""
+  model: gemini-2.5-flash
+  endpoint: https://generativelanguage.googleapis.com/v1beta/models
+
+pricing:
+  fallback:
+    fuel-price-eur-per-liter: 1.65
