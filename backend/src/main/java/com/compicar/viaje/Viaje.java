@@ -9,6 +9,7 @@ import com.compicar.persona.Persona;
 import com.compicar.reserva.Reserva;
 import com.compicar.vehiculo.Vehiculo;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,6 +20,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 @Entity
@@ -53,8 +55,12 @@ public class Viaje {
     @OneToMany(mappedBy = "viaje")
     private List<Reserva> reservas;
 
-    @OneToMany(mappedBy = "viaje")
+    @OneToMany(mappedBy = "viaje", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orden ASC")
     private List<Parada> paradas;
+
+    @Column(nullable = false, unique = true, length = 180)
+    private String slug;
 
     // Constructores
     public Viaje() {
@@ -68,6 +74,7 @@ public class Viaje {
         this.precio = precio;
         this.persona = persona;
         this.vehiculo = vehiculo;
+        this.slug = "viaje-" + id;
     }
 
     // Getters
@@ -106,6 +113,10 @@ public class Viaje {
     public List<Parada> getParadas() {
         return paradas;
     }
+    
+    public String getSlug() {
+        return slug;
+    }
 
     // Setters
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
@@ -132,10 +143,18 @@ public class Viaje {
         this.vehiculo = vehiculo;
     }
 
+    public void setParadas(List<Parada> paradas) {
+        this.paradas = paradas;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "Viaje{id=" + id + ", fechaHoraSalida=" + fechaHoraSalida + ", estado=" + estado
-                + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + "}";
+                + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + ", slug=" + slug + "}";
     }
 
 }

@@ -10,6 +10,7 @@ import org.springframework.security.core.Authentication;
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
 import com.compicar.autenticacion.registro.Registro;
+import com.compicar.config.SlugUtils;
 
 import jakarta.transaction.Transactional;
 
@@ -52,6 +53,11 @@ public class PersonaServiceImpl implements PersonaService {
 
         String contrasenaEncriptada = passwordEncoder.encode(registro.getContrasena());
         persona.setContrasena(contrasenaEncriptada);
+
+        String baseSlug = SlugUtils.toSlug(
+            registro.getNombre() + "-" + registro.getPrimerApellido()
+        );
+        persona.setSlug(generarSlugUnico(baseSlug));
 
         return personaRepository.save(persona);
     }
@@ -113,5 +119,22 @@ public class PersonaServiceImpl implements PersonaService {
         Persona persona = personaRepository.findByEmail(email)
         .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
         return persona;
+    }
+
+    @Override
+    public PerfilPersonaDTO obtenerPerfilPorSlug(String slug) {
+        Persona persona = personaRepository.findBySlug(slug)
+            .orElseThrow(() -> new IllegalArgumentException("Persona no encontrada"));
+        return new PerfilPersonaDTO(persona);
+    }
+
+    private String generarSlugUnico(String baseSlug) {
+        String candidato = baseSlug;
+        int sufijo = 2;
+        while (personaRepository.existsBySlug(candidato)) {
+            candidato = baseSlug + "-" + sufijo;
+            sufijo++;
+        }
+        return candidato;
     }
 }

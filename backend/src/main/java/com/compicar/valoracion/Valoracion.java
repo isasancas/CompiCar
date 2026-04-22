@@ -41,6 +41,10 @@ public abstract class Valoracion {
     @JoinColumn(name = "valorado_id", nullable = false)
     private Persona valorado;
 
+    @Column(nullable = false, unique = true, length = 180)
+    private String slug;
+
+
     // Constructores
     public Valoracion() {
         this.fecha = LocalDateTime.now();
@@ -52,6 +56,7 @@ public abstract class Valoracion {
         this.autor = autor;
         this.valorado = valorado;
         this.fecha = LocalDateTime.now();
+        this.slug = "valoracion-" + id;
     }
 
     // Getters
@@ -79,6 +84,10 @@ public abstract class Valoracion {
         return valorado;
     }
 
+    public String getSlug() {
+        return slug;
+    }
+
     // Setters
     public void setPuntuacion(Integer puntuacion) {
         this.puntuacion = puntuacion;
@@ -96,10 +105,14 @@ public abstract class Valoracion {
         this.valorado = valorado;
     }
 
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "Valoracion{id=" + id + ", puntuacion=" + puntuacion + ", comentario='" + comentario + "', fecha=" + fecha
-                + ", autor=" + autor.getId() + ", valorado=" + valorado.getId() + "}";
+                + ", autor=" + autor.getId() + ", valorado=" + valorado.getId() + ", slug=" + slug + "}";
     }
     
 }

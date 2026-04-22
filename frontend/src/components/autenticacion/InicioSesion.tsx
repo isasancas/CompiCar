@@ -137,16 +137,20 @@ const InicioSesion: React.FC = () => {
           </h2>
         </div>
         {generalError && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div
+            data-testid="login-general-error"
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
             {generalError}
           </div>
         )}
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit} data-testid="login-form">
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">Email</label>
               <input
                 id="email"
+                data-testid="input-email"
                 name="email"
                 type="email"
                 required
@@ -155,12 +159,13 @@ const InicioSesion: React.FC = () => {
                 value={formData.email}
                 onChange={handleChange}
               />
-              {fieldErrors.email && <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>}
+              {fieldErrors.email && <p data-testid="login-email-error" className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>}
             </div>
             <div>
               <label htmlFor="password" className="sr-only">Contraseña</label>
               <input
                 id="password"
+                data-testid="input-password"
                 name="password"
                 type="password"
                 required
@@ -169,12 +174,13 @@ const InicioSesion: React.FC = () => {
                 value={formData.password}
                 onChange={handleChange}
               />
-              {fieldErrors.password && <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>}
+              {fieldErrors.password && <p data-testid="login-password-error" className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>}
             </div>
           </div>
 
           <div>
             <button
+              data-testid="btn-login"
               type="submit"
               className="bg-gradient-compi hover:opacity-90 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
               disabled={isSubmitting}

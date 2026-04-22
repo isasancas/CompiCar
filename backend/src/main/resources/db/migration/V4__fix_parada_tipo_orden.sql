@@ -1,0 +1,19 @@
+ALTER TABLE parada
+    ADD COLUMN IF NOT EXISTS tipo VARCHAR(30);
+
+ALTER TABLE parada
+    ADD COLUMN IF NOT EXISTS orden INTEGER;
+
+UPDATE parada
+SET tipo = 'INTERMEDIA'
+WHERE tipo IS NULL;
+
+UPDATE parada
+SET orden = 1
+WHERE orden IS NULL;
+
+ALTER TABLE parada
+    ALTER COLUMN tipo SET NOT NULL;
+
+ALTER TABLE parada
+    ALTER COLUMN orden SET NOT NULL;

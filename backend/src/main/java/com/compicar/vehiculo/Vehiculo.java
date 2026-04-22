@@ -19,7 +19,7 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "vehiculo")
-public abstract class Vehiculo {
+public class Vehiculo {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -54,6 +54,9 @@ public abstract class Vehiculo {
     @OneToMany(mappedBy = "vehiculo")
     private List<Viaje> viajes;
 
+    @Column(nullable = false, unique = true, length = 180)
+    private String slug;
+
     // Constructores
     public Vehiculo() {
     }
@@ -68,6 +71,7 @@ public abstract class Vehiculo {
         this.anio = anio;
         this.tipo = tipo;
         this.persona = persona;
+        this.slug = "vehiculo-" + id;
     }
 
     // Getters
@@ -111,7 +115,15 @@ public abstract class Vehiculo {
         return viajes;
     }
 
+    public String getSlug() {
+        return slug;
+    }
+
     // Setters
+    public void setId(Long id) {
+        this.id = id;
+    }
+
     public void setMatricula(String matricula) {
         this.matricula = matricula;
     }
@@ -144,11 +156,15 @@ public abstract class Vehiculo {
         this.persona = persona;
     }
 
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "Vehiculo{id=" + id + ", matricula='" + matricula + "', marca='" + marca + "', modelo='" + modelo
                 + "', plazas=" + plazas + ", consumo=" + consumo + ", anio=" + anio + ", tipo=" + tipo
-                + ", personaId=" + (persona != null ? persona.getId() : null) + "}";
+                + ", personaId=" + (persona != null ? persona.getId() : null) + ", slug=" + slug + "}";
     }
 
 }

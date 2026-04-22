@@ -11,6 +11,7 @@ public class PerfilPersonaDTO {
     private String email;
     private String telefono;
     private Double reputacion;
+    private String slug;
 
     public PerfilPersonaDTO() {
     }
@@ -23,10 +24,11 @@ public class PerfilPersonaDTO {
         this.email = persona.getEmail();
         this.telefono = persona.getTelefono();
         this.reputacion = persona.getReputacion();
+        this.slug = persona.getSlug();
     }
 
     public PerfilPersonaDTO(Long id, String nombre, String primerApellido, String segundoApellido, String email,
-            String telefono, Double reputacion) {
+            String telefono, Double reputacion, String slug) {
         this.id = id;
         this.nombre = nombre;
         this.primerApellido = primerApellido;
@@ -34,6 +36,7 @@ public class PerfilPersonaDTO {
         this.email = email;
         this.telefono = telefono;
         this.reputacion = reputacion;
+        this.slug = slug;
     }
 
     public Long getId() {
@@ -64,6 +67,10 @@ public class PerfilPersonaDTO {
         return reputacion;
     }
 
+    public String getSlug() {
+        return slug;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -92,6 +99,10 @@ public class PerfilPersonaDTO {
         this.reputacion = reputacion;
     }
 
+    public void setSlug(String slug) {
+        this.slug = slug;
+    }
+
     @Override
     public String toString() {
         return "PerfilPersonaDTO{" +
@@ -102,6 +113,7 @@ public class PerfilPersonaDTO {
                 ", email='" + email + '\'' +
                 ", telefono='" + telefono + '\'' +
                 ", reputacion=" + reputacion +
+                ", slug='" + slug + '\'' +
                 '}';
     }
 
