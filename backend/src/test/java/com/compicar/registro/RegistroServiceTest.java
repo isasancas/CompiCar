@@ -18,7 +18,7 @@ import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaService;
 
 @ExtendWith(MockitoExtension.class)
-class RegistroServiceTests {
+class RegistroServiceTest {
 
     @Mock
     private PersonaService personaService;

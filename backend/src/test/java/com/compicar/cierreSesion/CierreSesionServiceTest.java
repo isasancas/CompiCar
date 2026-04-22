@@ -15,7 +15,7 @@ import com.compicar.autenticacion.inicioSesion.LogoutService;
 import com.compicar.autenticacion.inicioSesion.TokenBlacklistService;
 
 @ExtendWith(MockitoExtension.class)
-public class CierreSesionServiceTests {
+public class CierreSesionServiceTest {
 
     @Mock
     private JwtUtil jwtUtil;

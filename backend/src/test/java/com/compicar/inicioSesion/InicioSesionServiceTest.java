@@ -20,7 +20,7 @@ import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaService;
 
 @ExtendWith(MockitoExtension.class)
-public class InicioSesionServiceTests {
+public class InicioSesionServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
