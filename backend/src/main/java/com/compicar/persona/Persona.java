@@ -58,10 +58,12 @@ public class Persona {
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
 
-    @Column(columnDefinition = "LONGTEXT")
+    @Column(columnDefinition = "TEXT")
     private String foto;
 
-    // Atributo derivado
+    @Column(nullable = false)
+    private Integer numeroCancelaciones = 0;
+
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
             return 0.0;
@@ -70,7 +72,6 @@ public class Persona {
         return valoracionesRecibidas.stream().mapToDouble(Valoracion::getPuntuacion).average().orElse(0.0);
     }
 
-    // Constructores
     public Persona() {
     }
 
@@ -83,6 +84,7 @@ public class Persona {
         this.email = email;
         this.telefono = telefono;
         this.slug = "persona-" + id;
+        this.numeroCancelaciones = 0;
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
@@ -100,9 +102,9 @@ public class Persona {
         this.viajes = viajes;
         this.valoracionesEmitidas = valoracionesEmitidas;
         this.valoracionesRecibidas = valoracionesRecibidas;
+        this.numeroCancelaciones = 0;
     }
 
-    //Getters
     public Long getId() {
         return id;
     }
@@ -159,7 +161,17 @@ public class Persona {
         return foto;
     }
 
-    //Setters
+    public Integer getNumeroCancelaciones() {
+        return numeroCancelaciones;
+    }
+
+    public void incrementarCancelaciones() {
+        if (this.numeroCancelaciones == null) {
+            this.numeroCancelaciones = 0;
+        }
+        this.numeroCancelaciones++;
+    }
+
     public void setNombre(String nombre) {
         this.nombre = nombre;
     }
@@ -212,10 +224,14 @@ public class Persona {
         this.foto = foto;
     }
 
+    public void setNumeroCancelaciones(Integer numeroCancelaciones) {
+        this.numeroCancelaciones = numeroCancelaciones;
+    }
+
     @Override
     public String toString() {
         return "Persona{id=" + id + ", nombre='" + nombre + "', primerApellido='" + primerApellido
                 + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono
-                + "', reputacion=" + getReputacion() + ", slug=" + slug + "}";
+                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + slug + "}";
     }
 }

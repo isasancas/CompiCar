@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -37,7 +38,7 @@ public class ReservaController {
     }
 
     @PutMapping("/cancelar")
-    public Reserva cancelarReserva(String usuarioEmail, Long reservaId) {
+    public Reserva cancelarReserva(@RequestParam Long reservaId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
             throw new org.springframework.web.server.ResponseStatusException(
@@ -61,7 +62,7 @@ public class ReservaController {
     }
 
     @GetMapping("/viaje")
-    public List<Reserva> obtenerReservasPorViaje(Long viajeId) {
+    public List<Reserva> obtenerReservasPorViaje(@RequestParam Long viajeId) {
         return reservaService.obtenerReservasPorViaje(viajeId);
     }
 
@@ -102,9 +103,16 @@ public class ReservaController {
         return reservaService.reservaConfirmada(reservaId);
     }
 
-    @RequestMapping("/noPresentado")
-    public Reserva reservaNoPresentado(Long reservaId) {
-        return reservaService.reservaNoPresentado(reservaId);
+    @PutMapping("/{reservaId}/no-presentado")
+    public Reserva marcarNoPresentadoPorConductor(@PathVariable Long reservaId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.UNAUTHORIZED, "No autenticado"
+            );
+        }
+        String usuarioEmailAuth = auth.getName();
+        return reservaService.marcarNoPresentadoPorConductor(usuarioEmailAuth, reservaId);
     }
     
 }

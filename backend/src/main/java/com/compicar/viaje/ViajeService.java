@@ -15,5 +15,6 @@ public interface ViajeService {
     List<ViajeDTO> obtenerViajesParticipados(String email);
     ViajeDTO obtenerViajePorSlug(String slug);
     List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha);
-    
+    ViajeDTO cancelarViaje(String usuarioEmail, String slug);
+    int cancelarViajesPendientesExpirados();
 }

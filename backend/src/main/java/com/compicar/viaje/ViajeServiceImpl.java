@@ -2,6 +2,7 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -16,10 +17,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.config.SlugUtils;
+import com.compicar.pago.EstadoPago;
+import com.compicar.pago.Pago;
+import com.compicar.pago.PagoRepository;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
@@ -39,16 +46,23 @@ public class ViajeServiceImpl implements ViajeService {
     private final VehiculoRepository vehiculoRepository;
     private final CalculoPrecioIA calculoPrecioIA;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ReservaRepository reservaRepository;
+    private final PagoRepository pagoRepository;
+
+    private static final long HORAS_LIMITE_CANCELACION = 12L;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
 
-    public ViajeServiceImpl(ViajeRepository viajeRepository,PersonaRepository personaRepository,
-        VehiculoRepository vehiculoRepository,CalculoPrecioIA calculoPrecioIA) {
+    public ViajeServiceImpl(ViajeRepository viajeRepository, PersonaRepository personaRepository,
+            VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
+            ReservaRepository reservaRepository, PagoRepository pagoRepository) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
         this.calculoPrecioIA = calculoPrecioIA;
+        this.reservaRepository = reservaRepository;
+        this.pagoRepository = pagoRepository;
     }
 
     @Override
@@ -190,6 +204,74 @@ public class ViajeServiceImpl implements ViajeService {
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
             .map(this::convertToDTO)
             .toList();
+    }
+
+    @Override
+    public ViajeDTO cancelarViaje(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede cancelar este viaje");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viaje.getEstado());
+        }
+
+        long horasHastaSalida = Duration.between(LocalDateTime.now(), viaje.getFechaHoraSalida()).toHours();
+        boolean penalizaConductor = horasHastaSalida < HORAS_LIMITE_CANCELACION;
+
+        cancelarReservasYReembolsar(viaje, true);
+
+        viaje.setEstado(EstadoViaje.CANCELADO);
+        viajeRepository.save(viaje);
+
+        if (penalizaConductor) {
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return convertToDTO(viaje);
+    }
+
+    @Override
+    public int cancelarViajesPendientesExpirados() {
+        LocalDateTime limite = LocalDateTime.now().minusHours(HORAS_LIMITE_CANCELACION);
+
+        List<Viaje> viajesExpirados = viajeRepository.findByEstadoAndFechaHoraSalidaBefore(EstadoViaje.PENDIENTE, limite);
+
+        for (Viaje viaje : viajesExpirados) {
+            cancelarReservasYReembolsar(viaje, true);
+            viaje.setEstado(EstadoViaje.CANCELADO);
+            viajeRepository.save(viaje);
+
+            Persona conductor = viaje.getPersona();
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return viajesExpirados.size();
+    }
+
+    private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {
+        List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
+
+        for (Reserva reserva : reservasActivas) {
+            if (reserva.getEstado() != EstadoReserva.NO_PRESENTADO) {
+                reserva.setEstado(EstadoReserva.CANCELADA);
+                reservaRepository.save(reserva);
+            }
+
+            Pago pago = reserva.getPago();
+            if (pago != null && reembolsar) {
+                pago.setEstado(EstadoPago.REEMBOLSADO);
+                pagoRepository.save(pago);
+            }
+        }
     }
 
     private BigDecimal obtenerPrecioLitroConGemini(Vehiculo vehiculo) {

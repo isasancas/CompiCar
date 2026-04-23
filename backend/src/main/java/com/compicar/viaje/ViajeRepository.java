@@ -12,7 +12,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ViajeRepository extends JpaRepository<Viaje, Long> {
-    
+
     @Query("SELECT v FROM Viaje v")
     List<Viaje> findAllViajes();
 
@@ -25,6 +25,8 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
 
     Optional<Viaje> findBySlug(String slug);
     boolean existsBySlug(String slug);
+
+    List<Viaje> findByEstadoAndFechaHoraSalidaBefore(EstadoViaje estado, LocalDateTime limite);
 
     @Query("""
         SELECT DISTINCT v
@@ -53,5 +55,4 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
         @Param("inicio") LocalDateTime inicio,
         @Param("fin") LocalDateTime fin
     );
-
 }

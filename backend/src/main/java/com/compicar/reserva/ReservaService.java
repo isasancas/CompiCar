@@ -3,7 +3,6 @@ package com.compicar.reserva;
 import java.util.List;
 
 public interface ReservaService {
-    
     Reserva crearReserva(String usuarioEmail, Long viajeId);
     Reserva cancelarReserva(String usuarioEmail, Long reservaId);
     List<Reserva> obtenerReservasPorPersona(String usuarioEmail);
@@ -12,5 +11,5 @@ public interface ReservaService {
     Reserva obtenerReservaPorId(Long reservaId);
     Reserva reservaConfirmada(Long reservaId);
     Reserva reservaNoPresentado(Long reservaId);
-    
+    Reserva marcarNoPresentadoPorConductor(String usuarioEmail, Long reservaId);
 }

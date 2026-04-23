@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -95,6 +96,17 @@ public class ViajeController {
     @GetMapping("/publicos/{slug}")
     public ViajeDTO obtenerViajePublicoPorSlug(@PathVariable String slug) {
         return viajeService.obtenerViajePorSlug(slug);
+    }
+
+    @PutMapping("/{slug}/cancelar")
+    public ViajeDTO cancelarViaje(@PathVariable String slug) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.cancelarViaje(usuarioEmail, slug);
     }
 
 }
