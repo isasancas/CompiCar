@@ -9,10 +9,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
+import com.compicar.persona.dto.SubirFotoRequestDTO;
 
 @RestController
 @RequestMapping("/api/personas")
@@ -60,6 +62,13 @@ public class PersonaController {
     public ResponseEntity<PerfilPersonaDTO> obtenerPerfilPublicoPorSlug(@PathVariable String slug) {
         PerfilPersonaDTO perfil = personaService.obtenerPerfilPorSlug(slug);
         return ResponseEntity.ok(perfil);
+    }
+
+    @PostMapping("/foto")
+    public ResponseEntity<String> subirFoto(@RequestBody SubirFotoRequestDTO request) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        personaService.subirFoto(email, request.getFoto());
+        return ResponseEntity.ok("{\"mensaje\": \"Foto actualizada correctamente\"}");
     }
     
 }

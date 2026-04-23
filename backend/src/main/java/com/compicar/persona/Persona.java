@@ -58,6 +58,8 @@ public class Persona {
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
 
+    @Column(columnDefinition = "LONGTEXT")
+    private String foto;
 
     // Atributo derivado
     public Double getReputacion() {
@@ -153,6 +155,10 @@ public class Persona {
         return slug;
     }
 
+    public String getFoto() {
+        return foto;
+    }
+
     //Setters
     public void setNombre(String nombre) {
         this.nombre = nombre;
@@ -200,6 +206,10 @@ public class Persona {
 
     public void setSlug(String slug) {
         this.slug = slug;
+    }
+
+    public void setFoto(String foto) {
+        this.foto = foto;
     }
 
     @Override
