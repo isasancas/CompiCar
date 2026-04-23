@@ -96,7 +96,6 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public PrecioTrayectoResponseDTO calcularPrecioTrayecto(String usuarioEmail, CalcularPrecioTrayectoRequestDTO request) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
@@ -125,14 +124,22 @@ public class ViajeServiceImpl implements ViajeService {
             detalle = "Gemini no disponible, se usa precio fallback";
         }
 
-        BigDecimal costeTotal = litrosEstimados.multiply(precioLitro).setScale(2, RoundingMode.HALF_UP);
+        // Coste de combustible
+        BigDecimal costeCombustible = litrosEstimados.multiply(precioLitro).setScale(2, RoundingMode.HALF_UP);
+
+        // Coste de desgaste (Gemini estima coste por km)
+        BigDecimal costeDesgaste = obtenerCosteDesgasteConGemini(vehiculo, distanciaKm);
+        
+        // Coste total: combustible + desgaste
+        BigDecimal costeTotal = costeCombustible.add(costeDesgaste).setScale(2, RoundingMode.HALF_UP);
+        
         BigDecimal precioMin = costeTotal.multiply(BigDecimal.valueOf(0.80)).setScale(2, RoundingMode.HALF_UP);
         BigDecimal precioMax = costeTotal.multiply(BigDecimal.valueOf(1.20)).setScale(2, RoundingMode.HALF_UP);
 
         PrecioTrayectoResponseDTO response = new PrecioTrayectoResponseDTO();
         response.setLitrosEstimados(litrosEstimados.setScale(2, RoundingMode.HALF_UP));
         response.setPrecioCombustibleLitro(precioLitro.setScale(3, RoundingMode.HALF_UP));
-        response.setCosteTotalCombustible(costeTotal);
+        response.setCosteTotalCombustible(costeCombustible);
         response.setPrecioMinimoPasajero(precioMin);
         response.setPrecioMaximoPasajero(precioMax);
         response.setFuente(fuente);
@@ -146,6 +153,43 @@ public class ViajeServiceImpl implements ViajeService {
         Viaje viaje = viajeRepository.findBySlug(slug)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
         return convertToDTO(viaje);
+    }
+
+        @Override
+    public List<ViajeDTO> obtenerMisViajes(String email) {
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        List<Viaje> viajes = viajeRepository.findByPersonaId(persona.getId());
+        return viajes.stream().map(this::convertToDTO).toList();
+    }
+
+    @Override
+    public List<ViajeDTO> obtenerViajesParticipados(String email) {
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
+        return viajes.stream().map(this::convertToDTO).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha) {
+        LocalDateTime inicio = fecha != null ? fecha.atStartOfDay() : null;
+        LocalDateTime fin = fecha != null ? fecha.plusDays(1).atStartOfDay() : null;
+
+        Set<EstadoViaje> estadosPublicos = Set.of(EstadoViaje.PENDIENTE, EstadoViaje.INICIADO);
+
+        List<Viaje> base = (inicio != null && fin != null)
+            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin)
+            : viajeRepository.buscarViajesPublicosSinFecha(estadosPublicos);
+
+        String origenNorm = normalizar(origen);
+        String destinoNorm = normalizar(destino);
+
+        return base.stream()
+            .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
+            .map(this::convertToDTO)
+            .toList();
     }
 
     private BigDecimal obtenerPrecioLitroConGemini(Vehiculo vehiculo) {
@@ -162,6 +206,47 @@ public class ViajeServiceImpl implements ViajeService {
             return precio;
         } catch (Exception ex) {
             return null;
+        }
+    }
+
+    private BigDecimal obtenerCosteDesgasteConGemini(Vehiculo vehiculo, BigDecimal distanciaKm) {
+        try {
+            String prompt = """
+            Devuelve SOLO JSON valido (sin markdown ni texto extra) con esta forma:
+            {
+            "coste_desgaste_por_km": number,
+            "detalle": "string"
+            }
+
+            Contexto:
+            - Pais: Espana
+            - Vehiculo:
+                - marca: %s
+                - modelo: %s
+                - tipo: %s
+                - anio: %d
+
+            Tarea:
+            - Estimar el coste de desgaste POR KILÓMETRO del vehículo (mantenimiento, aceite, neumáticos, piezas, etc).
+            - Incluye: desgaste de neumáticos, cambios de aceite, filtros, frenos, correas, etc.
+            - Devuelve un coste por km en euros (ejemplo: 0.08 para 8 céntimos por km).
+            - Si no estas seguro, usa una estimacion razonable de turismos en Espana (entre 0.06 y 0.12 euros por km).
+            """.formatted(vehiculo.getMarca(), vehiculo.getModelo(), vehiculo.getTipo().name(), vehiculo.getAnio());
+
+            String json = calculoPrecioIA.pedirEstimacionJson(prompt);
+
+            JsonNode node = objectMapper.readTree(json);
+            BigDecimal costeKm = node.path("coste_desgaste_por_km").decimalValue();
+
+            if (costeKm.compareTo(BigDecimal.valueOf(0.02)) < 0 || costeKm.compareTo(BigDecimal.valueOf(0.30)) > 0) {
+                // Fallback: 0.08€/km (estimación estándar)
+                costeKm = BigDecimal.valueOf(0.08);
+            }
+
+            return costeKm.multiply(distanciaKm).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception ex) {
+            // Fallback: 0.08€/km
+            return BigDecimal.valueOf(0.08).multiply(distanciaKm).setScale(2, RoundingMode.HALF_UP);
         }
     }
 
@@ -213,43 +298,6 @@ public class ViajeServiceImpl implements ViajeService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puede haber dos paradas con el mismo orden");
             }
         }
-    }
-
-    @Override
-    public List<ViajeDTO> obtenerMisViajes(String email) {
-        Persona persona = personaRepository.findByEmail(email)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        List<Viaje> viajes = viajeRepository.findByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertToDTO).toList();
-    }
-
-    @Override
-    public List<ViajeDTO> obtenerViajesParticipados(String email) {
-        Persona persona = personaRepository.findByEmail(email)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertToDTO).toList();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha) {
-        LocalDateTime inicio = fecha != null ? fecha.atStartOfDay() : null;
-        LocalDateTime fin = fecha != null ? fecha.plusDays(1).atStartOfDay() : null;
-
-        Set<EstadoViaje> estadosPublicos = Set.of(EstadoViaje.PENDIENTE, EstadoViaje.INICIADO);
-
-        List<Viaje> base = (inicio != null && fin != null)
-            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin)
-            : viajeRepository.buscarViajesPublicosSinFecha(estadosPublicos);
-
-        String origenNorm = normalizar(origen);
-        String destinoNorm = normalizar(destino);
-
-        return base.stream()
-            .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
-            .map(this::convertToDTO)
-            .toList();
     }
 
     private boolean coincideEnParadas(Viaje viaje, String origenNorm, String destinoNorm) {
