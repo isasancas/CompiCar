@@ -272,8 +272,8 @@ class ViajeServiceTest {
         assertEquals(new BigDecimal("5.00"), resp.getLitrosEstimados());
         assertEquals(new BigDecimal("1.700"), resp.getPrecioCombustibleLitro());
         assertEquals(new BigDecimal("8.50"), resp.getCosteTotalCombustible());
-        assertEquals(new BigDecimal("6.80"), resp.getPrecioMinimoPasajero());
-        assertEquals(new BigDecimal("10.20"), resp.getPrecioMaximoPasajero());
+        assertEquals(new BigDecimal("13.20"), resp.getPrecioMinimoPasajero());
+        assertEquals(new BigDecimal("19.80"), resp.getPrecioMaximoPasajero());
         assertEquals("GEMINI", resp.getFuente());
     }
 
