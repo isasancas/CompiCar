@@ -93,6 +93,11 @@ public class ViajeController {
         return viajeService.buscarViajesPublicos(origen, destino, fecha);
     }
 
+    @GetMapping("/publicos/conductor/{conductorSlug}")
+    public List<ViajeDTO> obtenerViajesPublicosPorConductor(@PathVariable String conductorSlug) {
+        return viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
+    }
+
     @GetMapping("/publicos/{slug}")
     public ViajeDTO obtenerViajePublicoPorSlug(@PathVariable String slug) {
         return viajeService.obtenerViajePorSlug(slug);

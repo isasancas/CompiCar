@@ -25,6 +25,7 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
 
     Optional<Viaje> findBySlug(String slug);
     boolean existsBySlug(String slug);
+    List<Viaje> findByPersonaSlugOrderByFechaHoraSalidaDesc(String personaSlug);
 
     List<Viaje> findByEstadoAndFechaHoraSalidaBefore(EstadoViaje estado, LocalDateTime limite);
 

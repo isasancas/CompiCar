@@ -207,6 +207,17 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> obtenerViajesPublicosPorConductor(String conductorSlug) {
+        if (conductorSlug == null || conductorSlug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug de conductor invalido");
+        }
+
+        List<Viaje> viajes = viajeRepository.findByPersonaSlugOrderByFechaHoraSalidaDesc(conductorSlug);
+        return viajes.stream().map(this::convertirADTO).toList();
+    }
+
+    @Override
     public ViajeDTO cancelarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));

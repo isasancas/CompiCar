@@ -13,6 +13,19 @@ interface PerfilPublicoData {
   slug: string;
 }
 
+type ViajeActividad = {
+  id: number;
+  fechaHoraSalida: string;
+  estado: string;
+};
+
+type ResumenActividad = {
+  ofrecidosMes: number;
+  completados: number;
+  cancelados: number;
+  tendenciaPct: number;
+};
+
 const PerfilPublico: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -20,6 +33,12 @@ const PerfilPublico: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilPublicoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resumenActividad, setResumenActividad] = useState<ResumenActividad>({
+    ofrecidosMes: 0,
+    completados: 0,
+    cancelados: 0,
+    tendenciaPct: 0
+  });
 
   const volver = () => navigate(-1);
 
@@ -27,7 +46,6 @@ const PerfilPublico: React.FC = () => {
     const fetchPerfilPublico = async () => {
       if (!slug) {
         setError('Perfil no encontrado');
-        setLoading(false);
         return;
       }
 
@@ -41,7 +59,6 @@ const PerfilPublico: React.FC = () => {
 
         if (!response.ok) {
           setError('No se pudo cargar el perfil público');
-          setLoading(false);
           return;
         }
 
@@ -49,12 +66,73 @@ const PerfilPublico: React.FC = () => {
         setPerfil(data);
       } catch {
         setError('Error de conexión al cargar el perfil');
-      } finally {
-        setLoading(false);
       }
     };
 
-    fetchPerfilPublico();
+    const fetchResumenActividad = async () => {
+      if (!slug) {
+        return;
+      }
+
+      try {
+        const response = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}`), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const viajes = (await response.json()) as ViajeActividad[];
+
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
+        const prevMonth = prevMonthDate.getMonth();
+        const prevYear = prevMonthDate.getFullYear();
+
+        const offeredCurrent = viajes.filter((v) => {
+          const d = new Date(v.fechaHoraSalida);
+          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        }).length;
+
+        const offeredPrev = viajes.filter((v) => {
+          const d = new Date(v.fechaHoraSalida);
+          return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+        }).length;
+
+        const completados = viajes.filter((v) =>
+          ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
+        ).length;
+
+        const cancelados = viajes.filter((v) =>
+          ['CANCELADO', 'CANCELADA'].includes((v.estado || '').toUpperCase())
+        ).length;
+
+        const tendenciaPct =
+          offeredPrev === 0
+            ? offeredCurrent > 0
+              ? 100
+              : 0
+            : Math.round(((offeredCurrent - offeredPrev) / offeredPrev) * 100);
+
+        setResumenActividad({
+          ofrecidosMes: offeredCurrent,
+          completados,
+          cancelados,
+          tendenciaPct
+        });
+      } catch {
+        // No bloqueamos la carga del perfil si fallan estadisticas.
+      }
+    };
+
+    Promise.all([fetchPerfilPublico(), fetchResumenActividad()]).finally(() => setLoading(false));
   }, [slug]);
 
   if (loading) {
@@ -93,53 +171,98 @@ const PerfilPublico: React.FC = () => {
     .join(' ');
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8 px-4">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gray-200 pb-10 pt-4">
+      <div className="mx-auto max-w-6xl px-4">
         <button
           type="button"
           onClick={volver}
-          className="rounded-full border border-green-600 px-4 py-2 text-sm text-green-700 transition hover:bg-green-50"
+          className="rounded-full border border-green-600 px-4 py-1 text-sm text-green-700 transition hover:bg-green-50"
         >
           ← Volver al viaje
         </button>
 
-        <div className="bg-white border border-slate-300 rounded-3xl shadow-sm overflow-hidden">
-          <div className="bg-gradient-compi px-6 py-6 text-white">
-            <p className="text-sm opacity-90">Perfil público del conductor</p>
-            <h1 className="text-2xl font-bold">{nombreCompleto}</h1>
-            <p className="text-sm opacity-90 mt-1">@{perfil.slug}</p>
-          </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+          <aside className="rounded-xl bg-transparent p-2">
+            <h2 className="text-4xl font-bold leading-none text-slate-800">Perfil público</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-semibold text-slate-500 mb-1">Nombre</p>
-              <p className="text-base font-semibold text-slate-900">{nombreCompleto}</p>
+            <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
+              <span>{perfil?.nombre?.charAt(0).toUpperCase()}</span>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-semibold text-slate-500 mb-1">Reputación</p>
-              <p className="text-base font-semibold text-slate-900">
-                {Number(perfil.reputacion ?? 0).toFixed(1)} / 5
+            <div className="mt-4 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 text-center">
+              Solo lectura
+            </div>
+          </aside>
+
+          <section className="grid gap-4 md:grid-cols-2 items-start">
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Datos y actividad</h3>
+
+              <div className="mt-3 space-y-1 text-lg text-slate-700">
+                <p>Nombre: {nombreCompleto || '-'}</p>
+                <p>Email: {perfil.email || '-'}</p>
+                <p>Teléfono: {perfil.telefono || '-'}</p>
+                <p>Usuario: @{perfil.slug}</p>
+              </div>
+
+              <div className="my-4 h-px bg-slate-300" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Este mes</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.ofrecidosMes}</p>
+                  <p className="text-sm text-slate-600">viajes ofrecidos</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Completados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.completados}</p>
+                  <p className="text-sm text-slate-600">histórico</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Cancelados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.cancelados}</p>
+                  <p className="text-sm text-slate-600">histórico</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Tendencia</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {resumenActividad.tendenciaPct > 0 ? '+' : ''}
+                    {resumenActividad.tendenciaPct}%
+                  </p>
+                  <p className="text-sm text-slate-600">vs mes anterior</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+              <h3 className="text-3xl font-semibold text-slate-800">Preferencias de viaje</h3>
+              <div className="mt-4 space-y-2 text-lg text-slate-700">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4" readOnly />
+                  Se permite fumar
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4" readOnly />
+                  Se permiten mascotas
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4" readOnly />
+                  Música
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5 md:col-span-2">
+              <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
+              <p className="mt-6 text-xl text-slate-700">
+                Puntuación media: {Number(perfil.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
               </p>
             </div>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-semibold text-slate-500 mb-1">Email</p>
-              <p className="text-base font-semibold text-slate-900">{perfil.email}</p>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-semibold text-slate-500 mb-1">Teléfono</p>
-              <p className="text-base font-semibold text-slate-900">{perfil.telefono || 'No disponible'}</p>
-            </div>
+          </section>
           </div>
-
-          <div className="px-6 pb-6">
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              Este perfil es solo de lectura. No se permiten cambios desde esta vista.
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

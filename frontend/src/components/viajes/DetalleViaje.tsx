@@ -320,21 +320,6 @@ const DetalleViaje: React.FC = () => {
               </h1>
               <p className="text-slate-600">Matrícula: {viaje.vehiculo.matricula}</p>
             </div>
-            <div className="mt-4 flex items-center gap-3">
-              <span className="text-slate-600 text-sm">
-                Conductor: <span className="font-semibold text-slate-900">{viaje.conductorNombre || 'Usuario'}</span>
-              </span>
-
-              {viaje.conductorSlug && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/usuarios/${viaje.conductorSlug}/perfil`)}
-                  className="rounded-full border border-blue-600 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
-                >
-                  Ver perfil público
-                </button>
-              )}
-            </div>
             <span
               className={`px-3 py-2 rounded-full text-sm font-medium ${
                 viaje.estado === 'ACTIVO'
@@ -346,6 +331,30 @@ const DetalleViaje: React.FC = () => {
             >
               {viaje.estado}
             </span>
+          </div>
+
+          <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-blue-300 bg-white text-lg font-bold text-blue-700">
+                  {(viaje.conductorNombre || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Usuario que ofrece el viaje</p>
+                  <p className="text-lg font-bold text-slate-900">{viaje.conductorNombre || 'Usuario'}</p>
+                </div>
+              </div>
+
+              {viaje.conductorSlug && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/usuarios/${viaje.conductorSlug}/perfil`)}
+                  className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                >
+                  Ver perfil público
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Información del trayecto */}
