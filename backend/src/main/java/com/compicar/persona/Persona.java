@@ -1,5 +1,6 @@
 package com.compicar.persona;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.compicar.reserva.Reserva;
@@ -7,11 +8,14 @@ import com.compicar.valoracion.Valoracion;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.viaje.Viaje;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
@@ -63,6 +67,14 @@ public class Persona {
 
     @Column(nullable = false)
     private Integer numeroCancelaciones = 0;
+
+    @ElementCollection
+    @CollectionTable(
+        name = "persona_preferencia_viaje",
+        joinColumns = @JoinColumn(name = "persona_id")
+    )
+    @Column(name = "preferencia")
+    private List<String> preferenciasViaje = new ArrayList<>();
 
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
@@ -161,6 +173,10 @@ public class Persona {
         return foto;
     }
 
+    public List<String> getPreferenciasViaje() {
+        return preferenciasViaje;
+    }
+
     public Integer getNumeroCancelaciones() {
         return numeroCancelaciones;
     }
@@ -222,6 +238,17 @@ public class Persona {
 
     public void setFoto(String foto) {
         this.foto = foto;
+    }
+
+    public void setPreferenciasViaje(List<String> nuevasPreferencias) {
+        if (this.preferenciasViaje == null) {
+            this.preferenciasViaje = new ArrayList<>();
+        }
+
+        this.preferenciasViaje.clear();
+        if (nuevasPreferencias != null) {
+            this.preferenciasViaje.addAll(nuevasPreferencias);
+        }
     }
 
     public void setNumeroCancelaciones(Integer numeroCancelaciones) {

@@ -10,6 +10,7 @@ interface PerfilData {
   email: string;
   telefono: string;
   reputacion?: number;
+  preferenciasViaje?: string[];
 }
 
 interface VehiculoData {
@@ -529,7 +530,8 @@ const Perfil: React.FC = () => {
           segundoApellido: editForm.segundoApellido.trim() || null,
           email: editForm.email.trim(),
           telefono: editForm.telefono.trim(),
-          contrasenaActual: isEmailChanged ? editForm.contrasenaActual : null
+          contrasenaActual: isEmailChanged ? editForm.contrasenaActual : null,
+          preferenciasViaje: preferencias
         })
       });
 
@@ -543,7 +545,8 @@ const Perfil: React.FC = () => {
           segundoApellido: updated.segundoApellido,
           email: updated.email,
           telefono: updated.telefono,
-          reputacion: prev?.reputacion
+          preferenciasViaje: updated.preferenciasViaje,
+          reputacion: prev?.reputacion,
         } as PerfilData));
         setShowEditModal(false);
         setEditError('');
@@ -618,6 +621,42 @@ const Perfil: React.FC = () => {
       }
     };
     reader.readAsDataURL(file);
+  };
+  const [preferencias, setPreferencias] = useState<string[]>([]);
+  const [nuevaPreferencia, setNuevaPreferencia] = useState("");
+  useEffect(() => {
+    if (perfil?.preferenciasViaje) {
+      setPreferencias(perfil.preferenciasViaje);
+    }
+  }, [perfil]);
+
+  const persistirPreferencias = async (nuevaLista: string[]) => {
+    const token = getValidToken();
+    if (!token || !perfil?.id) return;
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/personas/${perfil.id}/perfil`), {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...perfil,
+          preferenciasViaje: nuevaLista // Usamos la lista que entra por parámetro
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al guardar');
+      }
+      
+      // Opcional: una notificación silenciosa o simplemente refrescar
+      fetchPerfil(); 
+    } catch (error) {
+      alert('No se pudieron sincronizar las preferencias.');
+      console.error(error);
+    }
   };
 
   if (loading) {
@@ -792,20 +831,59 @@ const Perfil: React.FC = () => {
             </div>
 
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
-              <h3 className="text-3xl font-semibold text-slate-800">Preferencias de viaje</h3>
-              <div className="mt-4 space-y-2 text-lg text-slate-700">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="h-4 w-4" readOnly />
-                  Se permite fumar
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="h-4 w-4" readOnly />
-                  Se permiten mascotas
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="h-4 w-4" readOnly />
-                  Música
-                </label>
+              <h3 className="text-3xl font-semibold mb-2 text-slate-800">Preferencias de viaje</h3>
+              <div className="flex flex-wrap gap-2 my-3">
+                {preferencias.length > 0 ? (
+                  preferencias.map((pref, idx) => (
+                    <span key={idx} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center border border-blue-200">
+                      {pref}
+                      <button
+                        className="ml-2 text-red-500 hover:text-red-700 font-bold"
+                        onClick={() => {
+                          const listaActualizada = preferencias.filter((_, i) => i !== idx);
+                          setPreferencias(listaActualizada);
+                          persistirPreferencias(listaActualizada);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No hay preferencias añadidas.</p>
+                )}
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={nuevaPreferencia}
+                  onChange={(e) => setNuevaPreferencia(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 flex-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Ej: No fumador, Mascotas..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && nuevaPreferencia.trim()) {
+                      const listaActualizada = [...preferencias, nuevaPreferencia.trim()];
+                      setPreferencias(listaActualizada);
+                      setNuevaPreferencia("");
+                      persistirPreferencias(listaActualizada); // Guardado automático al pulsar Enter
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="rounded-full bg-gradient-compi px-4 py-1.5 text-sm font-semibold text-white shadow"
+                  onClick={() => {
+                    if (nuevaPreferencia.trim()) {
+                      const listaActualizada = [...preferencias, nuevaPreferencia.trim()];
+                      setPreferencias(listaActualizada);
+                      setNuevaPreferencia("");
+                      persistirPreferencias(listaActualizada); // Guardado automático al hacer clic
+                    }
+                  }}
+                >
+                  Añadir
+                </button>
               </div>
             </div>
 

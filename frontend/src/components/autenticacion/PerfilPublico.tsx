@@ -11,6 +11,8 @@ interface PerfilPublicoData {
   telefono: string;
   reputacion?: number;
   slug: string;
+  preferenciasViaje?: string[];
+
 }
 
 type ViajeActividad = {
@@ -183,49 +185,41 @@ const PerfilPublico: React.FC = () => {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
           <aside className="rounded-xl bg-transparent p-2">
-            <h2 className="text-4xl font-bold leading-none text-slate-800">Perfil público</h2>
+            <h2 className="text-4xl font-bold leading-none text-slate-800">
+              {nombreCompleto}
+            </h2>
 
             <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
               <span>{perfil?.nombre?.charAt(0).toUpperCase()}</span>
             </div>
-
-            <div className="mt-4 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 text-center">
-              Solo lectura
-            </div>
           </aside>
 
           <section className="grid gap-4 md:grid-cols-2 items-start">
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5 md:col-span-2">
               <h3 className="text-3xl font-semibold text-slate-800">Datos y actividad</h3>
-
               <div className="mt-3 space-y-1 text-lg text-slate-700">
                 <p>Nombre: {nombreCompleto || '-'}</p>
                 <p>Email: {perfil.email || '-'}</p>
                 <p>Teléfono: {perfil.telefono || '-'}</p>
                 <p>Usuario: @{perfil.slug}</p>
               </div>
-
               <div className="my-4 h-px bg-slate-300" />
-
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
                   <p className="text-xs font-semibold uppercase text-slate-500">Este mes</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.ofrecidosMes}</p>
                   <p className="text-sm text-slate-600">viajes ofrecidos</p>
                 </div>
-
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
                   <p className="text-xs font-semibold uppercase text-slate-500">Completados</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.completados}</p>
                   <p className="text-sm text-slate-600">histórico</p>
                 </div>
-
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
                   <p className="text-xs font-semibold uppercase text-slate-500">Cancelados</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.cancelados}</p>
                   <p className="text-sm text-slate-600">histórico</p>
                 </div>
-
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
                   <p className="text-xs font-semibold uppercase text-slate-500">Tendencia</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">
@@ -237,21 +231,16 @@ const PerfilPublico: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
-              <h3 className="text-3xl font-semibold text-slate-800">Preferencias de viaje</h3>
-              <div className="mt-4 space-y-2 text-lg text-slate-700">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="h-4 w-4" readOnly />
-                  Se permite fumar
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="h-4 w-4" readOnly />
-                  Se permiten mascotas
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="h-4 w-4" readOnly />
-                  Música
-                </label>
+            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5 md:col-span-2">
+              <label className="font-semibold">Preferencias de viaje:</label>
+              <div className="flex flex-wrap gap-2 my-2">
+                {perfil.preferenciasViaje && perfil.preferenciasViaje.length > 0 ? (
+                  perfil.preferenciasViaje.map((pref, idx) => (
+                    <span key={idx} className="bg-blue-100 text-blue-800 px-2 py-1 rounded">{pref}</span>
+                  ))
+                ) : (
+                  <span className="text-gray-500">Sin preferencias</span>
+                )}
               </div>
             </div>
 

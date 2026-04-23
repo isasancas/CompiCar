@@ -88,6 +88,10 @@ public class PersonaServiceImpl implements PersonaService {
         personaAutenticada.setPrimerApellido(perfilActualizado.getPrimerApellido());
         personaAutenticada.setSegundoApellido(perfilActualizado.getSegundoApellido());
         personaAutenticada.setTelefono(perfilActualizado.getTelefono());
+        personaAutenticada.getPreferenciasViaje().clear();
+        if (perfilActualizado.getPreferenciasViaje() != null) {
+            personaAutenticada.getPreferenciasViaje().addAll(perfilActualizado.getPreferenciasViaje());
+        }
 
         if (!personaAutenticada.getEmail().equals(perfilActualizado.getEmail())) {
             if (personaRepository.existsByEmail(perfilActualizado.getEmail())) {
