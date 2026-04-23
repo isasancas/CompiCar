@@ -28,6 +28,8 @@ interface Viaje {
   estado: string;
   plazasDisponibles: number;
   precio: number;
+  conductorNombre?: string;
+  conductorSlug?: string;
   vehiculo: {
     marca: string;
     modelo: string;
@@ -317,6 +319,21 @@ const DetalleViaje: React.FC = () => {
                 {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
               </h1>
               <p className="text-slate-600">Matrícula: {viaje.vehiculo.matricula}</p>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <span className="text-slate-600 text-sm">
+                Conductor: <span className="font-semibold text-slate-900">{viaje.conductorNombre || 'Usuario'}</span>
+              </span>
+
+              {viaje.conductorSlug && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/usuarios/${viaje.conductorSlug}/perfil`)}
+                  className="rounded-full border border-blue-600 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+                >
+                  Ver perfil público
+                </button>
+              )}
             </div>
             <span
               className={`px-3 py-2 rounded-full text-sm font-medium ${

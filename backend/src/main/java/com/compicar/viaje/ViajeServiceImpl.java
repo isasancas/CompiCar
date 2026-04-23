@@ -166,7 +166,7 @@ public class ViajeServiceImpl implements ViajeService {
     public ViajeDTO obtenerViajePorSlug(String slug) {
         Viaje viaje = viajeRepository.findBySlug(slug)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
-        return convertToDTO(viaje);
+        return convertirADTO(viaje);
     }
 
         @Override
@@ -174,7 +174,7 @@ public class ViajeServiceImpl implements ViajeService {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
         List<Viaje> viajes = viajeRepository.findByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertToDTO).toList();
+        return viajes.stream().map(this::convertirADTO).toList();
     }
 
     @Override
@@ -182,7 +182,7 @@ public class ViajeServiceImpl implements ViajeService {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
         List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertToDTO).toList();
+        return viajes.stream().map(this::convertirADTO).toList();
     }
 
     @Override
@@ -202,7 +202,7 @@ public class ViajeServiceImpl implements ViajeService {
 
         return base.stream()
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
-            .map(this::convertToDTO)
+            .map(this::convertirADTO)
             .toList();
     }
 
@@ -235,7 +235,7 @@ public class ViajeServiceImpl implements ViajeService {
             personaRepository.save(conductor);
         }
 
-        return convertToDTO(viaje);
+        return convertirADTO(viaje);
     }
 
     @Override
@@ -412,7 +412,7 @@ public class ViajeServiceImpl implements ViajeService {
         return t.toLowerCase(Locale.ROOT).trim();
     }
 
-    private ViajeDTO convertToDTO(Viaje viaje) {
+    private ViajeDTO convertirADTO(Viaje viaje) {
         VehiculoDTO vehiculoDTO = new VehiculoDTO(
             viaje.getVehiculo().getId(),
             viaje.getVehiculo().getMarca(),
@@ -437,7 +437,9 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPrecio(),
             vehiculoDTO,
             paradasDTO,
-            viaje.getSlug()
+            viaje.getSlug(),
+            viaje.getPersona().getNombre(),
+            viaje.getPersona().getSlug()
         );
     }
 
