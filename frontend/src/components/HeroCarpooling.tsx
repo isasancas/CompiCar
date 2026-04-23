@@ -39,6 +39,15 @@ const HeroCarpooling: React.FC = () => {
             Ahorra dinero, reduce emisiones y llega sin estres.
           </p>
 
+          <div className="flex gap-4 mb-12">
+            <button
+              onClick={() => navigate('/explorar')}
+              className="border-2 border-green-600 text-green-600 hover:bg-green-50 px-8 py-3 rounded-full font-bold transition-all"
+            >
+              Explorar todos los viajes
+            </button>
+          </div>
+
           <form
             onSubmit={handleBuscar}
             className="bg-white rounded-2xl md:rounded-full p-3 shadow-2xl border border-gray-100 flex flex-col md:flex-row items-center w-full max-w-4xl"
