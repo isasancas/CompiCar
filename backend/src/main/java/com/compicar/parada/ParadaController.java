@@ -2,6 +2,7 @@ package com.compicar.parada;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,7 +39,7 @@ public class ParadaController {
     @GetMapping("/viaje/{viajeId}")
     public List<Parada> obtenerParadasPorViaje(@PathVariable Long viajeId) {
         Viaje viaje = viajeRepository.findById(viajeId)
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
         return paradaService.obtenerParadasPorViaje(viaje);
     }
 }

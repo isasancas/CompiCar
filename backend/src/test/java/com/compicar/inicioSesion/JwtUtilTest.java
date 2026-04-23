@@ -15,7 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.compicar.autenticacion.inicioSesion.JwtUtil;
 
 @ExtendWith(MockitoExtension.class)
-class JwtUtilTests {
+class JwtUtilTest {
 
     private JwtUtil jwtUtil;
     

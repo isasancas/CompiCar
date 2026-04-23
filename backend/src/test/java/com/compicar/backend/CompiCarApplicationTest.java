@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
     "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
     "spring.flyway.enabled=false"
 })
-class CompiCarApplicationTests {
+class CompiCarApplicationTest {
 
 	@Test
 	void contextLoads() {

@@ -120,6 +120,10 @@ public class Vehiculo {
     }
 
     // Setters
+    public void setId(Long id) {
+        this.id = id;
+    }
+
     public void setMatricula(String matricula) {
         this.matricula = matricula;
     }

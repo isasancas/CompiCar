@@ -47,10 +47,7 @@ public class VehiculoController {
     }
 
     @PutMapping("/{vehiculoId}")
-    public VehiculoResponseDTO editarVehiculo(
-        @PathVariable Long vehiculoId,
-        @Valid @RequestBody AltaVehiculoRequestDTO request
-    ) {
+    public VehiculoResponseDTO editarVehiculo(@PathVariable Long vehiculoId, @Valid @RequestBody AltaVehiculoRequestDTO request) {
         String email = obtenerEmailAutenticado();
         return vehiculoService.actualizarVehiculo(email, vehiculoId, request);
     }

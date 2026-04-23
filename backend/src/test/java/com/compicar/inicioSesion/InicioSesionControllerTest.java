@@ -23,7 +23,7 @@ import com.compicar.config.GlobalExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
-public class InicioSesionControllerTests {
+public class InicioSesionControllerTest {
 
     private MockMvc mockMvc;
 

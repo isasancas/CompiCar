@@ -26,7 +26,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 @ExtendWith(MockitoExtension.class)
-class JwtAuthenticationFilterTests {
+class JwtAuthenticationFilterTest {
 
     @Mock 
     private JwtUtil jwtUtil;

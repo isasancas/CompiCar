@@ -19,7 +19,7 @@ import com.compicar.autenticacion.registro.RegistroService;
 import com.compicar.persona.Persona;
 
 @ExtendWith(MockitoExtension.class)
-class RegistroControllerTests {
+class RegistroControllerTest {
 
     @InjectMocks
     private RegistroController registroController;
