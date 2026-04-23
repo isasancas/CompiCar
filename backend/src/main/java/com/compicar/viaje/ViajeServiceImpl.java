@@ -2,8 +2,11 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -226,6 +229,57 @@ public class ViajeServiceImpl implements ViajeService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
         List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
         return viajes.stream().map(this::convertToDTO).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha) {
+        LocalDateTime inicio = fecha != null ? fecha.atStartOfDay() : null;
+        LocalDateTime fin = fecha != null ? fecha.plusDays(1).atStartOfDay() : null;
+
+        Set<EstadoViaje> estadosPublicos = Set.of(EstadoViaje.PENDIENTE, EstadoViaje.INICIADO);
+
+        List<Viaje> base = (inicio != null && fin != null)
+            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin)
+            : viajeRepository.buscarViajesPublicosSinFecha(estadosPublicos);
+
+        String origenNorm = normalizar(origen);
+        String destinoNorm = normalizar(destino);
+
+        return base.stream()
+            .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
+            .map(this::convertToDTO)
+            .toList();
+    }
+
+    private boolean coincideEnParadas(Viaje viaje, String origenNorm, String destinoNorm) {
+        List<Parada> paradas = viaje.getParadas();
+        if (paradas == null || paradas.isEmpty()) {
+            return false;
+        }
+
+        boolean origenOk = origenNorm.isBlank() || paradas.stream()
+            .map(Parada::getLocalizacion)
+            .filter(loc -> loc != null && !loc.isBlank())
+            .map(this::normalizar)
+            .anyMatch(locNorm -> locNorm.contains(origenNorm));
+
+        boolean destinoOk = destinoNorm.isBlank() || paradas.stream()
+            .map(Parada::getLocalizacion)
+            .filter(loc -> loc != null && !loc.isBlank())
+            .map(this::normalizar)
+            .anyMatch(locNorm -> locNorm.contains(destinoNorm));
+
+        return origenOk && destinoOk;
+    }
+
+    private String normalizar(String texto) {
+        if (texto == null) {
+            return "";
+        }
+        String t = java.text.Normalizer.normalize(texto, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "");
+        return t.toLowerCase(Locale.ROOT).trim();
     }
 
     private ViajeDTO convertToDTO(Viaje viaje) {

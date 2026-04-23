@@ -1,5 +1,6 @@
 package com.compicar.viaje;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
@@ -13,5 +14,6 @@ public interface ViajeService {
     List<ViajeDTO> obtenerMisViajes(String email);
     List<ViajeDTO> obtenerViajesParticipados(String email);
     ViajeDTO obtenerViajePorSlug(String slug);
+    List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha);
     
 }
