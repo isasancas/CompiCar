@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.compicar.reserva.dto.ReservaDTO;
+
 public class ViajeDTO {
     private Long id;
     private LocalDateTime fechaHoraSalida;
@@ -13,12 +15,13 @@ public class ViajeDTO {
     private VehiculoDTO vehiculo;
     private List<ParadaDTO> paradas;
     private String slug;
+    private List<ReservaDTO> reservas;
 
     public ViajeDTO() {
     }
 
     public ViajeDTO(Long id, LocalDateTime fechaHoraSalida, String estado, Integer plazasDisponibles,
-                   BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug) {
+                   BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug, List<ReservaDTO> reservas) {
         this.id = id;
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
@@ -27,6 +30,7 @@ public class ViajeDTO {
         this.vehiculo = vehiculo;
         this.paradas = paradas;
         this.slug = slug;
+        this.reservas = reservas;
     }
 
     // Getters and setters
@@ -92,5 +96,13 @@ public class ViajeDTO {
 
     public void setParadas(List<ParadaDTO> paradas) {
         this.paradas = paradas;
+    }
+
+    public List<ReservaDTO> getReservas() {
+        return reservas;
+    }
+
+    public void setReservas(List<ReservaDTO> reservas) {
+        this.reservas = reservas;
     }
 }

@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.config.SlugUtils;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
@@ -347,6 +349,18 @@ public class ViajeServiceImpl implements ViajeService {
             ))
             .toList();
 
+        List<ReservaDTO> reservasDTO = viaje.getReservas() != null 
+            ? viaje.getReservas().stream()
+                .filter(r -> r.getEstado() != EstadoReserva.CANCELADA)
+                .map(r -> new ReservaDTO(
+                    r.getId(),
+                    r.getPersona().getNombre() + " " + r.getPersona().getPrimerApellido(),
+                    r.getPersona().getId(),
+                    r.getCantidadPlazas(),
+                    r.getEstado().toString()
+                )).toList()
+            : List.of();
+
         return new ViajeDTO(
             viaje.getId(),
             viaje.getFechaHoraSalida(),
@@ -355,7 +369,8 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPrecio(),
             vehiculoDTO,
             paradasDTO,
-            viaje.getSlug()
+            viaje.getSlug(),
+            reservasDTO
         );
     }
 

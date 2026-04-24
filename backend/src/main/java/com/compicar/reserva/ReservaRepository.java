@@ -18,4 +18,7 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     @Query("SELECT r FROM Reserva r WHERE r.persona = :persona")
     List<Reserva> findByPersona(@Param("persona") Persona persona);
 
+    @Query("SELECT r FROM Reserva r WHERE r.viaje.persona.email = :email AND r.estado = com.compicar.reserva.EstadoReserva.PENDIENTE")
+    List<Reserva> findPendientesParaConductor(@Param("email") String email);
+
 }

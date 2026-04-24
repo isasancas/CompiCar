@@ -32,49 +32,42 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     @Override
-    public Reserva crearReserva(String usuarioEmail, Long viajeId) {
-        // Find the user by email
+    public Reserva crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas) {
         Persona persona = personaRepository.findByEmail(usuarioEmail)
-            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));
-
-        // Find the trip by ID
+            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         Viaje viaje = viajeRepository.findById(viajeId)
-            .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado con ID: " + viajeId));
+            .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado"));
+        
+        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+            throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
+        }
 
-        // Business rules: Trip must be pending, have available seats, and user can't reserve their own trip
         if (viaje.getEstado() != EstadoViaje.PENDIENTE) {
             throw new IllegalArgumentException("El viaje no está disponible para reservas (estado: " + viaje.getEstado() + ")");
         }
-        if (viaje.getPlazasDisponibles() <= 0) {
-            throw new IllegalArgumentException("No hay plazas disponibles en este viaje");
+
+        if (viaje.getPlazasDisponibles() < plazasSolicitadas) {
+            throw new IllegalArgumentException("Solo quedan " + viaje.getPlazasDisponibles() + " plazas disponibles.");
         }
+        
         if (viaje.getPersona().getId().equals(persona.getId())) {
             throw new IllegalArgumentException("No puedes reservar tu propio viaje");
         }
 
-        // Get pickup and drop-off stops from the trip's ordered paradas (first and last)
         List<Parada> paradas = viaje.getParadas();
-        if (paradas.isEmpty()) {
-            throw new IllegalArgumentException("El viaje no tiene paradas definidas");
-        }
-        Parada paradaSubida = paradas.get(0);  // First parada (pickup)
-        Parada paradaBajada = paradas.get(paradas.size() - 1);  // Last parada (drop-off)
+        Parada paradaSubida = paradas.get(0);
+        Parada paradaBajada = paradas.get(paradas.size() - 1);
 
-        // Create the reservation
-        Reserva reserva = new Reserva(EstadoReserva.PENDIENTE, LocalDateTime.now(), persona, paradaSubida, paradaBajada, viaje);
+        Reserva reserva = new Reserva(EstadoReserva.PENDIENTE, LocalDateTime.now(), 
+                                    persona, paradaSubida, paradaBajada, viaje, plazasSolicitadas);
 
-        // Save to generate ID
         reserva = reservaRepository.save(reserva);
 
-        // Update trip's available seats
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - 1);
+        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - plazasSolicitadas);
         viajeRepository.save(viaje);
 
-        // Generate and set slug after ID is available
         reserva.setSlug("reserva-" + reserva.getId());
-        reserva = reservaRepository.save(reserva);
-
-        return reserva;
+        return reservaRepository.save(reserva);
     }
 
     @Override
@@ -91,12 +84,11 @@ public class ReservaServiceImpl implements ReservaService {
         }
         // Update reservation status to cancelled
         reserva.setEstado(EstadoReserva.CANCELADA);
-        reservaRepository.save(reserva);
-        // Update trip's available seats
         Viaje viaje = reserva.getViaje();
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + 1);
+        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+        
         viajeRepository.save(viaje);
-        return reserva;
+        return reservaRepository.save(reserva);
     }
 
     @Override
@@ -110,26 +102,20 @@ public class ReservaServiceImpl implements ReservaService {
 
     @Override
     public List<Reserva> obtenerReservasPorViaje(Long viajeId) {
-        // Find the trip by ID
         Viaje viaje = viajeRepository.findById(viajeId)
             .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado con ID: " + viajeId));
-        // Find reservations by viaje ID
         return reservaRepository.findByViajeId(viajeId);
     }
 
     @Override
-    public Reserva actualizReserva(String usuarioEmail, Long reservaId, Reserva reserva) {
-        // Find the user by email
+    public Reserva actualizarReserva(String usuarioEmail, Long reservaId, Reserva reserva) {
         Persona persona = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));
-        // Find the reservation by ID
         Reserva reservaExistente = reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
-        // Check if the reservation belongs to the user        
         if (!reservaExistente.getPersona().getId().equals(persona.getId())) {
             throw new IllegalArgumentException("La reserva no pertenece al usuario");
         }
-        // Update allowed fields (e.g., pickup and drop-off stops)
         reservaExistente.setParadaSubida(reserva.getParadaSubida());
         reservaExistente.setParadaBajada(reserva.getParadaBajada());
         reservaExistente.setFechaHoraReserva(LocalDateTime.now()); // Update reservation time
@@ -140,24 +126,24 @@ public class ReservaServiceImpl implements ReservaService {
 
     @Override
     public Reserva obtenerReservaPorId(Long reservaId) {
-        // Find the reservation by ID
         return reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
     }
 
     @Override
-    public Reserva reservaConfirmada(Long reservaId) {
-        // Find the reservation by ID
+    public Reserva reservaConfirmada(String conductorEmail, Long reservaId) {
         Reserva reserva = reservaRepository.findById(reservaId)
-            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId)); 
-        // Update reservation status to confirmed
+        .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada")); 
+        if (!reserva.getViaje().getPersona().getEmail().equals(conductorEmail)) {
+            throw new IllegalArgumentException("No tienes permiso para confirmar esta reserva");
+        }
+
         reserva.setEstado(EstadoReserva.CONFIRMADA);
         return reservaRepository.save(reserva);
     }
 
     @Override
     public Reserva reservaNoPresentado(Long reservaId) {
-        // Find the reservation by ID
         Reserva reserva = reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
         // Update reservation status to no-show
@@ -165,6 +151,32 @@ public class ReservaServiceImpl implements ReservaService {
         return reservaRepository.save(reserva);
     }
 
-    
+    @Override
+    public List<Reserva> obtenerReservasComoConductor(String conductorEmail) {
+        System.out.println("Buscando reservas para el conductor: " + conductorEmail);
+        List<Reserva> lista = reservaRepository.findPendientesParaConductor(conductorEmail);
+        System.out.println("Reservas encontradas: " + lista.size());
+        return lista;
+    }
+
+    @Override
+    public Reserva rechazarReserva(String conductorEmail, Long reservaId) {
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
+
+        if (!reserva.getViaje().getPersona().getEmail().equals(conductorEmail)) {
+            throw new IllegalArgumentException("No tienes permiso para rechazar esta reserva");
+        }
+
+        if (reserva.getEstado() == EstadoReserva.PENDIENTE) {
+            reserva.setEstado(EstadoReserva.CANCELADA);
+            
+            Viaje viaje = reserva.getViaje();
+            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+            viajeRepository.save(viaje);
+        }
+
+        return reservaRepository.save(reserva);
+    }
     
 }

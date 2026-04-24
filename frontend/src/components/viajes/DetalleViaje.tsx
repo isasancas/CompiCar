@@ -21,6 +21,14 @@ interface ParadaConCoordenadas extends Parada {
   lng?: number;
 }
 
+interface ReservaInfo {
+  id: number;
+  nombrePasajero: string;
+  pasajeroId: number;
+  cantidadPlazas: number;
+  estado: string;
+}
+
 interface Viaje {
   id: number;
   slug: string;
@@ -34,6 +42,7 @@ interface Viaje {
     matricula: string;
   };
   paradas: Parada[];
+  reservas?: ReservaInfo[];
 }
 
 const DetalleViaje: React.FC = () => {
@@ -241,59 +250,48 @@ const DetalleViaje: React.FC = () => {
       return;
     }
 
-    if (!viaje) {
-      setReservaMsg('No se pudo obtener el viaje.');
-      return;
-    }
+    if (!viaje) return;
 
     if (!aceptaBloqueoPago) {
-      setReservaMsg('Debes aceptar el aviso de cobro y retención antes de reservar.');
-      return;
-    }
-
-    if (cantidadPlazas < 1 || cantidadPlazas > viaje.plazasDisponibles) {
-      setReservaMsg('Cantidad de plazas no válida.');
+      setReservaMsg('Debes aceptar el aviso de cobro antes de reservar.');
       return;
     }
 
     setReservando(true);
 
-    let reservasCreadas = 0;
     try {
-      for (let i = 0; i < cantidadPlazas; i++) {
-        const response = await fetch(buildApiUrl('/api/reservas/crear'), {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(viaje.id)
-        });
+      const response = await fetch(buildApiUrl('/api/reservas/crear'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        // ENVIAMOS EL DTO QUE ESPERA EL BACKEND
+        body: JSON.stringify({ 
+          viajeId: viaje.id, 
+          plazas: cantidadPlazas 
+        })
+      });
 
-        if (!response.ok) {
-          const data = await response.json().catch(() => null);
-          const msg = data?.error || data?.message || 'No se pudo completar la reserva.';
-          throw new Error(msg);
-        }
-
-        reservasCreadas++;
-      }
-
-      setReservaMsg(`Reserva completada. Plazas reservadas: ${reservasCreadas}.`);
-      setViaje((prev) =>
-        prev
-          ? { ...prev, plazasDisponibles: Math.max(0, prev.plazasDisponibles - reservasCreadas) }
-          : prev
-      );
-      setCantidadPlazas(1);
-      setAceptaBloqueoPago(false);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error de reserva.';
-      if (reservasCreadas > 0) {
-        setReservaMsg(`Se reservaron ${reservasCreadas} plazas, pero no se pudieron completar todas. Detalle: ${msg}`);
+      if (response.ok) {
+        // const data = await response.json(); // Si necesitas el objeto reserva
+        setReservaMsg(`Reserva completada con éxito por ${cantidadPlazas} plaza(s).`);
+        
+        // Actualizamos el estado local de plazas disponibles
+        setViaje((prev) =>
+          prev
+            ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas }
+            : prev
+        );
+        
+        // Cerramos el modal después de un breve delay o dejamos el mensaje
+        setTimeout(() => setModalReservaAbierto(false), 2000);
       } else {
-        setReservaMsg(msg);
+        const data = await response.json().catch(() => null);
+        setReservaMsg(`Error: ${data?.message || 'No se pudo realizar la reserva'}`);
       }
+    } catch (err) {
+      setReservaMsg('Error de conexión con el servidor.');
     } finally {
       setReservando(false);
     }
@@ -330,6 +328,34 @@ const DetalleViaje: React.FC = () => {
               {viaje.estado}
             </span>
           </div>
+
+          {/* Lista de Pasajeros (Solo visible para el conductor) */}
+          {navState.rol === 'conductor' && viaje.reservas && viaje.reservas.length > 0 && (
+            <div className="mb-6 border-t border-slate-100 pt-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <span className="bg-blue-100 text-blue-600 p-1 rounded-md">👤</span>
+                Pasajeros confirmados
+              </h3>
+              <div className="space-y-3">
+                {viaje.reservas.map((res) => (
+                  <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
+                        {res.nombrePasajero.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-800">{res.nombrePasajero}</p>
+                        <p className="text-xs text-slate-500">{res.cantidadPlazas} plaza(s) • {res.estado}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium text-slate-400 italic">
+                      Ver perfil
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Información del trayecto */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
