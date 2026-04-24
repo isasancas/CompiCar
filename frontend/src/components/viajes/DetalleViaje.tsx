@@ -21,14 +21,6 @@ interface ParadaConCoordenadas extends Parada {
   lng?: number;
 }
 
-interface ReservaInfo {
-  id: number;
-  nombrePasajero: string;
-  pasajeroId: number;
-  cantidadPlazas: number;
-  estado: string;
-}
-
 interface Viaje {
   id: number;
   slug: string;
@@ -44,7 +36,7 @@ interface Viaje {
     matricula: string;
   };
   paradas: Parada[];
-  reservas?: ReservaInfo[];
+  reservas?: Reserva[];
 }
 
 interface Reserva {
@@ -54,6 +46,9 @@ interface Reserva {
   personaId: number;
   paradaSubidaId: number;
   paradaBajadaId: number;
+  pasajeroSlug?: string; // <-- Nuevo campo
+  cantidadPlazas: number;
+  nombrePasajero: string;
 }
 
 const DetalleViaje: React.FC = () => {
@@ -506,9 +501,15 @@ const cancelarReserva = async () => {
                         <p className="text-xs text-slate-500">{res.cantidadPlazas} plaza(s) • {res.estado}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-medium text-slate-400 italic">
-                      Ver perfil
-                    </span>
+                    {res.pasajeroSlug && ( // <-- Condición para mostrar el botón solo si hay slug
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)} // <-- Usamos el slug
+                        className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                      >
+                        Ver perfil público
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

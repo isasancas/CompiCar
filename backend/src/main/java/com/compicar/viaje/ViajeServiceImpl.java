@@ -447,10 +447,15 @@ public class ViajeServiceImpl implements ViajeService {
                 .filter(r -> r.getEstado() != EstadoReserva.CANCELADA)
                 .map(r -> new ReservaDTO(
                     r.getId(),
-                    r.getPersona().getNombre() + " " + r.getPersona().getPrimerApellido(),
+                    r.getEstado().toString(),
+                    r.getFechaHoraReserva(),
+                    r.getViaje().getId(),
                     r.getPersona().getId(),
-                    r.getCantidadPlazas(),
-                    r.getEstado().toString()
+                    r.getPersona().getNombre(),
+                    r.getPersona().getSlug(),
+                    r.getParadaSubida().getId(),
+                    r.getParadaBajada().getId(),
+                    r.getCantidadPlazas()
                 )).toList()
             : List.of();
 

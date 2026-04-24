@@ -3,6 +3,7 @@ package com.compicar.reserva;
 import java.util.List;
 
 import com.compicar.persona.Persona;
+import com.compicar.reserva.dto.ReservaDTO;
 
 public interface ReservaService {
     

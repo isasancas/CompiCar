@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
@@ -47,8 +48,11 @@ public class ReservaServiceImpl implements ReservaService {
         r.getFechaHoraReserva(),
         r.getViaje().getId(),
         r.getPersona().getId(),
+        r.getPersona().getNombre(),
+        r.getPersona().getSlug(),
         r.getParadaSubida().getId(),
-        r.getParadaBajada().getId()
+        r.getParadaBajada().getId(),
+        r.getCantidadPlazas()
     );
 }
 

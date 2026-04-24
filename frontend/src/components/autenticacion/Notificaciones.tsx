@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { buildApiUrl } from '../../apiConfig';
 
 const Notificaciones: React.FC = () => {
+  const navigate = useNavigate();
   const [reservas, setReservas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem('token');
@@ -67,10 +69,20 @@ const Notificaciones: React.FC = () => {
             {reservas.map((reserva) => (
               <div key={reserva.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
                 <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-bold text-lg text-slate-900">
-                      {reserva.persona.nombre} quiere unirse a tu viaje
-                    </p>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-lg text-slate-900">
+                        {reserva.persona.nombre} quiere unirse a tu viaje
+                      </p>
+                      {reserva.persona.slug && (
+                        <button
+                          onClick={() => navigate(`/usuarios/${reserva.persona.slug}/perfil`)}
+                          className="text-xs font-bold text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded"
+                        >
+                          Ver perfil
+                        </button>
+                      )}
+                    </div>
                     <p className="text-sm text-slate-600">
                       Trayecto: {reserva.viaje.paradas[0].localizacion} → {reserva.viaje.paradas[reserva.viaje.paradas.length - 1].localizacion}
                     </p>

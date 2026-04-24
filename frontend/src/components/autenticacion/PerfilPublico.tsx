@@ -201,7 +201,6 @@ const PerfilPublico: React.FC = () => {
                 <p>Nombre: {nombreCompleto || '-'}</p>
                 <p>Email: {perfil.email || '-'}</p>
                 <p>Teléfono: {perfil.telefono || '-'}</p>
-                <p>Usuario: @{perfil.slug}</p>
               </div>
               <div className="my-4 h-px bg-slate-300" />
               <div className="grid grid-cols-2 gap-3">

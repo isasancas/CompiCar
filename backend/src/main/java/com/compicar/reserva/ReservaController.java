@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 
 @RestController
