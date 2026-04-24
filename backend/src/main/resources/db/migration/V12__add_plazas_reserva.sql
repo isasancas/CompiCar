@@ -1,0 +1,1 @@
+ALTER TABLE reserva ADD COLUMN cantidad_plazas INTEGER NOT NULL DEFAULT 1;

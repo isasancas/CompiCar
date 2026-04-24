@@ -162,7 +162,8 @@ class ViajeControllerTest {
                 List.of(new ParadaDTO(1L, "Sevilla", "ORIGEN", 1), new ParadaDTO(2L, "Cadiz", "DESTINO", 2)),
                 "sevilla-cadiz-2026-05-10",
                 "",
-                ""
+                "",
+                List.of()
         );
 
         when(viajeService.obtenerMisViajes("driver@compicar.com")).thenReturn(List.of(v1));
@@ -196,7 +197,8 @@ class ViajeControllerTest {
                 List.of(),
                 "jerez-cadiz-2026-05-11",
                 "",
-                ""
+                "",
+                List.of()
         );
 
         when(viajeService.obtenerViajesParticipados("driver@compicar.com")).thenReturn(List.of(v1));
@@ -218,7 +220,8 @@ class ViajeControllerTest {
                 List.of(),
                 "sevilla-huelva-2026-06-01",
                 "",
-                ""
+                "",
+                List.of()
         );
 
         when(viajeService.obtenerViajePorSlug("sevilla-huelva-2026-06-01")).thenReturn(dto);

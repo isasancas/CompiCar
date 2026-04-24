@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.compicar.persona.Persona;
 import com.compicar.viaje.Viaje;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,9 +50,11 @@ public class Vehiculo {
 
     @ManyToOne
     @JoinColumn(name = "persona_id", nullable = false)
+    @JsonIgnore
     private Persona persona;
 
     @OneToMany(mappedBy = "vehiculo")
+    @JsonIgnore
     private List<Viaje> viajes;
 
     @Column(nullable = false, unique = true, length = 180)

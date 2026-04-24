@@ -15,6 +15,7 @@ import DetalleViaje from './components/viajes/DetalleViaje';
 import ResultadosBusquedaViajes from './components/viajes/ResultadosBusquedaViajes';
 import TodosLosViajes from './components/viajes/TodosLosViajes';
 import PerfilPublico from './components/autenticacion/PerfilPublico';
+import Notificaciones from './components/autenticacion/Notificaciones';
 
 const hasValidToken = () => {
   const token = localStorage.getItem('token');
@@ -66,6 +67,7 @@ function App() {
             <Route path="/buscar" element={<ResultadosBusquedaViajes />} />
             <Route path="/explorar" element={<TodosLosViajes />} />
             <Route path="/usuarios/:slug/perfil" element={<PerfilPublico />} />
+            <Route path="/notificaciones" element={<Notificaciones />} />
           </Routes>
         </main>
 

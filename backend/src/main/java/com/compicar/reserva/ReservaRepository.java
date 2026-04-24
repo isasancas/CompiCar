@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.compicar.persona.Persona;
@@ -24,5 +25,9 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
 
     @Query("SELECT r FROM Reserva r WHERE r.viaje.id = :viajeId AND r.persona.id = :personaId AND r.estado != :estado")
     Optional<Reserva> findByViajeIdAndPersonaIdAndEstadoNot(Long viajeId, Long personaId, EstadoReserva estado);
+
+    @Query("SELECT r FROM Reserva r WHERE r.viaje.persona.email = :email AND r.estado = com.compicar.reserva.EstadoReserva.PENDIENTE")
+    List<Reserva> findPendientesParaConductor(@Param("email") String email);
+
 }
 
