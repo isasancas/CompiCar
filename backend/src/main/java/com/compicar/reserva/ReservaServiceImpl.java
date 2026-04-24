@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.compicar.reserva.dto.ReservaDTO;
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.notificacion.TipoNotificacion;
 import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
@@ -29,16 +32,19 @@ public class ReservaServiceImpl implements ReservaService {
     private final PersonaRepository personaRepository;
     private final ViajeRepository viajeRepository;
     private final PagoRepository pagoRepository;
+    private final NotificacionRepository notificacionRepository;
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
                               PersonaRepository personaRepository,
                               ViajeRepository viajeRepository,
-                              PagoRepository pagoRepository) {
+                              PagoRepository pagoRepository,
+                              NotificacionRepository notificacionRepository) {
         this.reservaRepository = reservaRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
         this.pagoRepository = pagoRepository;
+        this.notificacionRepository = notificacionRepository;
     }
 
     public ReservaDTO toDTO(Reserva r) {
@@ -115,6 +121,9 @@ public class ReservaServiceImpl implements ReservaService {
         if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
             throw new IllegalArgumentException("No se puede cancelar una reserva de un viaje en estado " + viaje.getEstado());
         }
+        String msj = pasajero.getNombre() + " ha cancelado su reserva en tu viaje.";
+        Notificacion noti = new Notificacion(msj, reserva.getViaje().getPersona(), TipoNotificacion.RESERVA_CANCELADA);
+        notificacionRepository.save(noti);
 
         LocalDateTime ahora = LocalDateTime.now();
         long horasHastaSalida = Duration.between(ahora, viaje.getFechaHoraSalida()).toHours();

@@ -19,6 +19,9 @@ import org.springframework.web.server.ResponseStatusException;
 import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.config.SlugUtils;
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.notificacion.TipoNotificacion;
 import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
@@ -50,6 +53,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ReservaRepository reservaRepository;
     private final PagoRepository pagoRepository;
+    private final NotificacionRepository notificacionRepository;
 
     private static final long HORAS_LIMITE_CANCELACION = 12L;
 
@@ -58,13 +62,14 @@ public class ViajeServiceImpl implements ViajeService {
 
     public ViajeServiceImpl(ViajeRepository viajeRepository, PersonaRepository personaRepository,
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
-            ReservaRepository reservaRepository, PagoRepository pagoRepository) {
+            ReservaRepository reservaRepository, PagoRepository pagoRepository, NotificacionRepository notificacionRepository) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
         this.calculoPrecioIA = calculoPrecioIA;
         this.reservaRepository = reservaRepository;
         this.pagoRepository = pagoRepository;
+        this.notificacionRepository = notificacionRepository;
     }
 
     @Override
@@ -284,6 +289,9 @@ public class ViajeServiceImpl implements ViajeService {
                 pago.setEstado(EstadoPago.REEMBOLSADO);
                 pagoRepository.save(pago);
             }
+            String msj = "El viaje de " + viaje.getSlug() + " ha sido cancelado por el conductor.";
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
+            notificacionRepository.save(noti);
         }
     }
 

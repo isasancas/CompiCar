@@ -797,12 +797,12 @@ const cancelarReserva = async () => {
 
                     {/* Mensaje de error/éxito */}
                     {reservaMsg && (
-                      <div className={`p-3 rounded-lg text-sm ${
-                        reservaMsg.includes('✅')
-                          ? 'bg-green-50 border border-green-200 text-green-700'
-                          : reservaMsg.includes('⚠️')
-                            ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
-                            : 'bg-red-50 border border-red-200 text-red-700'
+                      <div className={`p-3 rounded-xl text-sm font-medium border ${
+                        reservaMsg.includes('✅') || reservaMsg.toLowerCase().includes('éxito') || reservaMsg.toLowerCase().includes('confirmada')
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700' // Verde si hay éxito o "confirmada"
+                          : reservaMsg.includes('⚠️') || reservaMsg.toLowerCase().includes('atención') || reservaMsg.toLowerCase().includes('pendiente')
+                            ? 'bg-amber-50 border-amber-200 text-amber-700'   // Amarillo
+                            : 'bg-red-50 border-red-200 text-red-700'          // Rojo para todo lo demás
                       }`}>
                         {reservaMsg}
                       </div>
