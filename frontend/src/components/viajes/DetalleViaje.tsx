@@ -53,6 +53,8 @@ const DetalleViaje: React.FC = () => {
   const [reservando, setReservando] = useState(false);
   const [reservaMsg, setReservaMsg] = useState<string | null>(null);
   const [modalReservaAbierto, setModalReservaAbierto] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState<string | null>(null);
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
   const totalReserva = Number(viaje?.precio || 0) * cantidadPlazas;
@@ -301,6 +303,48 @@ const DetalleViaje: React.FC = () => {
     }
   };
 
+  const cancelarViaje = async () => {
+  if (!viaje) return;
+
+  const confirmacion = window.confirm('¿Estás seguro de que quieres cancelar este viaje?');
+  if (!confirmacion) return;
+
+  setCancelando(true);
+  setCancelMsg(null);
+
+  try {
+    const response = await fetch(
+      buildApiUrl(`/api/viajes/${viaje.slug}/cancelar`),
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      const msg = data?.error || data?.message || 'No se pudo cancelar el viaje';
+      throw new Error(msg);
+    }
+
+    const viajeActualizado = await response.json();
+
+    // 🔥 Actualiza estado sin recargar
+    setViaje(viajeActualizado);
+
+    setCancelMsg('✅ Viaje cancelado correctamente.');
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error al cancelar viaje';
+    setCancelMsg(`❌ ${msg}`);
+  } finally {
+    setCancelando(false);
+  }
+};
+
   return (
     <div className="min-h-screen bg-gray-100 pb-10 pt-6">
       <div className="mx-auto max-w-4xl px-4">
@@ -421,6 +465,26 @@ const DetalleViaje: React.FC = () => {
               {viaje.plazasDisponibles > 0 ? 'Reservar ahora' : 'Sin plazas disponibles'}
             </button>
           )}
+          {/* Botón Cancelar - SOLO CONDUCTOR */}
+            {navState.rol === 'conductor' && viaje.estado === 'PENDIENTE' && (
+              <button
+                type="button"
+                onClick={() => {cancelarViaje(); volver();}}
+                disabled={cancelando}
+                className="w-full mt-3 rounded-lg bg-red-600 px-6 py-3 text-base font-bold text-white hover:bg-red-700 disabled:opacity-60 transition-all"
+              >
+                {cancelando ? 'Cancelando...' : 'Cancelar viaje'}
+              </button>
+            )}
+            {cancelMsg && (
+              <div className={`mt-3 p-3 rounded-lg text-sm ${
+                cancelMsg.includes('✅')
+                  ? 'bg-green-50 border border-green-200 text-green-700'
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}>
+                {cancelMsg}
+              </div>
+            )}
         </div>
 
         {/* Mapa */}
