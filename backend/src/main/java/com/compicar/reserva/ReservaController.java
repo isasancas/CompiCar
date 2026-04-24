@@ -3,6 +3,7 @@ package com.compicar.reserva;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,16 +14,22 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.compicar.persona.Persona;
+import com.compicar.persona.PersonaRepository;
 
 @RestController
 @RequestMapping("/api/reservas")
 public class ReservaController {
 
     private final ReservaService reservaService;
+    private final PersonaRepository personaRepository;
 
     @Autowired
-    public ReservaController(ReservaService reservaService) {
+    public ReservaController(ReservaService reservaService, PersonaRepository personaRepository ) {
         this.reservaService = reservaService;
+        this.personaRepository = personaRepository;
     }
 
     @PostMapping("/crear")  // Changed to POST for creation; get usuarioEmail from auth
@@ -49,16 +56,24 @@ public class ReservaController {
         return reservaService.cancelarReserva(usuarioEmailAuth, reservaId);
     }
 
-    @GetMapping("/mis-reservas")  // Renamed for clarity; fetches authenticated user's reservations
-    public List<Reserva> obtenerReservasPorPersona() {
+    @GetMapping("/mis-reservas")
+    public List<ReservaDTO> obtenerReservasPorPersona() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        
         if (auth == null || auth.getName() == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.UNAUTHORIZED, "No autenticado"
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "No autenticado"
             );
         }
-        String usuarioEmail = auth.getName();
-        return reservaService.obtenerReservasPorPersona(usuarioEmail);
+
+        String email = auth.getName();
+
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "Usuario no encontrado"
+            ));
+
+        return reservaService.obtenerReservasPorPersona(persona);
     }
 
     @GetMapping("/viaje")

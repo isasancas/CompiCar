@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,18 @@ public class ReservaServiceImpl implements ReservaService {
         this.viajeRepository = viajeRepository;
         this.pagoRepository = pagoRepository;
     }
+
+    public ReservaDTO toDTO(Reserva r) {
+    return new ReservaDTO(
+        r.getId(),
+        r.getEstado().name(),
+        r.getFechaHoraReserva(),
+        r.getViaje().getId(),
+        r.getPersona().getId(),
+        r.getParadaSubida().getId(),
+        r.getParadaBajada().getId()
+    );
+}
 
     @Override
     public Reserva crearReserva(String usuarioEmail, Long viajeId) {
@@ -120,10 +133,11 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     @Override
-    public List<Reserva> obtenerReservasPorPersona(String usuarioEmail) {
-        Persona persona = personaRepository.findByEmail(usuarioEmail)
-            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));
-        return reservaRepository.findByPersona(persona);
+    public List<ReservaDTO> obtenerReservasPorPersona(Persona persona) {
+    List<Reserva> reservas = reservaRepository.findByPersona(persona);
+    return reservas.stream()
+            .map(this::toDTO)
+            .toList();
     }
 
     @Override

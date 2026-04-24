@@ -38,6 +38,15 @@ interface Viaje {
   paradas: Parada[];
 }
 
+interface Reserva {
+  id: number;
+  estado: string;
+  viajeId: number;
+  personaId: number;
+  paradaSubidaId: number;
+  paradaBajadaId: number;
+}
+
 const DetalleViaje: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -55,6 +64,10 @@ const DetalleViaje: React.FC = () => {
   const [modalReservaAbierto, setModalReservaAbierto] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [cancelMsg, setCancelMsg] = useState<string | null>(null);
+  const [miReserva, setMiReserva] = useState<Reserva | null>(null);
+  const [cancelandoReserva, setCancelandoReserva] = useState(false);
+  const [cancelReservaMsg, setCancelReservaMsg] = useState<string | null>(null);
+
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
   const totalReserva = Number(viaje?.precio || 0) * cantidadPlazas;
@@ -153,6 +166,83 @@ const DetalleViaje: React.FC = () => {
 
     obtenerCoordenadas();
   }, [viaje]);
+
+  useEffect(() => {
+  const fetchMiReserva = async () => {
+    if (!viaje || !isLoggedIn) return;
+
+    try {
+      const response = await fetch(buildApiUrl('/api/reservas/mis-reservas'), {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+      });
+
+      if (!response.ok) return;
+
+      const reservas = await response.json();
+
+      // 🔥 Buscar reserva de ESTE viaje
+      const reservaEncontrada = reservas.find(
+      (r: Reserva) => r.viajeId === viaje.id && r.estado !== 'CANCELADA'
+      );
+
+      setMiReserva(reservaEncontrada || null);
+
+    } catch {
+      // silencio (no rompemos la UI)
+    }
+  };
+  fetchMiReserva();
+}, [viaje, isLoggedIn]);
+
+const cancelarReserva = async () => {
+  if (!miReserva) return;
+
+  const confirmacion = window.confirm('¿Cancelar tu reserva?');
+  if (!confirmacion) return;
+
+  setCancelandoReserva(true);
+  setCancelReservaMsg(null);
+
+  try {
+    const response = await fetch(
+      buildApiUrl(`/api/reservas/cancelar?reservaId=${miReserva.id}`),
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      const msg = data?.message || 'Error al cancelar reserva';
+      throw new Error(msg);
+    }
+
+    const reservaActualizada = await response.json();
+
+    // 🔥 actualizar estado local
+    setMiReserva(reservaActualizada);
+
+    // 🔥 aumentar plazas disponibles en UI
+    setViaje((prev) =>
+      prev
+        ? { ...prev, plazasDisponibles: prev.plazasDisponibles + 1 }
+        : prev
+    );
+
+    setCancelReservaMsg('✅ Reserva cancelada correctamente');
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error inesperado';
+    setCancelReservaMsg(`❌ ${msg}`);
+  } finally {
+    setCancelandoReserva(false);
+  }
+};
 
   const calcularRutaReal = async (paradas: ParadaConCoordenadas[]) => {
     if (paradas.length < 2) return;
@@ -464,6 +554,26 @@ const DetalleViaje: React.FC = () => {
             >
               {viaje.plazasDisponibles > 0 ? 'Reservar ahora' : 'Sin plazas disponibles'}
             </button>
+          )}
+          {/* Botón Cancelar reserva */}
+          {miReserva && miReserva.estado !== 'CANCELADA' && (
+            <button
+              type="button"
+              onClick={cancelarReserva}
+              disabled={cancelandoReserva}
+              className="w-full mt-3 rounded-lg bg-yellow-500 px-6 py-3 text-base font-bold text-white hover:bg-yellow-600 disabled:opacity-60"
+            >
+              {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
+            </button>
+          )} 
+          {cancelReservaMsg && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${
+              cancelReservaMsg.includes('✅')
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}>
+              {cancelReservaMsg}
+            </div>
           )}
           {/* Botón Cancelar - SOLO CONDUCTOR */}
             {navState.rol === 'conductor' && viaje.estado === 'PENDIENTE' && (
