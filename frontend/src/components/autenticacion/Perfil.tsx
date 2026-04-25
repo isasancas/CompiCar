@@ -566,6 +566,60 @@ const Perfil: React.FC = () => {
     }
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [fotoPerfil, setFotoPerfil] = useState<string | null>(null);
+
+  const handleEditarFoto = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamaño (máx 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('La foto debe ser menor a 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      setUploading(true);
+
+      try {
+        const token = getValidToken();
+        if (!token) {
+          clearLocalSession('/inicio-sesion');
+          return;
+        }
+
+        const response = await fetch(buildApiUrl('/api/personas/foto'), {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ foto: base64 })
+        });
+
+        if (response.ok) {
+          setFotoPerfil(base64);
+          alert('Foto actualizada correctamente');
+        } else {
+          alert('Error al subir la foto');
+        }
+      } catch (error) {
+        alert('Error de conexión al subir la foto');
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
@@ -601,15 +655,29 @@ const Perfil: React.FC = () => {
           <aside className="rounded-xl bg-transparent p-2">
             <h2 className="text-4xl font-bold leading-none text-slate-800">Mi perfil</h2>
 
-            <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700">
-              <span>A</span>
+            <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
+              {fotoPerfil ? (
+                <img src={fotoPerfil} alt="Foto perfil" className="h-full w-full object-cover" />
+              ) : (
+                <span>{perfil?.nombre?.charAt(0).toUpperCase()}</span>
+              )}
             </div>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              hidden
+              accept="image/*"
+              onChange={handleFotoChange}
+            />
 
             <button
               type="button"
-              className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow"
+              onClick={handleEditarFoto}
+              disabled={uploading}
+              className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow disabled:opacity-60"
             >
-              Editar foto
+              {uploading ? 'Subiendo...' : 'Editar foto'}
             </button>
           </aside>
 

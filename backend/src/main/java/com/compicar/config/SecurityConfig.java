@@ -2,6 +2,7 @@ package com.compicar.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
@@ -71,21 +72,19 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable()) // Deshabilitado para APIs JWT
             .authorizeHttpRequests(authz -> authz
-                // 1. PERMITIR FRONTEND (Recursos estáticos)
-                // Esto permite que cualquiera vea la web antes de loguearse
-                .requestMatchers("/", "/index.html", "/static/**", "/assets/**", 
+                .requestMatchers("/", "/index.html", "/static/**", "/assets/**",
                                 "/images/**",
                                 "/*.js", "/*.css", "/*.png", "/*.ico", "/*.svg").permitAll()
 
-                // 2. PERMITIR ENDPOINTS PÚBLICOS DE LA API
                 .requestMatchers("/api/registro/**").permitAll()
                 .requestMatchers("/api/login/**").permitAll()
-                
-                // 3. RESTRINGIR EL RESTO
+
+                // Endpoints publicos de solo lectura para viajes
+                .requestMatchers(HttpMethod.GET, "/api/viajes/publicos/**").permitAll()
+
                 .requestMatchers("/api/logout").authenticated()
                 .requestMatchers("/api/personas/**").authenticated()
-                
-                // Cualquier otra ruta de la API o endpoint nuevo requiere login
+
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)

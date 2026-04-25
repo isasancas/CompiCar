@@ -13,5 +13,6 @@ public interface PersonaService {
     Persona obtenerPersonaPorEmail(String email);
     Persona obtenerPersonaPorNombrePersona(String username);
     PerfilPersonaDTO obtenerPerfilPorSlug(String slug);
+    void subirFoto(String email, String fotoBase64);
 
 }

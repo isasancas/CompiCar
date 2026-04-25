@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.compicar.viaje.Viaje;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,7 @@ public class Parada {
 
     @ManyToOne
     @JoinColumn(name = "viaje_id", nullable = false)
+    @JsonIgnore
     private Viaje viaje;
 
     @Column(precision = 9, scale = 6)

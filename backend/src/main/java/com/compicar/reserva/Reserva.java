@@ -8,6 +8,8 @@ import com.compicar.pago.Pago;
 import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.viaje.Viaje;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -24,7 +26,7 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "reserva")
-public abstract class Reserva {
+public class Reserva {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -39,6 +41,7 @@ public abstract class Reserva {
 
     @ManyToOne
     @JoinColumn(name = "persona_id", nullable = false)
+    @JsonIgnoreProperties({"reservas", "viajes"})
     private Persona persona;
 
     @ManyToOne
@@ -50,30 +53,37 @@ public abstract class Reserva {
     private Parada paradaBajada;
 
     @OneToMany(mappedBy = "reserva")
+    @JsonIgnore
     private List<Checkin> checkins;
 
     @OneToOne(mappedBy = "reserva")
+    @JsonIgnore
     private Pago pago;
 
     @ManyToOne
     @JoinColumn(name = "viaje_id", nullable = false)
+    @JsonIgnoreProperties({"reservas", "persona"})
     private Viaje viaje;
 
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
+
+    @Column(nullable = false)
+    private Integer cantidadPlazas;
 
     // Constructores
     public Reserva() {
     }
 
     public Reserva(EstadoReserva estado, LocalDateTime fechaHoraReserva, Persona persona, Parada paradaSubida,
-            Parada paradaBajada, Viaje viaje) {
+            Parada paradaBajada, Viaje viaje, Integer cantidadPlazas) {
         this.estado = estado;
         this.fechaHoraReserva = fechaHoraReserva;
         this.persona = persona;
         this.paradaSubida = paradaSubida;
         this.paradaBajada = paradaBajada;
         this.viaje = viaje;
+        this.cantidadPlazas = cantidadPlazas;
         this.slug = "reserva-" + id;
     }
 
@@ -118,6 +128,10 @@ public abstract class Reserva {
         return slug;
     }
 
+    public Integer getCantidadPlazas() {
+        return cantidadPlazas;
+    }
+
     // Setters
     public void setEstado(EstadoReserva estado) {
         this.estado = estado;
@@ -155,11 +169,15 @@ public abstract class Reserva {
         this.slug = slug;
     }
 
+    public void setCantidadPlazas(Integer cantidadPlazas) {
+        this.cantidadPlazas = cantidadPlazas;
+    }
+
     @Override
     public String toString() {
         return "Reserva{id=" + id + ", estado=" + estado + ", fechaHoraReserva=" + fechaHoraReserva
                 + ", persona=" + persona.getId() + ", paradaSubida=" + paradaSubida.getId() + ", paradaBajada="
-                + paradaBajada.getId() + ", viaje=" + viaje.getId() + ", slug=" + slug + "}";
+                + paradaBajada.getId() + ", viaje=" + viaje.getId() + ", slug=" + slug + ", cantidadPlazas=" + cantidadPlazas + "}";
     }
 
 }

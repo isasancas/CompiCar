@@ -21,11 +21,18 @@ interface Viaje {
   }>;
 }
 
+interface ViajeConRol extends Viaje {
+  rol: 'conductor' | 'pasajero';
+}
+
+type EstadoFiltro = 'PENDIENTE' | 'FINALIZADO';
+
 const MisViajes: React.FC = () => {
   const navigate = useNavigate();
-  const [viajesOfrecidos, setViajesOfrecidos] = useState<Viaje[]>([]);
+  const [todosLosViajes, setTodosLosViajes] = useState<ViajeConRol[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtroEstado, setFiltroEstado] = useState<EstadoFiltro>('PENDIENTE');
 
   const getValidToken = () => {
     const token = localStorage.getItem('token');
@@ -49,19 +56,40 @@ const MisViajes: React.FC = () => {
     }
 
     try {
-      const response = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
+      // Obtener viajes como conductor
+      const resConductor = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
 
-      if (response.ok) {
-        const ofrecidos = await response.json();
-        setViajesOfrecidos(ofrecidos);
-      } else if (response.status === 401 || response.status === 403) {
-        clearLocalSession('/inicio-sesion');
-        return;
-      } else {
+      // Obtener viajes como pasajero
+      const resPasajero = await fetch(buildApiUrl('/api/viajes/participados'), {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      });
+
+      if (!resConductor.ok || !resPasajero.ok) {
+        if (resConductor.status === 401 || resPasajero.status === 401) {
+          clearLocalSession('/inicio-sesion');
+          return;
+        }
         setError('Error al cargar los viajes');
+        return;
       }
+
+      const viajesConductor: Viaje[] = await resConductor.json();
+      const viajesPasajero: Viaje[] = await resPasajero.json();
+
+      // Combinar y añadir rol
+      const combinados: ViajeConRol[] = [
+        ...viajesConductor.map(v => ({ ...v, rol: 'conductor' as const })),
+        ...viajesPasajero.map(v => ({ ...v, rol: 'pasajero' as const }))
+      ];
+
+      // Ordenar por fecha descendente
+      combinados.sort((a, b) => 
+        new Date(b.fechaHoraSalida).getTime() - new Date(a.fechaHoraSalida).getTime()
+      );
+
+      setTodosLosViajes(combinados);
     } catch {
       setError('Error de conexión');
     } finally {
@@ -89,6 +117,14 @@ const MisViajes: React.FC = () => {
     const paradasIntermedias = paradas.filter(p => p.tipo === 'INTERMEDIA').sort((a, b) => a.orden - b.orden).map(p => p.localizacion);
     return { origen, destino, paradasIntermedias };
   };
+
+  const viajesFiltrados = todosLosViajes.filter(v => {
+    if (filtroEstado === 'PENDIENTE') {
+      return v.estado === 'PENDIENTE' || v.estado === 'ACTIVO';
+    } else {
+      return v.estado === 'FINALIZADO' || v.estado === 'COMPLETADO';
+    }
+  });
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
@@ -125,14 +161,39 @@ const MisViajes: React.FC = () => {
         <div className="mt-6 space-y-8">
           <div className="rounded-3xl border border-slate-300 bg-white p-6 shadow-sm">
             <h1 className="text-3xl font-bold text-slate-900 mb-6">Mis viajes</h1>
-            {viajesOfrecidos.length === 0 ? (
+
+            {/* Tabs de filtro */}
+            <div className="flex gap-6 mb-6 border-b border-slate-200 pb-2">
+              <button
+                onClick={() => setFiltroEstado('PENDIENTE')}
+                className={`font-medium text-sm transition ${
+                  filtroEstado === 'PENDIENTE'
+                    ? 'text-green-600'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Pendientes
+              </button>
+              <button
+                onClick={() => setFiltroEstado('FINALIZADO')}
+                className={`font-medium text-sm transition ${
+                  filtroEstado === 'FINALIZADO'
+                    ? 'text-green-600'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Finalizados
+              </button>
+            </div>
+
+            {viajesFiltrados.length === 0 ? (
               <p className="text-slate-600">No hay viajes.</p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {viajesOfrecidos.map((viaje) => {
+                {viajesFiltrados.map((viaje) => {
                   const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
                   return (
-                    <div key={viaje.id} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm">
+                    <div key={`${viaje.id}-${viaje.rol}`} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-semibold text-slate-900">
                           {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
@@ -145,11 +206,13 @@ const MisViajes: React.FC = () => {
                           }`}>
                             {viaje.estado}
                           </span>
-                          {paradasIntermedias.length > 0 && (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                              Con paradas
-                            </span>
-                          )}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            viaje.rol === 'conductor'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {viaje.rol === 'conductor' ? 'Conductor' : 'Pasajero'}
+                          </span>
                         </div>
                       </div>
                       <p className="text-sm text-slate-600 mb-1">
@@ -179,13 +242,21 @@ const MisViajes: React.FC = () => {
                       <p className="text-sm font-medium text-slate-900">
                         {viaje.precio}€
                       </p>
-                        <button
-                          type="button"
-                          onClick={() => navigate('/viajes/' + viaje.slug)}
-                          className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
-                        >
-                          Ver detalle
-                        </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate('/viajes/' + viaje.slug, {
+                            state: {
+                              backTo: '/mis-viajes',
+                              backLabel: 'Volver a Mis Viajes',
+                              rol: viaje.rol
+                            }
+                          })
+                        }
+                        className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
+                      >
+                        Ver detalle
+                      </button>
                     </div>
                   );
                 })}

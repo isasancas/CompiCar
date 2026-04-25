@@ -160,7 +160,8 @@ class ViajeControllerTest {
                 new BigDecimal("10.00"),
                 new VehiculoDTO(10L, "Seat", "Ibiza", "1234ABC"),
                 List.of(new ParadaDTO(1L, "Sevilla", "ORIGEN", 1), new ParadaDTO(2L, "Cadiz", "DESTINO", 2)),
-                "sevilla-cadiz-2026-05-10"
+                "sevilla-cadiz-2026-05-10",
+                List.of()
         );
 
         when(viajeService.obtenerMisViajes("driver@compicar.com")).thenReturn(List.of(v1));
@@ -192,7 +193,8 @@ class ViajeControllerTest {
                 new BigDecimal("12.00"),
                 new VehiculoDTO(11L, "Toyota", "Yaris", "9876XYZ"),
                 List.of(),
-                "jerez-cadiz-2026-05-11"
+                "jerez-cadiz-2026-05-11",
+                List.of()
         );
 
         when(viajeService.obtenerViajesParticipados("driver@compicar.com")).thenReturn(List.of(v1));
@@ -212,7 +214,8 @@ class ViajeControllerTest {
                 new BigDecimal("15.00"),
                 new VehiculoDTO(20L, "Kia", "Ceed", "4567DEF"),
                 List.of(),
-                "sevilla-huelva-2026-06-01"
+                "sevilla-huelva-2026-06-01",
+                List.of()
         );
 
         when(viajeService.obtenerViajePorSlug("sevilla-huelva-2026-06-01")).thenReturn(dto);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   MapContainer,
   TileLayer,
@@ -21,6 +21,14 @@ interface ParadaConCoordenadas extends Parada {
   lng?: number;
 }
 
+interface ReservaInfo {
+  id: number;
+  nombrePasajero: string;
+  pasajeroId: number;
+  cantidadPlazas: number;
+  estado: string;
+}
+
 interface Viaje {
   id: number;
   slug: string;
@@ -34,6 +42,7 @@ interface Viaje {
     matricula: string;
   };
   paradas: Parada[];
+  reservas?: ReservaInfo[];
 }
 
 const DetalleViaje: React.FC = () => {
@@ -45,21 +54,40 @@ const DetalleViaje: React.FC = () => {
   const [paradasConCoordenadas, setParadasConCoordenadas] = useState<ParadaConCoordenadas[]>([]);
   const [routeLine, setRouteLine] = useState<Array<[number, number]>>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([40.4168, -3.7038]);
-
   const token = localStorage.getItem('token') || '';
+  const [cantidadPlazas, setCantidadPlazas] = useState(1);
+  const [aceptaBloqueoPago, setAceptaBloqueoPago] = useState(false);
+  const [reservando, setReservando] = useState(false);
+  const [reservaMsg, setReservaMsg] = useState<string | null>(null);
+  const [modalReservaAbierto, setModalReservaAbierto] = useState(false);
+
+  const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
+  const totalReserva = Number(viaje?.precio || 0) * cantidadPlazas;
+
+  type DetalleNavState = {
+    backTo?: string;
+    backLabel?: string;
+    rol?: 'conductor' | 'pasajero';
+  };
+
+  const location = useLocation();
+  const navState = (location.state ?? {}) as DetalleNavState;
+
+  const backTo = navState.backTo || '/';
+  const backLabel = navState.backLabel || 'Volver al inicio';
+
+  const volver = () => navigate(backTo);
 
   useEffect(() => {
     const fetchViaje = async () => {
-      if (!slug || !token) {
+      if (!slug) {
         setError('No se pudo cargar el viaje');
         setLoading(false);
         return;
       }
 
       try {
-        const response = await fetch(buildApiUrl(`/api/viajes/${slug}`), {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const response = await fetch(buildApiUrl(`/api/viajes/publicos/${slug}`));
 
         if (response.ok) {
           const data = await response.json();
@@ -75,7 +103,7 @@ const DetalleViaje: React.FC = () => {
     };
 
     fetchViaje();
-  }, [slug, token]);
+  }, [slug]);
 
   // Obtener coordenadas de las paradas
   useEffect(() => {
@@ -202,10 +230,10 @@ const DetalleViaje: React.FC = () => {
           <p className="text-red-500 mb-4">{error || 'Viaje no encontrado'}</p>
           <button
             type="button"
-            onClick={() => navigate('/mis-viajes')}
+            onClick={volver}
             className="bg-gradient-compi hover:opacity-90 text-white font-bold py-2 px-4 rounded"
           >
-            Volver a Mis Viajes
+            {backLabel}
           </button>
         </div>
       </div>
@@ -214,15 +242,70 @@ const DetalleViaje: React.FC = () => {
 
   const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
 
+  const reservarPlazas = async () => {
+    setReservaMsg(null);
+
+    if (!isLoggedIn) {
+      navigate('/inicio-sesion');
+      return;
+    }
+
+    if (!viaje) return;
+
+    if (!aceptaBloqueoPago) {
+      setReservaMsg('Debes aceptar el aviso de cobro antes de reservar.');
+      return;
+    }
+
+    setReservando(true);
+
+    try {
+      const response = await fetch(buildApiUrl('/api/reservas/crear'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        // ENVIAMOS EL DTO QUE ESPERA EL BACKEND
+        body: JSON.stringify({ 
+          viajeId: viaje.id, 
+          plazas: cantidadPlazas 
+        })
+      });
+
+      if (response.ok) {
+        // const data = await response.json(); // Si necesitas el objeto reserva
+        setReservaMsg(`Reserva completada con éxito por ${cantidadPlazas} plaza(s).`);
+        
+        // Actualizamos el estado local de plazas disponibles
+        setViaje((prev) =>
+          prev
+            ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas }
+            : prev
+        );
+        
+        // Cerramos el modal después de un breve delay o dejamos el mensaje
+        setTimeout(() => setModalReservaAbierto(false), 2000);
+      } else {
+        const data = await response.json().catch(() => null);
+        setReservaMsg(`Error: ${data?.message || 'No se pudo realizar la reserva'}`);
+      }
+    } catch (err) {
+      setReservaMsg('Error de conexión con el servidor.');
+    } finally {
+      setReservando(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 pb-10 pt-6">
       <div className="mx-auto max-w-4xl px-4">
         <button
           type="button"
-          onClick={() => navigate('/mis-viajes')}
+          onClick={volver}
           className="rounded-full border border-green-600 px-4 py-1 text-sm text-green-700 transition hover:bg-green-50 mb-6"
         >
-          ← Volver a Mis Viajes
+          ← {backLabel}
         </button>
 
         <div className="bg-white rounded-3xl border border-slate-300 shadow-sm p-6 mb-6">
@@ -245,6 +328,34 @@ const DetalleViaje: React.FC = () => {
               {viaje.estado}
             </span>
           </div>
+
+          {/* Lista de Pasajeros (Solo visible para el conductor) */}
+          {navState.rol === 'conductor' && viaje.reservas && viaje.reservas.length > 0 && (
+            <div className="mb-6 border-t border-slate-100 pt-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <span className="bg-blue-100 text-blue-600 p-1 rounded-md">👤</span>
+                Pasajeros confirmados
+              </h3>
+              <div className="space-y-3">
+                {viaje.reservas.map((res) => (
+                  <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
+                        {res.nombrePasajero.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-800">{res.nombrePasajero}</p>
+                        <p className="text-xs text-slate-500">{res.cantidadPlazas} plaza(s) • {res.estado}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium text-slate-400 italic">
+                      Ver perfil
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Información del trayecto */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -298,6 +409,18 @@ const DetalleViaje: React.FC = () => {
               <p className="text-sm font-semibold text-slate-900">{viaje.estado}</p>
             </div>
           </div>
+
+          {/* Botón Reservar - Solo mostrar si NO es conductor */}
+          {navState.rol !== 'conductor' && (
+            <button
+              type="button"
+              onClick={() => setModalReservaAbierto(true)}
+              disabled={viaje.plazasDisponibles <= 0}
+              className="w-full rounded-lg bg-gradient-compi px-6 py-3 text-base font-bold text-white disabled:opacity-60 transition-all hover:opacity-90"
+            >
+              {viaje.plazasDisponibles > 0 ? 'Reservar ahora' : 'Sin plazas disponibles'}
+            </button>
+          )}
         </div>
 
         {/* Mapa */}
@@ -357,6 +480,161 @@ const DetalleViaje: React.FC = () => {
             </p>
           </div>
         </div>
+
+        {/* MODAL DE RESERVA */}
+        {modalReservaAbierto && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200">
+              
+              {/* Header Modal */}
+              <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-slate-900">Reservar viaje</h2>
+                <button
+                  type="button"
+                  onClick={() => setModalReservaAbierto(false)}
+                  className="text-slate-400 hover:text-slate-900 text-2xl"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body Modal */}
+              <div className="px-6 py-4">
+                {!isLoggedIn ? (
+                  /* Usuario NO logueado */
+                  <div className="space-y-4">
+                    <p className="text-slate-700 mb-4">
+                      Debes iniciar sesión o registrarte para poder reservar un viaje.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalReservaAbierto(false);
+                        navigate('/inicio-sesion');
+                      }}
+                      className="w-full rounded-lg bg-gradient-compi px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+                    >
+                      Iniciar sesión
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalReservaAbierto(false);
+                        navigate('/registro');
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+                    >
+                      Registrarse
+                    </button>
+                  </div>
+                ) : (
+                  /* Usuario logueado */
+                  <div className="space-y-4">
+                    {/* Información del viaje resumida */}
+                    <div className="bg-slate-50 p-3 rounded-lg text-sm">
+                      <p><span className="font-semibold">Origen:</span> {origen}</p>
+                      <p><span className="font-semibold">Destino:</span> {destino}</p>
+                      <p><span className="font-semibold">Fecha:</span> {formatFecha(viaje.fechaHoraSalida)}</p>
+                    </div>
+
+                    {/* Selector de plazas */}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Número de plazas</label>
+                      <div className="flex gap-2 items-center">
+                        <button
+                          type="button"
+                          onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
+                          disabled={reservando || cantidadPlazas <= 1}
+                          className="rounded-lg border border-slate-300 px-3 py-2 font-bold disabled:opacity-50 hover:bg-slate-50"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max={viaje.plazasDisponibles}
+                          value={cantidadPlazas}
+                          onChange={(e) => {
+                            const val = Number(e.target.value || 1);
+                            if (val >= 1 && val <= viaje.plazasDisponibles) {
+                              setCantidadPlazas(val);
+                            }
+                          }}
+                          disabled={reservando}
+                          className="w-20 rounded-lg border border-slate-300 px-3 py-2 text-center font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCantidadPlazas(Math.min(viaje.plazasDisponibles, cantidadPlazas + 1))}
+                          disabled={reservando || cantidadPlazas >= viaje.plazasDisponibles}
+                          className="rounded-lg border border-slate-300 px-3 py-2 font-bold disabled:opacity-50 hover:bg-slate-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">Disponibles: {viaje.plazasDisponibles}</p>
+                    </div>
+
+                    {/* Información de precios */}
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 space-y-1 text-sm">
+                      <p><span className="text-slate-600">Precio por plaza:</span> <span className="font-bold">{Number(viaje.precio).toFixed(2)}€</span></p>
+                      <p className="text-lg"><span className="text-slate-600">Total a cobrar:</span> <span className="font-bold text-blue-600">{(Number(viaje.precio) * cantidadPlazas).toFixed(2)}€</span></p>
+                    </div>
+
+                    {/* Checkbox de aceptación */}
+                    <label className="flex items-start gap-2 text-sm text-slate-700 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      <input
+                        type="checkbox"
+                        checked={aceptaBloqueoPago}
+                        onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
+                        disabled={reservando}
+                        className="mt-1 w-4 h-4"
+                      />
+                      <span>
+                        <strong>Entiendo que:</strong> Se cobrará {(Number(viaje.precio) * cantidadPlazas).toFixed(2)}€ de forma inmediata. 
+                        Este importe quedará retenido hasta finalizar el viaje, momento en el que se transferirá al conductor.
+                      </span>
+                    </label>
+
+                    {/* Mensaje de error/éxito */}
+                    {reservaMsg && (
+                      <div className={`p-3 rounded-lg text-sm ${
+                        reservaMsg.includes('✅')
+                          ? 'bg-green-50 border border-green-200 text-green-700'
+                          : reservaMsg.includes('⚠️')
+                            ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                            : 'bg-red-50 border border-red-200 text-red-700'
+                      }`}>
+                        {reservaMsg}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Modal */}
+              <div className="px-6 py-4 border-t border-slate-200 flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalReservaAbierto(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                {isLoggedIn && (
+                  <button
+                    type="button"
+                    onClick={reservarPlazas}
+                    disabled={reservando || !aceptaBloqueoPago || cantidadPlazas < 1}
+                    className="rounded-lg bg-gradient-compi px-4 py-2 text-sm font-bold text-white disabled:opacity-60 hover:opacity-90"
+                  >
+                    {reservando ? 'Procesando...' : `Reservar - ${(Number(viaje.precio) * cantidadPlazas).toFixed(2)}€`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

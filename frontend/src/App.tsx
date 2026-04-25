@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Navbar from './components/Navbar';
 import HeroCarpooling from './components/HeroCarpooling';
@@ -12,6 +12,9 @@ import HomeLoggedIn from './components/HomeLoggedIn';
 import NuevoVehiculo from './components/vehiculos/NuevoVehiculo';
 import MisViajes from './components/misViajes/MisViajes';
 import DetalleViaje from './components/viajes/DetalleViaje';
+import ResultadosBusquedaViajes from './components/viajes/ResultadosBusquedaViajes';
+import TodosLosViajes from './components/viajes/TodosLosViajes';
+import Notificaciones from './components/autenticacion/Notificaciones';
 
 const hasValidToken = () => {
   const token = localStorage.getItem('token');
@@ -59,6 +62,10 @@ function App() {
             <Route path="/mis-viajes" element={<MisViajes />} />
             <Route path="/ofrecer-trayecto" element={<OfrecerTrayecto />} />
             <Route path="/viajes/:slug" element={<DetalleViaje />} />
+            <Route path="/ofrecer-trayecto" element={isLoggedIn ? <OfrecerTrayecto /> : <Navigate to="/inicio-sesion" replace />} />
+            <Route path="/buscar" element={<ResultadosBusquedaViajes />} />
+            <Route path="/explorar" element={<TodosLosViajes />} />
+            <Route path="/notificaciones" element={<Notificaciones />} />
           </Routes>
         </main>
 
