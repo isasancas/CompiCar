@@ -2,6 +2,7 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -18,10 +19,19 @@ import org.springframework.web.server.ResponseStatusException;
 import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.config.SlugUtils;
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.notificacion.TipoNotificacion;
+import com.compicar.pago.EstadoPago;
+import com.compicar.pago.Pago;
+import com.compicar.pago.PagoRepository;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
@@ -41,16 +51,25 @@ public class ViajeServiceImpl implements ViajeService {
     private final VehiculoRepository vehiculoRepository;
     private final CalculoPrecioIA calculoPrecioIA;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ReservaRepository reservaRepository;
+    private final PagoRepository pagoRepository;
+    private final NotificacionRepository notificacionRepository;
+
+    private static final long HORAS_LIMITE_CANCELACION = 12L;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
 
-    public ViajeServiceImpl(ViajeRepository viajeRepository,PersonaRepository personaRepository,
-        VehiculoRepository vehiculoRepository,CalculoPrecioIA calculoPrecioIA) {
+    public ViajeServiceImpl(ViajeRepository viajeRepository, PersonaRepository personaRepository,
+            VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
+            ReservaRepository reservaRepository, PagoRepository pagoRepository, NotificacionRepository notificacionRepository) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
         this.calculoPrecioIA = calculoPrecioIA;
+        this.reservaRepository = reservaRepository;
+        this.pagoRepository = pagoRepository;
+        this.notificacionRepository = notificacionRepository;
     }
 
     @Override
@@ -154,7 +173,7 @@ public class ViajeServiceImpl implements ViajeService {
     public ViajeDTO obtenerViajePorSlug(String slug) {
         Viaje viaje = viajeRepository.findBySlug(slug)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
-        return convertToDTO(viaje);
+        return convertirADTO(viaje);
     }
 
         @Override
@@ -162,7 +181,7 @@ public class ViajeServiceImpl implements ViajeService {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
         List<Viaje> viajes = viajeRepository.findByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertToDTO).toList();
+        return viajes.stream().map(this::convertirADTO).toList();
     }
 
     @Override
@@ -170,7 +189,7 @@ public class ViajeServiceImpl implements ViajeService {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
         List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertToDTO).toList();
+        return viajes.stream().map(this::convertirADTO).toList();
     }
 
     @Override
@@ -190,8 +209,90 @@ public class ViajeServiceImpl implements ViajeService {
 
         return base.stream()
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
-            .map(this::convertToDTO)
+            .map(this::convertirADTO)
             .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> obtenerViajesPublicosPorConductor(String conductorSlug) {
+        if (conductorSlug == null || conductorSlug.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Slug de conductor invalido");
+        }
+
+        List<Viaje> viajes = viajeRepository.findByPersonaSlugOrderByFechaHoraSalidaDesc(conductorSlug);
+        return viajes.stream().map(this::convertirADTO).toList();
+    }
+
+    @Override
+    public ViajeDTO cancelarViaje(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede cancelar este viaje");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viaje.getEstado());
+        }
+
+        long horasHastaSalida = Duration.between(LocalDateTime.now(), viaje.getFechaHoraSalida()).toHours();
+        boolean penalizaConductor = horasHastaSalida < HORAS_LIMITE_CANCELACION;
+
+        cancelarReservasYReembolsar(viaje, true);
+
+        viaje.setEstado(EstadoViaje.CANCELADO);
+        viajeRepository.save(viaje);
+
+        if (penalizaConductor) {
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return convertirADTO(viaje);
+    }
+
+    @Override
+    public int cancelarViajesPendientesExpirados() {
+        LocalDateTime limite = LocalDateTime.now().minusHours(HORAS_LIMITE_CANCELACION);
+
+        List<Viaje> viajesExpirados = viajeRepository.findByEstadoAndFechaHoraSalidaBefore(EstadoViaje.PENDIENTE, limite);
+
+        for (Viaje viaje : viajesExpirados) {
+            cancelarReservasYReembolsar(viaje, true);
+            viaje.setEstado(EstadoViaje.CANCELADO);
+            viajeRepository.save(viaje);
+
+            Persona conductor = viaje.getPersona();
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return viajesExpirados.size();
+    }
+
+    private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {
+        List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
+
+        for (Reserva reserva : reservasActivas) {
+            if (reserva.getEstado() != EstadoReserva.NO_PRESENTADO) {
+                reserva.setEstado(EstadoReserva.CANCELADA);
+                reservaRepository.save(reserva);
+            }
+
+            Pago pago = reserva.getPago();
+            if (pago != null && reembolsar) {
+                pago.setEstado(EstadoPago.REEMBOLSADO);
+                pagoRepository.save(pago);
+            }
+            String msj = "El viaje de " + viaje.getSlug() + " ha sido cancelado por el conductor.";
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
+            notificacionRepository.save(noti);
+        }
     }
 
     private BigDecimal obtenerPrecioLitroConGemini(Vehiculo vehiculo) {
@@ -332,7 +433,7 @@ public class ViajeServiceImpl implements ViajeService {
         return t.toLowerCase(Locale.ROOT).trim();
     }
 
-    private ViajeDTO convertToDTO(Viaje viaje) {
+    private ViajeDTO convertirADTO(Viaje viaje) {
         VehiculoDTO vehiculoDTO = new VehiculoDTO(
             viaje.getVehiculo().getId(),
             viaje.getVehiculo().getMarca(),
@@ -354,10 +455,15 @@ public class ViajeServiceImpl implements ViajeService {
                 .filter(r -> r.getEstado() != EstadoReserva.CANCELADA)
                 .map(r -> new ReservaDTO(
                     r.getId(),
-                    r.getPersona().getNombre() + " " + r.getPersona().getPrimerApellido(),
+                    r.getEstado().toString(),
+                    r.getFechaHoraReserva(),
+                    r.getViaje().getId(),
                     r.getPersona().getId(),
-                    r.getCantidadPlazas(),
-                    r.getEstado().toString()
+                    r.getPersona().getNombre(),
+                    r.getPersona().getSlug(),
+                    r.getParadaSubida().getId(),
+                    r.getParadaBajada().getId(),
+                    r.getCantidadPlazas()
                 )).toList()
             : List.of();
 
@@ -370,6 +476,8 @@ public class ViajeServiceImpl implements ViajeService {
             vehiculoDTO,
             paradasDTO,
             viaje.getSlug(),
+            viaje.getPersona().getNombre(),
+            viaje.getPersona().getSlug(),
             reservasDTO
         );
     }

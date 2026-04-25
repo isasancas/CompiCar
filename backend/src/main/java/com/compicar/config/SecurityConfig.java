@@ -81,6 +81,7 @@ public class SecurityConfig {
 
                 // Endpoints publicos de solo lectura para viajes
                 .requestMatchers(HttpMethod.GET, "/api/viajes/publicos/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/personas/*/perfil-publico").permitAll()
 
                 .requestMatchers("/api/logout").authenticated()
                 .requestMatchers("/api/personas/**").authenticated()

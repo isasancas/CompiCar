@@ -1,5 +1,7 @@
 package com.compicar.persona.dto;
 
+import java.util.List;
+
 import com.compicar.persona.Persona;
 
 public class PerfilPersonaDTO {
@@ -12,6 +14,7 @@ public class PerfilPersonaDTO {
     private String telefono;
     private Double reputacion;
     private String slug;
+    private List<String> preferenciasViaje;
 
     public PerfilPersonaDTO() {
     }
@@ -25,10 +28,11 @@ public class PerfilPersonaDTO {
         this.telefono = persona.getTelefono();
         this.reputacion = persona.getReputacion();
         this.slug = persona.getSlug();
+        this.preferenciasViaje = persona.getPreferenciasViaje();
     }
 
     public PerfilPersonaDTO(Long id, String nombre, String primerApellido, String segundoApellido, String email,
-            String telefono, Double reputacion, String slug) {
+            String telefono, Double reputacion, String slug, List<String> preferenciasViaje) {
         this.id = id;
         this.nombre = nombre;
         this.primerApellido = primerApellido;
@@ -37,6 +41,7 @@ public class PerfilPersonaDTO {
         this.telefono = telefono;
         this.reputacion = reputacion;
         this.slug = slug;
+        this.preferenciasViaje = preferenciasViaje;
     }
 
     public Long getId() {
@@ -71,6 +76,10 @@ public class PerfilPersonaDTO {
         return slug;
     }
 
+    public List<String> getPreferenciasViaje() {
+        return preferenciasViaje;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -103,6 +112,10 @@ public class PerfilPersonaDTO {
         this.slug = slug;
     }
 
+    public void setPreferenciasViaje(List<String> preferenciasViaje) {
+        this.preferenciasViaje = preferenciasViaje;
+    }
+
     @Override
     public String toString() {
         return "PerfilPersonaDTO{" +
@@ -114,6 +127,7 @@ public class PerfilPersonaDTO {
                 ", telefono='" + telefono + '\'' +
                 ", reputacion=" + reputacion +
                 ", slug='" + slug + '\'' +
+                ", preferenciasViaje=" + preferenciasViaje +
                 '}';
     }
 

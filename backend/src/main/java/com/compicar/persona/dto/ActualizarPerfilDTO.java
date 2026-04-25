@@ -1,5 +1,7 @@
 package com.compicar.persona.dto;
 
+import java.util.List;
+
 import com.compicar.persona.Persona;
 
 import jakarta.validation.constraints.Email;
@@ -24,6 +26,8 @@ public class ActualizarPerfilDTO {
 
     private String contrasenaActual;
 
+    private List<String> preferenciasViaje;
+
     public ActualizarPerfilDTO() {
     }
 
@@ -33,6 +37,7 @@ public class ActualizarPerfilDTO {
         this.segundoApellido = persona.getSegundoApellido();
         this.email = persona.getEmail();
         this.telefono = persona.getTelefono();
+        this.preferenciasViaje = persona.getPreferenciasViaje();
     }
 
     public ActualizarPerfilDTO(String nombre, String primerApellido, String segundoApellido, String email,
@@ -69,6 +74,10 @@ public class ActualizarPerfilDTO {
         return contrasenaActual;
     }
 
+    public List<String> getPreferenciasViaje() {
+        return preferenciasViaje;
+    }
+
     public void setNombre(String nombre) {
         this.nombre = nombre;
     }
@@ -93,9 +102,14 @@ public class ActualizarPerfilDTO {
         this.contrasenaActual = contrasenaActual;
     }
 
+    public void setPreferenciasViaje(List<String> preferenciasViaje) {
+        this.preferenciasViaje = preferenciasViaje;
+    }
+
     @Override
     public String toString() {
         return "ActualizarPerfilDTO{nombre='" + nombre + "', primerApellido='" + primerApellido
-                + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono + "', contrasenaActual='" + contrasenaActual + "'}";
+                + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + 
+                telefono + "', contrasenaActual='" + contrasenaActual + "', preferenciasViaje=" + preferenciasViaje + "}";
     }
 }

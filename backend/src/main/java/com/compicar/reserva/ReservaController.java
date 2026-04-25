@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.persona.Persona;
+import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 
 @RestController
@@ -25,10 +28,12 @@ import com.compicar.reserva.dto.ReservaRequest;
 public class ReservaController {
 
     private final ReservaService reservaService;
+    private final PersonaRepository personaRepository;
 
     @Autowired
-    public ReservaController(ReservaService reservaService) {
+    public ReservaController(ReservaService reservaService, PersonaRepository personaRepository ) {
         this.reservaService = reservaService;
+        this.personaRepository = personaRepository;
     }
 
     @PostMapping("/crear")
@@ -45,7 +50,7 @@ public class ReservaController {
     }
 
     @PutMapping("/cancelar")
-    public Reserva cancelarReserva(String usuarioEmail, Long reservaId) {
+    public Reserva cancelarReserva(@RequestParam Long reservaId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
             throw new ResponseStatusException(
@@ -57,19 +62,27 @@ public class ReservaController {
     }
 
     @GetMapping("/mis-reservas")
-    public List<Reserva> obtenerReservasPorPersona() {
+    public List<ReservaDTO> obtenerReservasPorPersona() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        
         if (auth == null || auth.getName() == null) {
             throw new ResponseStatusException(
                 HttpStatus.UNAUTHORIZED, "No autenticado"
             );
         }
-        String usuarioEmail = auth.getName();
-        return reservaService.obtenerReservasPorPersona(usuarioEmail);
+
+        String email = auth.getName();
+
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "Usuario no encontrado"
+            ));
+
+        return reservaService.obtenerReservasPorPersona(persona);
     }
 
     @GetMapping("/viaje")
-    public List<Reserva> obtenerReservasPorViaje(Long viajeId) {
+    public List<Reserva> obtenerReservasPorViaje(@RequestParam Long viajeId) {
         return reservaService.obtenerReservasPorViaje(viajeId);
     }
 
