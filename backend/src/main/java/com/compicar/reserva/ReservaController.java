@@ -46,7 +46,14 @@ public class ReservaController {
         }
         String usuarioEmail = auth.getName();
         
-        return reservaService.crearReserva(usuarioEmail, request.viajeId(), request.plazas());
+        // Añadimos los dos nuevos parámetros al llamar al servicio
+        return reservaService.crearReserva(
+            usuarioEmail, 
+            request.viajeId(), 
+            request.plazas(), 
+            request.paradaSubidaId(), 
+            request.paradaBajadaId()
+        );
     }
 
     @PutMapping("/cancelar")
@@ -86,14 +93,13 @@ public class ReservaController {
         return reservaService.obtenerReservasPorViaje(viajeId);
     }
 
-    @PutMapping("/actualizar")
-    public Reserva actualizarReserva(String usuarioEmail, Long reservaId, Reserva reserva) {
+    @PutMapping("/actualizar/{reservaId}")
+    public Reserva actualizarReserva(@PathVariable Long reservaId, @RequestBody Reserva reserva) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED, "No autenticado"
-            );
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
         }
+        
         String usuarioEmailAuth = auth.getName();
         return reservaService.actualizarReserva(usuarioEmailAuth, reservaId, reserva);
     }

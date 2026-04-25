@@ -275,6 +275,76 @@ public class ViajeServiceImpl implements ViajeService {
         return viajesExpirados.size();
     }
 
+    @Override
+    public ViajeDTO actualizarViaje(String usuarioEmail, String slug, Viaje viajeEditado) {
+        // 1. Validaciones de Identidad
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viajeExistente = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viajeExistente.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede editar el viaje");
+        }
+
+        // 2. Validación de margen de tiempo (12 horas)
+        if (LocalDateTime.now().isAfter(viajeExistente.getFechaHoraSalida().minusHours(12))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                "No se puede editar el viaje a falta de menos de 12 horas para la salida");
+        }
+
+        // 3. Actualización de Fecha (Solo si viene en el body)
+        if (viajeEditado.getFechaHoraSalida() != null) {
+            viajeExistente.setFechaHoraSalida(viajeEditado.getFechaHoraSalida());
+        }
+
+        // 4. Actualización de Precio (Protección contra NULL)
+        // Solo actualizamos si el valor enviado no es nulo y es mayor que 0
+        if (viajeEditado.getPrecio() != null && viajeEditado.getPrecio().compareTo(BigDecimal.ZERO) > 0) {
+            viajeExistente.setPrecio(viajeEditado.getPrecio());
+        }
+
+        // 5. Lógica de Plazas Disponibles
+        if (viajeEditado.getPlazasDisponibles() != null) {
+            // Contamos plazas ocupadas actualmente
+            int plazasOcupadas = reservaRepository.findByViajeAndEstadoNot(viajeExistente, EstadoReserva.CANCELADA)
+                    .stream()
+                    .mapToInt(Reserva::getCantidadPlazas)
+                    .sum();
+
+            // Interpretamos el valor del Front como "Capacidad Total"
+            int nuevoTotal = viajeEditado.getPlazasDisponibles();
+
+            if (nuevoTotal < plazasOcupadas) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                    "El total de plazas no puede ser inferior a las plazas ya reservadas: " + plazasOcupadas);
+            }
+
+            // Seteamos la disponibilidad real (Total - Ocupadas)
+            viajeExistente.setPlazasDisponibles(nuevoTotal - plazasOcupadas);
+        }
+
+        // 6. Guardado y Notificaciones
+        validarParadas(viajeExistente);
+        Viaje guardado = viajeRepository.save(viajeExistente);
+        
+        List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(guardado, EstadoReserva.CANCELADA);
+
+        for (Reserva r : reservasActivas) {
+            String msj = "Se han modificado los detalles del viaje " + guardado.getSlug() + ". Revisa el nuevo horario o número de plazas disponibles.";
+            
+            Notificacion noti = new Notificacion(
+                msj, 
+                r.getPersona(), 
+                TipoNotificacion.VIAJE_MODIFICADO
+            );
+            notificacionRepository.save(noti);
+        }
+
+        return convertirADTO(guardado);
+    }
+
     private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {
         List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
 
