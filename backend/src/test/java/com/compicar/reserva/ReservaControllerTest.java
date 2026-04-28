@@ -34,190 +34,205 @@ import com.compicar.reserva.dto.ReservaDTO;
 @ExtendWith(MockitoExtension.class)
 class ReservaControllerTest {
 
-	private MockMvc mockMvc;
+    private MockMvc mockMvc;
 
-	@Mock
-	private ReservaService reservaService;
+    @Mock
+    private ReservaService reservaService;
 
-	@Mock
-	private com.compicar.persona.PersonaRepository personaRepository;
+    @Mock
+    private com.compicar.persona.PersonaRepository personaRepository;
 
-	@InjectMocks
-	private ReservaController reservaController;
+    @InjectMocks
+    private ReservaController reservaController;
 
-	@BeforeEach
-	void setUp() {
-		mockMvc = MockMvcBuilders.standaloneSetup(reservaController).build();
-		SecurityContextHolder.clearContext();
-	}
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(reservaController).build();
+        SecurityContextHolder.clearContext();
+    }
 
-	@Test
-	void crearReserva_ok_autenticado() throws Exception {
-		autenticar("user@compicar.com");
+    @Test
+    void crearReserva_ok_autenticado() throws Exception {
+        autenticar("user@compicar.com");
 
-		Reserva retorno = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(retorno, 1L);
+        Reserva retorno = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(retorno, 1L);
 
-		when(reservaService.crearReserva(anyString(), anyLong(), any())).thenReturn(retorno);
+        // CORRECCIÓN: Usamos any() para todos los campos para evitar el error de Strict Stubbing
+        // Mockito a veces falla al diferenciar entre long y Long en modo estricto.
+        when(reservaService.crearReserva(any(), any(), any(), any(), any()))
+                .thenReturn(retorno);
 
-		mockMvc.perform(post("/api/reservas/crear")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"viajeId\":10,\"plazas\":1}"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(1));
+        mockMvc.perform(post("/api/reservas/crear")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"viajeId\":10,\"plazas\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
 
-		verify(reservaService).crearReserva(anyString(), anyLong(), any());
-	}
+        // Verificamos de la misma forma que definimos el stubbing
+        verify(reservaService).crearReserva(any(), any(), any(), any(), any());
+    }
 
-	@Test
-	void crearReserva_noAutenticado_401() throws Exception {
-		SecurityContextHolder.clearContext();
+    @Test
+    void crearReserva_noAutenticado_401() throws Exception {
+        SecurityContextHolder.clearContext();
 
-		mockMvc.perform(post("/api/reservas/crear")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("{\"viajeId\":10,\"plazas\":1}"))
-				.andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/reservas/crear")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"viajeId\":10,\"plazas\":1}"))
+                .andExpect(status().isUnauthorized());
 
-		verifyNoInteractions(reservaService);
-	}
+        verifyNoInteractions(reservaService);
+    }
 
-	@Test
-	void obtenerReservasPorPersona_ok() throws Exception {
-		autenticar("user@compicar.com");
+    @Test
+    void obtenerReservasPorPersona_ok() throws Exception {
+        autenticar("user@compicar.com");
 
-		ReservaDTO dto = new ReservaDTO(1L, "PENDIENTE", LocalDateTime.now(), 10L, 2L, "Nombre", "slug", 1L, 2L, 1);
-		Persona persona = new Persona();
-		java.lang.reflect.Field idField = Persona.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(persona, 2L);
-		when(personaRepository.findByEmail("user@compicar.com")).thenReturn(java.util.Optional.of(persona));
-		when(reservaService.obtenerReservasPorPersona(persona)).thenReturn(List.of(dto));
+        ReservaDTO dto = new ReservaDTO(1L, "PENDIENTE", LocalDateTime.now(), 10L, 2L, "Nombre", "slug", 1L, 2L, 1);
+        Persona persona = new Persona();
+        java.lang.reflect.Field idField = Persona.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(persona, 2L);
+        
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(java.util.Optional.of(persona));
+        when(reservaService.obtenerReservasPorPersona(persona)).thenReturn(List.of(dto));
 
-		mockMvc.perform(get("/api/reservas/mis-reservas"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[0].id").value(1));
-	}
+        mockMvc.perform(get("/api/reservas/mis-reservas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1));
+    }
 
-	@Test
-	void obtenerReservaPorId_ok_autorizado() throws Exception {
-		autenticar("user@compicar.com");
+    @Test
+    void obtenerReservaPorId_ok_autorizado() throws Exception {
+        autenticar("user@compicar.com");
 
-		Reserva r = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(r, 1L);
+        Reserva r = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 1L);
 
-		Persona p = new Persona();
-		java.lang.reflect.Field pid = Persona.class.getDeclaredField("email");
-		pid.setAccessible(true);
-		p.setEmail("user@compicar.com");
-		java.lang.reflect.Field personIdField = Persona.class.getDeclaredField("id");
-		personIdField.setAccessible(true);
-		personIdField.set(p, 2L);
+        Persona p = new Persona();
+        java.lang.reflect.Field emailField = Persona.class.getDeclaredField("email");
+        emailField.setAccessible(true);
+        emailField.set(p, "user@compicar.com");
+        
+        java.lang.reflect.Field personIdField = Persona.class.getDeclaredField("id");
+        personIdField.setAccessible(true);
+        personIdField.set(p, 2L);
 
-		r.setPersona(p);
+        r.setPersona(p);
 
-		when(reservaService.obtenerReservaPorId(1L)).thenReturn(r);
+        when(reservaService.obtenerReservaPorId(1L)).thenReturn(r);
 
-		mockMvc.perform(get("/api/reservas/1"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(1));
-	}
+        mockMvc.perform(get("/api/reservas/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+    }
 
-	@Test
-	void obtenerReservaPorId_noAutenticado_401() throws Exception {
-		SecurityContextHolder.clearContext();
+    @Test
+    void obtenerReservaPorId_noAutenticado_401() throws Exception {
+        SecurityContextHolder.clearContext();
 
-		mockMvc.perform(get("/api/reservas/1"))
-				.andExpect(status().isUnauthorized());
-	}
+        mockMvc.perform(get("/api/reservas/1"))
+                .andExpect(status().isUnauthorized());
+    }
 
-	@Test
-	void obtenerReservaPorId_forbidden() throws Exception {
-		autenticar("other@compicar.com");
+    @Test
+    void obtenerReservaPorId_forbidden() throws Exception {
+        autenticar("other@compicar.com");
 
-		Reserva r = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(r, 1L);
+        Reserva r = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 1L);
 
-		Persona p = new Persona();
-		p.setEmail("owner@compicar.com");
-		java.lang.reflect.Field personIdField = Persona.class.getDeclaredField("id");
-		personIdField.setAccessible(true);
-		personIdField.set(p, 2L);
-		r.setPersona(p);
+        Persona p = new Persona();
+        java.lang.reflect.Field emailField = Persona.class.getDeclaredField("email");
+        emailField.setAccessible(true);
+        emailField.set(p, "owner@compicar.com");
+        
+        java.lang.reflect.Field personIdField = Persona.class.getDeclaredField("id");
+        personIdField.setAccessible(true);
+        personIdField.set(p, 2L);
+        r.setPersona(p);
 
-		when(reservaService.obtenerReservaPorId(1L)).thenReturn(r);
+        when(reservaService.obtenerReservaPorId(1L)).thenReturn(r);
 
-		mockMvc.perform(get("/api/reservas/1"))
-				.andExpect(status().isForbidden());
-	}
+        mockMvc.perform(get("/api/reservas/1"))
+                .andExpect(status().isForbidden());
+    }
 
-	@Test
-	void reservaConfirmada_ok() throws Exception {
-		Reserva r = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(r, 5L);
-		when(reservaService.reservaConfirmada("driver@compicar.com", 5L)).thenReturn(r);
+    @Test
+    void reservaConfirmada_ok() throws Exception {
+        Reserva r = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 5L);
+        when(reservaService.reservaConfirmada("driver@compicar.com", 5L)).thenReturn(r);
 
-		mockMvc.perform(get("/api/reservas/confirmar").param("reservaId", "5").principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(5));
-	}
+        mockMvc.perform(get("/api/reservas/confirmar")
+                .param("reservaId", "5")
+                .principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(5));
+    }
 
-	@Test
-	void reservaNoPresentado_ok() throws Exception {
-		Reserva r = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(r, 6L);
-		when(reservaService.reservaNoPresentado(6L)).thenReturn(r);
+    @Test
+    void reservaNoPresentado_ok() throws Exception {
+        Reserva r = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 6L);
+        when(reservaService.reservaNoPresentado(6L)).thenReturn(r);
 
-		mockMvc.perform(get("/api/reservas/noPresentado").param("reservaId", "6"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(6));
-	}
+        mockMvc.perform(get("/api/reservas/noPresentado").param("reservaId", "6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(6));
+    }
 
-	@Test
-	void obtenerPendientes_principalNull_401() throws Exception {
-		mockMvc.perform(get("/api/reservas/pendientes-conductor"))
-				.andExpect(status().isUnauthorized());
-	}
+    @Test
+    void obtenerPendientes_principalNull_401() throws Exception {
+        mockMvc.perform(get("/api/reservas/pendientes-conductor"))
+                .andExpect(status().isUnauthorized());
+    }
 
-	@Test
-	void obtenerPendientes_ok() throws Exception {
-		Reserva r = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(r, 7L);
-		when(reservaService.obtenerReservasComoConductor("driver@compicar.com")).thenReturn(List.of(r));
+    @Test
+    void obtenerPendientes_ok() throws Exception {
+        Reserva r = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 7L);
+        when(reservaService.obtenerReservasComoConductor("driver@compicar.com")).thenReturn(List.of(r));
 
-		mockMvc.perform(get("/api/reservas/pendientes-conductor").principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$[0].id").value(7));
-	}
+        mockMvc.perform(get("/api/reservas/pendientes-conductor")
+                .principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(7));
+    }
 
-	@Test
-	void rechazarReserva_ok() throws Exception {
-		Reserva r = new Reserva();
-		java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
-		idField.setAccessible(true);
-		idField.set(r, 8L);
-		when(reservaService.rechazarReserva("driver@compicar.com", 8L)).thenReturn(r);
+    @Test
+    void rechazarReserva_ok() throws Exception {
+        Reserva r = new Reserva();
+        java.lang.reflect.Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 8L);
+        when(reservaService.rechazarReserva("driver@compicar.com", 8L)).thenReturn(r);
 
-		mockMvc.perform(put("/api/reservas/rechazar").param("reservaId", "8").principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(8));
-	}
+        mockMvc.perform(put("/api/reservas/rechazar")
+                .param("reservaId", "8")
+                .principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(8));
+    }
 
-	private void autenticar(String email) {
-		SecurityContext context = new org.springframework.security.core.context.SecurityContextImpl();
-		context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken(email, null));
-		SecurityContextHolder.setContext(context);
-		clearInvocations(reservaService);
-	}
+    private void autenticar(String email) {
+        SecurityContext context = new org.springframework.security.core.context.SecurityContextImpl();
+        context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken(email, null));
+        SecurityContextHolder.setContext(context);
+        // Limpiar invocaciones previas para evitar que el modo estricto detecte basura de otros tests
+        clearInvocations(reservaService);
+    }
 }
