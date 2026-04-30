@@ -7,7 +7,6 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -20,14 +19,19 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
         String driverToken = registerAndLogin();
         Long vehiculoId = crearVehiculo(driverToken);
 
-        crearViaje(driverToken, vehiculoId);
-        Long viajeId = obtenerPrimerViajeId(driverToken);
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
 
         String passengerToken = registerAndLogin();
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1
+            "plazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
         );
 
         MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
@@ -50,7 +54,9 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
     void crearReserva_sinToken_403() throws Exception {
         Map<String, Object> payload = Map.of(
             "viajeId", 1,
-            "plazas", 1
+            "plazas", 1,
+            "paradaSubidaId", 1,
+            "paradaBajadaId", 2
         );
 
         mockMvc.perform(post("/api/reservas/crear")
@@ -63,14 +69,20 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
     void obtenerReservaPorId_forbiddenParaOtroUsuario() throws Exception {
         String driverToken = registerAndLogin();
         Long vehiculoId = crearVehiculo(driverToken);
-        crearViaje(driverToken, vehiculoId);
-        Long viajeId = obtenerPrimerViajeId(driverToken);
+        
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
 
         String passengerToken = registerAndLogin();
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1
+            "plazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
         );
 
         MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
@@ -82,7 +94,6 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
 
-        // another user tries to access
         String otherToken = registerAndLogin();
 
         mockMvc.perform(get("/api/reservas/" + reservaId)
@@ -94,14 +105,20 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
     void confirmarYPendientesYNoPresentado_ok() throws Exception {
         String driverToken = registerAndLogin();
         Long vehiculoId = crearVehiculo(driverToken);
-        crearViaje(driverToken, vehiculoId);
-        Long viajeId = obtenerPrimerViajeId(driverToken);
+        
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
 
         String passengerToken = registerAndLogin();
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1
+            "plazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
         );
 
         MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
@@ -113,23 +130,21 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
 
-        // driver sees pendientes
         mockMvc.perform(get("/api/reservas/pendientes-conductor")
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].id").value(reservaId));
 
-        // driver confirma
-        mockMvc.perform(get("/api/reservas/confirmar").param("reservaId", String.valueOf(reservaId))
+        mockMvc.perform(get("/api/reservas/confirmar")
+            .param("reservaId", String.valueOf(reservaId))
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.estado").value("CONFIRMADA"));
 
-        // marcar no presentado
-        mockMvc.perform(get("/api/reservas/noPresentado").param("reservaId", String.valueOf(reservaId))
+        mockMvc.perform(get("/api/reservas/noPresentado")
+            .param("reservaId", String.valueOf(reservaId))
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.estado").value("NO_PRESENTADO"));
     }
 }
-
