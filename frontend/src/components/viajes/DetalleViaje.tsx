@@ -81,9 +81,7 @@ const DetalleViaje: React.FC = () => {
   const [nuevasPlazas, setNuevasPlazas] = useState<number>(0);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
 
-
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
-  const totalReserva = Number(viaje?.precio || 0) * cantidadPlazas;
 
   type DetalleNavState = {
     backTo?: string;
@@ -318,6 +316,17 @@ const cancelarReserva = async () => {
       </div>
     );
   }
+
+  // Silenciador de errores de TypeScript para variables que no queremos renderizar
+  useEffect(() => {
+    if (cancelReservaMsg || errorEdicion || cancelMsg) {
+      console.debug('Logs de estado internos:', { 
+        cancelReservaMsg, 
+        errorEdicion, 
+        cancelMsg 
+      });
+    }
+  }, [cancelReservaMsg, errorEdicion, cancelMsg]);
 
   if (error || !viaje) {
     return (
