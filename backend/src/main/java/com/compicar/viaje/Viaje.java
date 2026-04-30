@@ -8,6 +8,8 @@ import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.reserva.Reserva;
 import com.compicar.vehiculo.Vehiculo;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -46,6 +48,7 @@ public class Viaje {
 
     @ManyToOne
     @JoinColumn(name = "persona_id", nullable = false)
+    @JsonIgnoreProperties({"viajes", "reservas", "vehiculos"})
     private Persona persona;
 
     @ManyToOne
@@ -53,10 +56,12 @@ public class Viaje {
     private Vehiculo vehiculo;
 
     @OneToMany(mappedBy = "viaje")
+    @JsonIgnore
     private List<Reserva> reservas;
 
     @OneToMany(mappedBy = "viaje", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orden ASC")
+    @JsonIgnoreProperties("viaje")
     private List<Parada> paradas;
 
     @Column(nullable = false, unique = true, length = 180)

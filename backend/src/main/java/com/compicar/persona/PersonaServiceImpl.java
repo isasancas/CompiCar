@@ -1,9 +1,11 @@
 package com.compicar.persona;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 
@@ -86,6 +88,10 @@ public class PersonaServiceImpl implements PersonaService {
         personaAutenticada.setPrimerApellido(perfilActualizado.getPrimerApellido());
         personaAutenticada.setSegundoApellido(perfilActualizado.getSegundoApellido());
         personaAutenticada.setTelefono(perfilActualizado.getTelefono());
+        personaAutenticada.getPreferenciasViaje().clear();
+        if (perfilActualizado.getPreferenciasViaje() != null) {
+            personaAutenticada.getPreferenciasViaje().addAll(perfilActualizado.getPreferenciasViaje());
+        }
 
         if (!personaAutenticada.getEmail().equals(perfilActualizado.getEmail())) {
             if (personaRepository.existsByEmail(perfilActualizado.getEmail())) {
@@ -126,6 +132,20 @@ public class PersonaServiceImpl implements PersonaService {
         Persona persona = personaRepository.findBySlug(slug)
             .orElseThrow(() -> new IllegalArgumentException("Persona no encontrada"));
         return new PerfilPersonaDTO(persona);
+    }
+
+    @Override
+    public void subirFoto(String email, String fotoBase64) {
+        Persona persona = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        
+        // Validar tamaño máximo (5MB en Base64 = ~3.75MB original)
+        if (fotoBase64.length() > 5 * 1024 * 1024) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Foto demasiado grande");
+        }
+        
+        persona.setFoto(fotoBase64);
+        personaRepository.save(persona);
     }
 
     private String generarSlugUnico(String baseSlug) {

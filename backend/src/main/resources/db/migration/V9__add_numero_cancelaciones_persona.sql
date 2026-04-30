@@ -1,0 +1,2 @@
+ALTER TABLE persona
+ADD COLUMN numero_cancelaciones INTEGER NOT NULL DEFAULT 0;

@@ -1,16 +1,21 @@
 package com.compicar.viaje;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -78,6 +83,54 @@ public class ViajeController {
     @GetMapping("/{slug}")
     public ViajeDTO obtenerViajePorSlug(@PathVariable String slug) {
         return viajeService.obtenerViajePorSlug(slug);
+    }
+
+    @GetMapping("/publicos")
+    public List<ViajeDTO> buscarViajesPublicos(
+        @RequestParam(required = false) String origen,
+        @RequestParam(required = false) String destino,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha
+    ) {
+        return viajeService.buscarViajesPublicos(origen, destino, fecha);
+    }
+
+    @GetMapping("/publicos/conductor/{conductorSlug}")
+    public List<ViajeDTO> obtenerViajesPublicosPorConductor(@PathVariable String conductorSlug) {
+        return viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
+    }
+
+    @GetMapping("/publicos/{slug}")
+    public ViajeDTO obtenerViajePublicoPorSlug(@PathVariable String slug) {
+        return viajeService.obtenerViajePorSlug(slug);
+    }
+
+    @PutMapping("/{slug}/cancelar")
+    public ViajeDTO cancelarViaje(@PathVariable String slug) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.cancelarViaje(usuarioEmail, slug);
+    }
+
+    @PutMapping("/{slug}")
+    public ResponseEntity<ViajeDTO> actualizarViaje(
+            @PathVariable String slug, 
+            @RequestBody Viaje viajeEditado) {
+        
+        // 1. Obtener el email del usuario autenticado
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        String usuarioEmail = auth.getName();
+
+        // 2. Llamar al servicio que ya tienes implementado
+        ViajeDTO actualizado = viajeService.actualizarViaje(usuarioEmail, slug, viajeEditado);
+        
+        return ResponseEntity.ok(actualizado);
     }
 
 }

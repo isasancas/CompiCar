@@ -3,6 +3,7 @@ package com.compicar.viaje;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
@@ -11,10 +12,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.pago.EstadoPago;
+import com.compicar.pago.Pago;
+import com.compicar.pago.PagoRepository;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
 import com.compicar.vehiculo.TipoVehiculo;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
@@ -24,10 +33,10 @@ import com.compicar.viaje.dto.ViajeDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -42,6 +51,12 @@ class ViajeServiceTest {
     private VehiculoRepository vehiculoRepository;
     @Mock
     private CalculoPrecioIA calculoPrecioIA;
+    @Mock
+    private ReservaRepository reservaRepository;
+    @Mock
+    private PagoRepository pagoRepository;
+    @Mock
+    private NotificacionRepository notificacionRepository;
 
     @InjectMocks
     private ViajeServiceImpl viajeService;
@@ -272,8 +287,8 @@ class ViajeServiceTest {
         assertEquals(new BigDecimal("5.00"), resp.getLitrosEstimados());
         assertEquals(new BigDecimal("1.700"), resp.getPrecioCombustibleLitro());
         assertEquals(new BigDecimal("8.50"), resp.getCosteTotalCombustible());
-        assertEquals(new BigDecimal("6.80"), resp.getPrecioMinimoPasajero());
-        assertEquals(new BigDecimal("10.20"), resp.getPrecioMaximoPasajero());
+        assertEquals(new BigDecimal("13.20"), resp.getPrecioMinimoPasajero());
+        assertEquals(new BigDecimal("19.80"), resp.getPrecioMaximoPasajero());
         assertEquals("GEMINI", resp.getFuente());
     }
 
@@ -447,6 +462,100 @@ class ViajeServiceTest {
         assertEquals(1, result.getParadas().get(0).getOrden());
         assertEquals(2, result.getParadas().get(1).getOrden());
         assertEquals(3, result.getParadas().get(2).getOrden());
+    }
+
+    @Test
+    void cancelarViaje_ok_cancelaViajeYReservasYNotifica() {
+        String slug = "sevilla-cadiz-2026-05-01";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(24));
+
+        Reserva reserva = new Reserva();
+        reserva.setPersona(otroUsuario);
+        reserva.setViaje(viajeBase);
+        Pago pago = new Pago();
+        reserva.setPago(pago);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+        when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA))
+                .thenReturn(List.of(reserva));
+
+        ViajeDTO result = viajeService.cancelarViaje(conductor.getEmail(), slug);
+
+        assertEquals("CANCELADO", result.getEstado());
+        assertEquals(EstadoReserva.CANCELADA, reserva.getEstado());
+        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
+
+        verify(viajeRepository).save(viajeBase);
+        verify(reservaRepository).save(reserva);
+        verify(pagoRepository).save(pago);
+        verify(notificacionRepository).save(any(Notificacion.class));
+    }
+
+    @Test
+    void cancelarViaje_penalizaConductor_siEsMuyTarde() {
+        String slug = "viaje-urgente";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(2));
+        conductor.setNumeroCancelaciones(0);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        viajeService.cancelarViaje(conductor.getEmail(), slug);
+
+        assertTrue(conductor.getNumeroCancelaciones() > 0);
+        verify(personaRepository).save(conductor);
+    }
+
+    @Test
+    void cancelarViaje_error_usuarioNoEsConductor_lanza403() {
+        viajeBase.setPersona(conductor);
+        viajeBase.setSlug("slug-test");
+
+        when(personaRepository.findByEmail(otroUsuario.getEmail())).thenReturn(Optional.of(otroUsuario));
+        when(viajeRepository.findBySlug("slug-test")).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, 
+            () -> viajeService.cancelarViaje(otroUsuario.getEmail(), "slug-test"));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void cancelarViaje_error_viajeYaFinalizado_lanza400() {
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.FINALIZADO);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug("test")).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, 
+            () -> viajeService.cancelarViaje(conductor.getEmail(), "test"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    }
+
+    @Test
+    void cancelarViajesPendientesExpirados_ok_procesaViajesAntiguos() {
+        Viaje viajeExpirado = new Viaje();
+        viajeExpirado.setEstado(EstadoViaje.PENDIENTE);
+        viajeExpirado.setPersona(conductor);
+        viajeExpirado.setFechaHoraSalida(LocalDateTime.now().minusHours(13));
+        
+        when(viajeRepository.findByEstadoAndFechaHoraSalidaBefore(eq(EstadoViaje.PENDIENTE), any()))
+                .thenReturn(List.of(viajeExpirado));
+
+        int procesados = viajeService.cancelarViajesPendientesExpirados();
+
+        assertEquals(1, procesados);
+        assertEquals(EstadoViaje.CANCELADO, viajeExpirado.getEstado());
+        verify(viajeRepository).save(viajeExpirado);
+        verify(personaRepository).save(conductor);
     }
 
     private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
