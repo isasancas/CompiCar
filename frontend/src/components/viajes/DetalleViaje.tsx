@@ -97,30 +97,30 @@ const DetalleViaje: React.FC = () => {
 
   const volver = () => navigate(backTo);
 
-  useEffect(() => {
-    const fetchViaje = async () => {
-      if (!slug) {
+  const fetchViaje = async () => {
+    if (!slug) {
+      setError('No se pudo cargar el viaje');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/viajes/publicos/${slug}`));
+
+      if (response.ok) {
+        const data = await response.json();
+        setViaje(data);
+      } else {
         setError('No se pudo cargar el viaje');
-        setLoading(false);
-        return;
       }
+    } catch {
+      setError('Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      try {
-        const response = await fetch(buildApiUrl(`/api/viajes/publicos/${slug}`));
-
-        if (response.ok) {
-          const data = await response.json();
-          setViaje(data);
-        } else {
-          setError('No se pudo cargar el viaje');
-        }
-      } catch {
-        setError('Error de conexión');
-      } finally {
-        setLoading(false);
-      }
-    };
-
+  useEffect(() => {
     fetchViaje();
   }, [slug]);
 
@@ -569,17 +569,12 @@ const handleGuardarCambiosViaje = async () => {
         if (response.ok) {
             const viajeActualizado = await response.json();
             console.log("📥 Recibido del Servidor:", viajeActualizado);
-            
-            // Actualizamos el estado local
+
             setViaje(viajeActualizado); 
             setModalEditarViajeAbierto(false);
 
-            // 2. Feedback al usuario y recarga
-            // Mostramos el valor que el servidor calculó finalmente
             alert(`✅ ¡Actualizado! Plazas resultantes: ${viajeActualizado.plazasDisponibles}`);
-            
-            // Forzamos recarga para limpiar cualquier desajuste de estado
-            window.location.reload();
+            fetchViaje();
 
         } else {
             const errorData = await response.json().catch(() => null);
