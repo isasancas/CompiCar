@@ -309,15 +309,7 @@ const cancelarReserva = async () => {
     return { origen, destino, paradasIntermedias };
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-slate-700 font-semibold">Cargando detalles del viaje...</div>
-      </div>
-    );
-  }
-
-  // Silenciador de errores de TypeScript para variables que no queremos renderizar
+    // Silenciador de errores de TypeScript para variables que no queremos renderizar
   useEffect(() => {
     if (cancelReservaMsg || errorEdicion || cancelMsg) {
       console.debug('Logs de estado internos:', { 
@@ -327,6 +319,14 @@ const cancelarReserva = async () => {
       });
     }
   }, [cancelReservaMsg, errorEdicion, cancelMsg]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-slate-700 font-semibold">Cargando detalles del viaje...</div>
+      </div>
+    );
+  }
 
   if (error || !viaje) {
     return (

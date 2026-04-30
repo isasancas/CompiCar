@@ -13,7 +13,6 @@ const Navbar: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // 1. Lógica de eventos de Auth (lo que ya tenías)
     const handleAuthChange = () => {
       setIsLoggedIn(hasValidToken());
     };
@@ -21,16 +20,19 @@ const Navbar: React.FC = () => {
     window.addEventListener('authChange', handleAuthChange);
     window.addEventListener('storage', handleAuthChange);
 
-    // 2. Nueva lógica: Cargar notificaciones si ya está logueado al montar
     const checkNotifications = async () => {
       if (hasValidToken()) {
         try {
           const response = await fetch(buildApiUrl('/api/reservas/pendientes-conductor'), {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
+          
           if (response.ok) {
             const data = await response.json();
             setHasNotifications(data.length > 0);
+          } else if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('token');
+            window.dispatchEvent(new Event('authChange'));
           }
         } catch (err) {
           console.error("Error al verificar notificaciones");
@@ -44,7 +46,7 @@ const Navbar: React.FC = () => {
       window.removeEventListener('authChange', handleAuthChange);
       window.removeEventListener('storage', handleAuthChange);
     };
-  }, [isLoggedIn]); // Añadimos isLoggedIn aquí para que re-ejecute al iniciar sesión
+  }, [isLoggedIn]);
 
   return (
     <nav className="flex items-center justify-between px-10 md:px-16 py-6 bg-[#cfd1cc] border-b border-gray-100 sticky top-0 z-50 shadow-sm">
