@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -112,6 +113,24 @@ public class ViajeController {
 
         String usuarioEmail = auth.getName();
         return viajeService.cancelarViaje(usuarioEmail, slug);
+    }
+
+    @PutMapping("/{slug}")
+    public ResponseEntity<ViajeDTO> actualizarViaje(
+            @PathVariable String slug, 
+            @RequestBody Viaje viajeEditado) {
+        
+        // 1. Obtener el email del usuario autenticado
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        String usuarioEmail = auth.getName();
+
+        // 2. Llamar al servicio que ya tienes implementado
+        ViajeDTO actualizado = viajeService.actualizarViaje(usuarioEmail, slug, viajeEditado);
+        
+        return ResponseEntity.ok(actualizado);
     }
 
 }
