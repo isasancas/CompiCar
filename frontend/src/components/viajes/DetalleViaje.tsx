@@ -380,17 +380,13 @@ const cancelarReserva = async () => {
       });
 
       if (response.ok) {
-        // const data = await response.json(); // Si necesitas el objeto reserva
         setReservaMsg(`Reserva completada con éxito por ${cantidadPlazas} plaza(s).`);
-        
-        // Actualizamos el estado local de plazas disponibles
         setViaje((prev) =>
           prev
             ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas }
             : prev
         );
-        
-        // Cerramos el modal después de un breve delay o dejamos el mensaje
+
         setTimeout(() => setModalReservaAbierto(false), 2000);
       } else {
         const data = await response.json().catch(() => null);
@@ -404,7 +400,6 @@ const cancelarReserva = async () => {
   };
   
   const actualizarReserva = async () => {
-    // 1. Verificación de seguridad para TypeScript y lógica
     if (!miReserva) {
       setReservaMsg("❌ Error: No se encontró la información de la reserva original.");
       return;
@@ -413,10 +408,8 @@ const cancelarReserva = async () => {
     setReservaMsg(null);
     setReservando(true);
 
-    // Aseguramos el ID (por si acaso tu modelo usa reservaId en lugar de id)
     const reservaId = miReserva.id || (miReserva as any).reservaId;
 
-    // DEBUG: Esto es vital para ver qué viaja realmente
     console.log("Datos que saldrán hacia el Backend:", {
       urlId: reservaId,
       plazas: cantidadPlazas,
@@ -424,7 +417,6 @@ const cancelarReserva = async () => {
       bajada: paradaBajadaId
     });
 
-    // 2. Validación de campos obligatorios
     if (!paradaSubidaId || !paradaBajadaId || !reservaId) {
       setReservaMsg("❌ Error: Faltan datos obligatorios (ID o Paradas)");
       setReservando(false);
@@ -433,8 +425,7 @@ const cancelarReserva = async () => {
 
     try {
       const token = localStorage.getItem('token');
-      
-      // 3. Petición Fetch
+
       const response = await fetch(buildApiUrl(`/api/reservas/actualizar/${reservaId}`), {
         method: 'PUT',
         headers: {
@@ -451,10 +442,12 @@ const cancelarReserva = async () => {
 
       if (response.ok) {
         setReservaMsg("✅ Reserva actualizada con éxito");
-        // Recarga la página para refrescar los datos del viaje y la reserva
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => {
+          setReservaMsg(null);
+          fetchViaje(); 
+          setModalReservaAbierto(false); 
+        }, 1500);
       } else {
-        // Intentamos leer el mensaje de error del backend
         const errorText = await response.text();
         let errorMessage = "No se pudo actualizar";
         
@@ -462,7 +455,6 @@ const cancelarReserva = async () => {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorMessage;
         } catch (e) {
-          // Si no es JSON, usamos el texto plano
           errorMessage = errorText || errorMessage;
         }
 
@@ -470,7 +462,6 @@ const cancelarReserva = async () => {
         setReservaMsg(`❌ Error: ${errorMessage}`);
       }
     } catch (error: any) {
-      // 4. Captura de errores de red (CORS, Servidor caído, etc.)
       console.error("DETALLE DEL FALLO DE RED:", error);
       setReservaMsg(`❌ Error de conexión: ${error.message || 'El servidor no responde'}`);
     } finally {
