@@ -442,12 +442,10 @@ const cancelarReserva = async () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          id: reservaId, // Algunos backend requieren el ID también en el cuerpo
-          cantidadPlazas: Number(cantidadPlazas),
-          paradaSubida: { id: Number(paradaSubidaId) },
-          paradaBajada: { id: Number(paradaBajadaId) },
-          // Incluimos el viaje por si el backend valida la relación
-          viaje: { id: viaje.id } 
+          viajeId: Number(viaje.id), 
+          plazas: Number(cantidadPlazas),
+          paradaSubidaId: Number(paradaSubidaId),
+          paradaBajadaId: Number(paradaBajadaId)
         })
       });
 

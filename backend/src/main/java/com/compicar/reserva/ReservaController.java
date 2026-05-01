@@ -94,7 +94,7 @@ public class ReservaController {
     }
 
     @PutMapping("/actualizar/{reservaId}")
-    public Reserva actualizarReserva(@PathVariable Long reservaId, @RequestBody Reserva reserva) {
+    public Reserva actualizarReserva(@PathVariable Long reservaId, @RequestBody ReservaRequest reserva) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
