@@ -76,6 +76,12 @@ public class Persona {
     @Column(name = "preferencia")
     private List<String> preferenciasViaje = new ArrayList<>();
 
+    @Column(name = "stripe_customer_id", unique = true)
+    private String stripeCustomerId; // Para el que paga (pasajero)
+
+    @Column(name = "stripe_account_id", unique = true)
+    private String stripeAccountId; // Para el que recibe (conductor - Stripe Connect)
+
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
             return 0.0;

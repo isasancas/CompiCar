@@ -47,6 +47,10 @@ public class Pago {
     @JoinColumn(name = "reserva_id", nullable = false, unique = true)
     private Reserva reserva;
 
+    // Identificador de la transacción en Stripe para poder "congelar/capturar"
+    @Column(name = "stripe_payment_intent_id", unique = true)
+    private String stripePaymentIntentId;
+
     // Constructores
     public Pago() {
     }

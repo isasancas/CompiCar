@@ -100,7 +100,7 @@ public class PagoServiceImpl implements PagoService {
     public Pago pagoCompletado(Long pagoId) {
         Pago pago = pagoRepository.findById(pagoId)
             .orElseThrow(() -> new IllegalArgumentException("Pago no encontrado con ID: " + pagoId));
-        pago.setEstado(EstadoPago.COMPLETADO);
+        pago.setEstado(EstadoPago.CAPTURADO);
         return pagoRepository.save(pago);
     }
 
