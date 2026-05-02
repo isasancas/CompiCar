@@ -126,6 +126,9 @@ public class ReservaController {
 
     @RequestMapping("/confirmar")
     public ResponseEntity<Reserva> reservaConfirmada(@RequestParam("reservaId") Long reservaId, Principal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
         Reserva confirmada = reservaService.reservaConfirmada(principal.getName(), reservaId);
         return ResponseEntity.ok(confirmada);
     }
@@ -143,8 +146,11 @@ public class ReservaController {
         return ResponseEntity.ok(pendientes);
     }
 
-    @PutMapping("/rechazar")
+    @RequestMapping("/rechazar")
     public ResponseEntity<Reserva> rechazarReserva(@RequestParam Long reservaId, Principal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
         Reserva rechazada = reservaService.rechazarReserva(principal.getName(), reservaId);
         return ResponseEntity.ok(rechazada);
     }
