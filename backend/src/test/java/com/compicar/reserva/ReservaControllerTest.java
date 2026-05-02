@@ -24,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -31,6 +32,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
@@ -262,6 +264,26 @@ class ReservaControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(reservaService);
+    }
+
+    @Test
+    void cancelarReserva_errorServicio_403() throws Exception {
+        autenticar("user@compicar.com");
+        when(reservaService.cancelarReserva("user@compicar.com", 15L))
+        .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado"));
+        mockMvc.perform(put("/api/reservas/cancelar")
+                .param("reservaId", "15"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarReserva_errorServicio_404() throws Exception {
+        autenticar("user@compicar.com");
+        when(reservaService.cancelarReserva("user@compicar.com", 99L))
+        .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Reserva no encontrada"));
+        mockMvc.perform(put("/api/reservas/cancelar")
+                .param("reservaId", "99"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

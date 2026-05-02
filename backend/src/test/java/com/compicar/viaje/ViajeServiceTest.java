@@ -542,6 +542,54 @@ class ViajeServiceTest {
     }
 
     @Test
+    void cancelarViaje_error_viajeYaCancelado_lanza400() {
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.CANCELADO);
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug("ya-cancelado")).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.cancelarViaje(conductor.getEmail(), "ya-cancelado"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("No se puede cancelar un viaje en estado CANCELADO"));
+    }
+
+    @Test
+    void cancelarViaje_conReservaNoPresentado_noCancelaReserva_peroReembolsaYNotifica() {
+        String slug = "viaje-con-no-presentado";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(24));
+
+        Reserva reservaNoPresentado = new Reserva();
+        reservaNoPresentado.setPersona(otroUsuario);
+        reservaNoPresentado.setViaje(viajeBase);
+        reservaNoPresentado.setEstado(EstadoReserva.NO_PRESENTADO);
+
+        Pago pago = new Pago();
+        reservaNoPresentado.setPago(pago);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+        when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA))
+                .thenReturn(List.of(reservaNoPresentado));
+
+        ViajeDTO result = viajeService.cancelarViaje(conductor.getEmail(), slug);
+
+        assertEquals("CANCELADO", result.getEstado());
+        assertEquals(EstadoReserva.NO_PRESENTADO, reservaNoPresentado.getEstado());
+        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
+
+        verify(reservaRepository, never()).save(reservaNoPresentado);
+        verify(pagoRepository).save(pago);
+        verify(notificacionRepository).save(any(Notificacion.class));
+        verify(viajeRepository).save(viajeBase);
+
+    }
+
+    @Test
     void cancelarViajesPendientesExpirados_ok_procesaViajesAntiguos() {
         Viaje viajeExpirado = new Viaje();
         viajeExpirado.setEstado(EstadoViaje.PENDIENTE);
@@ -916,6 +964,16 @@ class ViajeServiceTest {
             () -> viajeService.actualizarViaje("missing@compicar.com", "slug", viajeEditado));
 
         assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatusCode());
+    }
+
+    @Test
+    void cancelarViajesExpirados_delegaEnServicio() {
+        ViajeService viajeServiceMock = mock(ViajeService.class);
+        ProgramadorCancelacionViajes programador = new ProgramadorCancelacionViajes(viajeServiceMock);
+
+        programador.cancelarViajesExpirados();
+
+        verify(viajeServiceMock, times(1)).cancelarViajesPendientesExpirados();
     }
 
     private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
