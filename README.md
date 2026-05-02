@@ -110,6 +110,8 @@ npm run dev
 
 La aplicación estará disponible en: http://localhost:5173
 
+También existe un archivo llamado **run-dev.bat** para Windows, el cual se puede ejecutar para levantarlo todo a la vez.
+
 ---
 
 ## Resumen de puertos
