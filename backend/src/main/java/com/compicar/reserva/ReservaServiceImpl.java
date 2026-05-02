@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.reserva.dto.ReservaDTO;
+import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.notificacion.TipoNotificacion;
@@ -193,15 +194,13 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     @Override
-    public Reserva actualizarReserva(String usuarioEmail, Long reservaId, Reserva reservaModificada) {
-        // 1. Cargar entidades principales
+    public Reserva actualizarReserva(String usuarioEmail, Long reservaId, ReservaRequest reservaModificada) {
         Persona persona = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));
         
         Reserva reservaExistente = reservaRepository.findById(reservaId)
                 .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
 
-        // 2. Validaciones de seguridad y tiempo
         if (!reservaExistente.getPersona().getId().equals(persona.getId())) {
             throw new IllegalArgumentException("La reserva no pertenece al usuario");
         }
@@ -212,14 +211,14 @@ public class ReservaServiceImpl implements ReservaService {
                 "No se puede modificar la reserva a falta de menos de 12 horas para el viaje");
         }
 
-        // 3. Lógica de ajuste de plazas en el viaje
+        if (reservaModificada.plazas() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El número de plazas no puede estar vacío");
+        }
+
         int plazasAnteriores = reservaExistente.getCantidadPlazas();
-        int plazasNuevas = reservaModificada.getCantidadPlazas();
+        int plazasNuevas = reservaModificada.plazas();
 
         if (plazasAnteriores != plazasNuevas) {
-            // Calculamos la diferencia: 
-            // Si pasas de 2 a 3 plazas, diferencia = -1 (el viaje pierde una plaza disponible)
-            // Si pasas de 3 a 1 plaza, diferencia = +2 (el viaje gana dos plazas disponibles)
             int diferencia = plazasAnteriores - plazasNuevas;
 
             if (viaje.getPlazasDisponibles() + diferencia < 0) {
@@ -227,34 +226,28 @@ public class ReservaServiceImpl implements ReservaService {
                     "No hay suficientes plazas disponibles para ampliar la reserva");
             }
 
-            // Actualizamos el stock del viaje
             viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + diferencia);
             viajeRepository.save(viaje);
         }
 
-        // 4. Validar y cargar las nuevas paradas
-        if (reservaModificada.getParadaSubida() == null || reservaModificada.getParadaBajada() == null) {
+        if (reservaModificada.paradaSubidaId() == null || reservaModificada.paradaBajadaId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Las paradas no pueden ser nulas");
         }
 
-        Parada subida = paradaRepository.findById(reservaModificada.getParadaSubida().getId())
+        Parada subida = paradaRepository.findById(reservaModificada.paradaSubidaId())
                 .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
         
-        Parada bajada = paradaRepository.findById(reservaModificada.getParadaBajada().getId())
+        Parada bajada = paradaRepository.findById(reservaModificada.paradaBajadaId())
                 .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no válida"));
 
-        // 5. Aplicar cambios a la reserva existente
         reservaExistente.setParadaSubida(subida);
         reservaExistente.setParadaBajada(bajada);
         reservaExistente.setCantidadPlazas(plazasNuevas);
         reservaExistente.setFechaHoraReserva(LocalDateTime.now());
-        
-        // Volvemos a ponerla en PENDIENTE para que el conductor deba aceptarla de nuevo si quieres
         reservaExistente.setEstado(EstadoReserva.PENDIENTE);
 
         Reserva actualizada = reservaRepository.save(reservaExistente);
 
-        // 6. Notificar al conductor
         String msj = "El pasajero " + actualizada.getPersona().getNombre() + 
                      " ha modificado su reserva para el viaje " + actualizada.getViaje().getSlug() + 
                      ". Revisa los cambios.";
