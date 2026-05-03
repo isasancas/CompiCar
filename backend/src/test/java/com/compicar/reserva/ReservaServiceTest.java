@@ -53,8 +53,8 @@ class ReservaServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        pasajero = new Persona("Nombre","Ape","B","pass","user@compicar.com","600000000");
-        conductor = new Persona("Cond","A","B","p","driver@compicar.com","611111111");
+        pasajero = new Persona("Nombre","Ape","B","pass","user@compicar.com","600000000",null,null,null,null,null, null, null);
+        conductor = new Persona("Cond","A","B","p","driver@compicar.com","611111111",null,null,null,null,null, null, null);
 
         // Usamos reflexión para setear IDs globales
         setId(pasajero, 2L);

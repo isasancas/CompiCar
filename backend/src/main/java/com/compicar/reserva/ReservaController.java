@@ -37,7 +37,7 @@ public class ReservaController {
     }
 
     @PostMapping("/crear")
-    public Reserva crearReserva(@RequestBody ReservaRequest request) {
+    public String crearReserva(@RequestBody ReservaRequest request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
             throw new ResponseStatusException(

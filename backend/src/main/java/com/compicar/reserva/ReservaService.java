@@ -8,7 +8,7 @@ import com.compicar.reserva.dto.ReservaRequest;
 
 public interface ReservaService {
     
-    Reserva crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId);
+    String crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId);
     Reserva cancelarReserva(String usuarioEmail, Long reservaId);
     List<ReservaDTO> obtenerReservasPorPersona(Persona persona);
     List<Reserva> obtenerReservasPorViaje(Long viajeId);

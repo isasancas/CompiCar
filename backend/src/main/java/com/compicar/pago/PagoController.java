@@ -1,16 +1,24 @@
 package com.compicar.pago;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.Reserva;
+import com.stripe.exception.StripeException;
+import com.stripe.model.PaymentIntent;
 
 @RestController
 @RequestMapping("/api/pagos")
@@ -23,6 +31,21 @@ public class PagoController {
     public PagoController(PagoService pagoService, PersonaRepository personaRepository) {
         this.pagoService = pagoService;
         this.personaRepository = personaRepository;
+    }
+
+    @Autowired
+    private StripeService stripeService;
+
+    @PostMapping("/intentar-reserva")
+    public ResponseEntity<Map<String, String>> iniciarPago(@RequestBody Reserva reserva) {
+        try {
+            PaymentIntent intent = stripeService.crearAutorizacion(reserva);
+            Map<String, String> response = new HashMap<>();
+            response.put("clientSecret", intent.getClientSecret());
+            return ResponseEntity.ok(response);
+        } catch (StripeException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @RequestMapping("/crear")

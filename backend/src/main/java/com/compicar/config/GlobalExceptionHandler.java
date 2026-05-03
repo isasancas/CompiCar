@@ -7,6 +7,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.server.ResponseStatusException;
+
+import com.stripe.exception.StripeException;
+
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import java.util.stream.Collectors;
@@ -41,5 +44,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class) // Captura cualquier cosa no especificada antes
     public ResponseEntity<?> handleAllExceptions(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Ocurrió un error inesperado"));
+    }
+
+    @ExceptionHandler(StripeException.class)
+    public ResponseEntity<Map<String, String>> handleStripeException(StripeException e) {
+        return ResponseEntity
+            .status(HttpStatus.PAYMENT_REQUIRED)
+            .body(Map.of("error", e.getMessage(), "code", e.getCode()));
     }
 }
