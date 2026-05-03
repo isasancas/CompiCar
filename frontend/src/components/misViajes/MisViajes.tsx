@@ -56,12 +56,10 @@ const MisViajes: React.FC = () => {
     }
 
     try {
-      // Obtener viajes como conductor
       const resConductor = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
 
-      // Obtener viajes como pasajero
       const resPasajero = await fetch(buildApiUrl('/api/viajes/participados'), {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
@@ -78,13 +76,11 @@ const MisViajes: React.FC = () => {
       const viajesConductor: Viaje[] = await resConductor.json();
       const viajesPasajero: Viaje[] = await resPasajero.json();
 
-      // Combinar y añadir rol
       const combinados: ViajeConRol[] = [
         ...viajesConductor.map(v => ({ ...v, rol: 'conductor' as const })),
         ...viajesPasajero.map(v => ({ ...v, rol: 'pasajero' as const }))
       ];
 
-      // Ordenar por fecha descendente
       combinados.sort((a, b) => 
         new Date(b.fechaHoraSalida).getTime() - new Date(a.fechaHoraSalida).getTime()
       );
@@ -118,11 +114,13 @@ const MisViajes: React.FC = () => {
     return { origen, destino, paradasIntermedias };
   };
 
+  const ahora = new Date();
   const viajesFiltrados = todosLosViajes.filter(v => {
+    const fechaViaje = new Date(v.fechaHoraSalida);
     if (filtroEstado === 'PENDIENTE') {
-      return v.estado === 'PENDIENTE' || v.estado === 'ACTIVO';
+      return fechaViaje > ahora;
     } else {
-      return v.estado === 'FINALIZADO' || v.estado === 'COMPLETADO';
+      return fechaViaje <= ahora;
     }
   });
 
