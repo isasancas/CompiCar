@@ -12,6 +12,7 @@ import java.util.Optional;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
+import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 
@@ -162,52 +163,46 @@ class ReservaServiceTest {
     }
 
     @Test
-void actualizarReserva_ok_y_validaPropietario() throws Exception {
-    Persona p = pasajero;
-    Reserva existente = new Reserva();
-    setId(existente, 20L);
+    void actualizarReserva_ok_y_validaPropietario() throws Exception {
+        Persona p = pasajero;
+        Reserva existente = new Reserva();
+        setId(existente, 20L);
 
-    // 1. Configurar IDs de paradas
-    Long idSubida = 101L;
-    Long idBajada = 102L;
-    
-    Parada subida = new Parada();
-    setId(subida, idSubida);
-    
-    Parada bajada = new Parada();
-    setId(bajada, idBajada);
+        Long idSubida = 101L;
+        Long idBajada = 102L;
+        
+        Parada subida = new Parada();
+        setId(subida, idSubida);
+        
+        Parada bajada = new Parada();
+        setId(bajada, idBajada);
 
-    // 2. Configurar la reserva existente
-    existente.setPersona(p);
-    existente.setViaje(viaje); 
-    existente.setCantidadPlazas(1);
-    existente.setParadaSubida(subida);
-    existente.setParadaBajada(bajada);
+        existente.setPersona(p);
+        existente.setViaje(viaje); 
+        existente.setCantidadPlazas(1);
+        existente.setParadaSubida(subida);
+        existente.setParadaBajada(bajada);
 
-    // 3. Configurar los datos de actualización
-    Reserva datosNuevos = new Reserva();
-    datosNuevos.setCantidadPlazas(2);
-    datosNuevos.setParadaSubida(subida);
-    datosNuevos.setParadaBajada(bajada);
+        ReservaRequest datosNuevos = new ReservaRequest(
+            viaje.getId(),
+            2, 
+            idSubida, 
+            idBajada
+        );
 
-    // 4. MOCKS
-    when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(p));
-    when(reservaRepository.findById(20L)).thenReturn(Optional.of(existente));
-    
-    // CORRECCIÓN: El servicio busca las paradas por ID en la DB, debemos responderle
-    when(paradaRepository.findById(idSubida)).thenReturn(Optional.of(subida));
-    when(paradaRepository.findById(idBajada)).thenReturn(Optional.of(bajada));
-    
-    when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(p));
+        when(reservaRepository.findById(20L)).thenReturn(Optional.of(existente));
 
-    // 5. Ejecución
-    Reserva result = reservaService.actualizarReserva("user@compicar.com", 20L, datosNuevos);
-    
-    // 6. Verificación
-    assertEquals(20L, result.getId());
-    assertEquals(2, result.getCantidadPlazas());
-    assertEquals(idSubida, result.getParadaSubida().getId());
-}
+        when(paradaRepository.findById(idSubida)).thenReturn(Optional.of(subida));
+        when(paradaRepository.findById(idBajada)).thenReturn(Optional.of(bajada));
+        
+        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva result = reservaService.actualizarReserva("user@compicar.com", 20L, datosNuevos);
+        assertEquals(20L, result.getId());
+        assertEquals(2, result.getCantidadPlazas());
+        assertEquals(idSubida, result.getParadaSubida().getId());
+    }
 
     @Test
     void obtenerReservaPorId_noExiste_lanza() {
