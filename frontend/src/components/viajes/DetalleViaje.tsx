@@ -559,11 +559,14 @@ const handleGuardarCambiosViaje = async () => {
             const viajeActualizado = await response.json();
             console.log("📥 Recibido del Servidor:", viajeActualizado);
 
-            setViaje(viajeActualizado); 
-            setModalEditarViajeAbierto(false);
+            setViaje(viajeActualizado);
+            setErrorEdicion("✅ Viaje actualizado con éxito");
 
-            alert(`✅ ¡Actualizado! Plazas resultantes: ${viajeActualizado.plazasDisponibles}`);
-            fetchViaje();
+            setTimeout(() => {
+                setErrorEdicion(null);
+                fetchViaje();
+                setModalEditarViajeAbierto(false);
+            }, 1500);
 
         } else {
             const errorData = await response.json().catch(() => null);
@@ -1240,6 +1243,18 @@ const handleGuardarCambiosViaje = async () => {
                 </p>
               </div>
 
+              {errorEdicion && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold border animate-in fade-in slide-in-from-top-2 ${
+                    errorEdicion.includes('✅')
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
+                  {errorEdicion}
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button 
                   onClick={() => setModalEditarViajeAbierto(false)}
@@ -1247,12 +1262,12 @@ const handleGuardarCambiosViaje = async () => {
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all disabled:bg-slate-300"
                   disabled={editando}
                   onClick={handleGuardarCambiosViaje}
                 >
-                  {editando ? 'Guardando...' : 'Confirmar cambios'}
+                  {editando ? 'Guardando...' : errorEdicion?.includes('✅') ? '✨ ¡Todo listo!' : 'Confirmar cambios'}
                 </button>
               </div>
             </div>
