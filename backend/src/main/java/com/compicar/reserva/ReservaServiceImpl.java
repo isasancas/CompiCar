@@ -110,7 +110,7 @@ public class ReservaServiceImpl implements ReservaService {
         Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
                 .orElseThrow(() -> new IllegalArgumentException("La parada de bajada no existe."));
 
-        // 3. Crear la instancia de Reserva
+        // 1. Crear la instancia de Reserva
         Reserva reserva = new Reserva(
             EstadoReserva.PENDIENTE, 
             LocalDateTime.now(), 
@@ -121,34 +121,46 @@ public class ReservaServiceImpl implements ReservaService {
             plazasSolicitadas
         );
 
-        // 4. Crear el objeto Pago asociado
+        // 2. Lógica de PAGO (Aquí es donde solucionamos el error de la DB)
         Pago pago = new Pago();
         pago.setReserva(reserva);
-        // Calculamos el total basado en el precio del viaje
+
+        // Calculamos el importe total
         BigDecimal total = viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
         pago.setImporteTotal(total);
+
+        // --- IMPORTANTE: Rellenar los campos que la DB exige como NOT NULL ---
+        // Si no tienes una comisión definida, puedes poner 0
+        BigDecimal comision = total.multiply(new BigDecimal("0.10")); // Ejemplo: 10%
+        pago.setComision(comision); 
+
+        // El importe que le queda al conductor es el total menos tu comisión
+        pago.setImporteConductor(total.subtract(comision)); 
+        // --------------------------------------------------------------------
+
         pago.setEstado(EstadoPago.PENDIENTE);
-        
-        // Establecer relación bidireccional
+        pago.setFechaCreacion(LocalDateTime.now());
+
+        // Añade esta línea para satisfacer a la base de datos temporalmente
+        pago.setFechaPago(LocalDateTime.now());
+
+        // Establecer la relación en ambos sentidos
         reserva.setPago(pago); 
 
-        // 5. Guardar primero para generar ID y asignar Slug
+        // 3. Guardar en la base de datos
         reserva = reservaRepository.save(reserva);
         reserva.setSlug("reserva-" + reserva.getId());
-        reserva = reservaRepository.save(reserva); // Actualizamos con el slug
+        reserva = reservaRepository.save(reserva);
 
-        // 6. Actualizar plazas del viaje
+        // 4. Actualizar plazas del viaje
         viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - plazasSolicitadas);
         viajeRepository.save(viaje);
 
-        // 7. Llamada a Stripe para obtener el clientSecret
+        // 5. Llamar a Stripe
         try {
-            // Este método en PagoService debe devolver el intent.getClientSecret()
             return pagoService.crearIntentoDePago(reserva); 
         } catch (StripeException e) {
-            // Si Stripe falla, lanzamos excepción para que @Transactional haga rollback
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, 
-                "Error al conectar con la pasarela de pagos: " + e.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
         }
     }
 
