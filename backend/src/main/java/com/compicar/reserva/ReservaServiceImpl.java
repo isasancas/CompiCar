@@ -154,36 +154,29 @@ public class ReservaServiceImpl implements ReservaService {
 
     @Override
     public Reserva cancelarReserva(String usuarioEmail, Long reservaId) {
-        // 1. Buscamos las entidades
         Persona pasajero = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
         Reserva reserva = reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
 
-        // 2. Verificaciones de seguridad
         if (!reserva.getPersona().getId().equals(pasajero.getId())) {
             throw new IllegalArgumentException("La reserva no pertenece al usuario");
         }
 
-        // Si ya está cancelada, no hacemos nada más
         if (reserva.getEstado() == EstadoReserva.CANCELADA) {
             return reserva;
         }
 
         Viaje viaje = reserva.getViaje();
-        
-        // 3. Notificación al conductor
+
         String msj = pasajero.getNombre() + " ha cancelado su reserva en tu viaje.";
         notificacionRepository.save(new Notificacion(msj, viaje.getPersona(), TipoNotificacion.RESERVA_CANCELADA));
 
-        // 4. LÓGICA DE PLAZAS (UNA SOLA VEZ)
-        // Devolvemos al viaje EXACTAMENTE las plazas que tenía la reserva
         int plazasADevolver = reserva.getCantidadPlazas();
         viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + plazasADevolver);
         viajeRepository.save(viaje);
 
-        // 5. Lógica de Pagos y penalizaciones
         LocalDateTime ahora = LocalDateTime.now();
         long horasHastaSalida = Duration.between(ahora, viaje.getFechaHoraSalida()).toHours();
         
@@ -205,7 +198,6 @@ public class ReservaServiceImpl implements ReservaService {
         pasajero.incrementarCancelaciones();
         personaRepository.save(pasajero);
 
-        // 6. Cambiamos el estado de la reserva al final
         reserva.setEstado(EstadoReserva.CANCELADA);
         
         return reservaRepository.save(reserva);

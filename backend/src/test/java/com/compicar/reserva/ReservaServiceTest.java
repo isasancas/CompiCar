@@ -3,18 +3,29 @@ package com.compicar.reserva;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.pago.EstadoPago;
+import com.compicar.pago.Pago;
+import com.compicar.pago.PagoRepository;
 import com.compicar.parada.Parada;
+import com.compicar.parada.ParadaRepository;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
+import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
+import com.compicar.viaje.ViajeRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +33,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class ReservaServiceTest {
@@ -30,19 +43,19 @@ class ReservaServiceTest {
     private ReservaRepository reservaRepository;
 
     @Mock
-    private com.compicar.persona.PersonaRepository personaRepository;
+    private PersonaRepository personaRepository;
 
     @Mock
-    private com.compicar.viaje.ViajeRepository viajeRepository;
+    private ViajeRepository viajeRepository;
 
     @Mock
-    private com.compicar.pago.PagoRepository pagoRepository;
+    private PagoRepository pagoRepository;
 
     @Mock
-    private com.compicar.notificacion.NotificacionRepository notificacionRepository;
+    private NotificacionRepository notificacionRepository;
 
     @Mock
-    private com.compicar.parada.ParadaRepository paradaRepository;
+    private ParadaRepository paradaRepository;
 
     @InjectMocks
     private ReservaServiceImpl reservaService;
@@ -56,7 +69,6 @@ class ReservaServiceTest {
         pasajero = new Persona("Nombre","Ape","B","pass","user@compicar.com","600000000",null,null,null,null,null, null, null);
         conductor = new Persona("Cond","A","B","p","driver@compicar.com","611111111",null,null,null,null,null, null, null);
 
-        // Usamos reflexión para setear IDs globales
         setId(pasajero, 2L);
         setId(conductor, 3L);
 
@@ -66,20 +78,35 @@ class ReservaServiceTest {
         viaje.setEstado(EstadoViaje.PENDIENTE);
         viaje.setPlazasDisponibles(3);
         viaje.setPersona(conductor);
-        // Importante para evitar NPE en lógica de fechas
         viaje.setFechaHoraSalida(LocalDateTime.now().plusDays(1)); 
     }
 
-    // Método auxiliar para evitar repetir reflexión
     private void setId(Object entity, Long id) throws Exception {
         java.lang.reflect.Field f = entity.getClass().getDeclaredField("id");
         f.setAccessible(true);
         f.set(entity, id);
     }
 
+    private Reserva crearReserva(Long reservaId, Persona pasajeroReserva, Viaje viajeReserva,
+        EstadoReserva estado, int cantidadPlazas, Pago pago) throws Exception {
+        Reserva reserva = new Reserva();
+        setId(reserva, reservaId);
+        reserva.setPersona(pasajeroReserva);
+        reserva.setViaje(viajeReserva);
+        reserva.setEstado(estado);
+        reserva.setCantidadPlazas(cantidadPlazas);
+        reserva.setFechaHoraReserva(LocalDateTime.now());
+
+        if (pago != null) {
+            reserva.setPago(pago);
+            pago.setReserva(reserva);
+        }
+
+        return reserva;
+    }
+
     @Test
     void crearReserva_ok() throws Exception {
-        // Configuración de IDs de paradas
         Long origenId = 101L;
         Long destinoId = 102L;
         Parada pOrigen = new Parada();
@@ -87,8 +114,6 @@ class ReservaServiceTest {
         
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-        
-        // MOCK: Simulamos que las paradas existen en la DB
         when(paradaRepository.findById(origenId)).thenReturn(Optional.of(pOrigen));
         when(paradaRepository.findById(destinoId)).thenReturn(Optional.of(pDestino));
         
@@ -98,7 +123,6 @@ class ReservaServiceTest {
             return r;
         });
 
-        // Llamamos con IDs que el mock reconoce
         Reserva res = reservaService.crearReserva("user@compicar.com", 10L, 1, origenId, destinoId);
 
         assertEquals(1L, res.getId());
@@ -110,7 +134,6 @@ class ReservaServiceTest {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
 
-        // CORRECCIÓN: Se añaden null para origenId y destinoId
         assertThrows(IllegalArgumentException.class, () -> 
             reservaService.crearReserva("user@compicar.com", 10L, 0, null, null));
     }
@@ -253,7 +276,6 @@ class ReservaServiceTest {
 
     @Test
     void marcarNoPresentadoPorConductor_valida_condiciones_y_actualiza() throws Exception {
-        // CORRECCIÓN: Las personas locales necesitan ID para que el .equals(id) no falle
         Persona conductorLocal = new Persona();
         conductorLocal.setEmail("driver@compicar.com");
         setId(conductorLocal, 70L);
@@ -322,5 +344,468 @@ class ReservaServiceTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Test
+    void cancelarReserva_ok_reembolsa_y_devuelvePlazas_siHanPasadoMasDe12Horas() throws Exception {
+        viaje.setFechaHoraSalida(LocalDateTime.now().plusHours(13));
+
+        Pago pago = new Pago();
+        pago.setEstado(EstadoPago.PENDIENTE);
+
+        Reserva reserva = crearReserva(
+                100L, pasajero, viaje, EstadoReserva.PENDIENTE, 2, pago);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(100L)).thenReturn(Optional.of(reserva));
+        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva res = reservaService.cancelarReserva("user@compicar.com", 100L);
+
+        assertEquals(EstadoReserva.CANCELADA, res.getEstado());
+        assertEquals(5, viaje.getPlazasDisponibles());
+        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
+        assertEquals(1, pasajero.getNumeroCancelaciones());
+
+        verify(notificacionRepository).save(any(Notificacion.class));
+        verify(pagoRepository).save(pago);
+        verify(personaRepository).save(pasajero);
+        verify(viajeRepository).save(viaje);
+        verify(reservaRepository).save(reserva);
+    }
+
+    @Test
+    void cancelarReserva_ok_cobra_siFaltanMenosDe12Horas() throws Exception {
+        viaje.setFechaHoraSalida(LocalDateTime.now().plusHours(11));
+
+        Pago pago = new Pago();
+        pago.setEstado(EstadoPago.PENDIENTE);
+
+        Reserva reserva = crearReserva(
+                101L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, pago);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(101L)).thenReturn(Optional.of(reserva));
+        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva res = reservaService.cancelarReserva("user@compicar.com", 101L);
+
+        assertEquals(EstadoReserva.CANCELADA, res.getEstado());
+        assertEquals(EstadoPago.COMPLETADO, pago.getEstado());
+        assertEquals(4, viaje.getPlazasDisponibles());
+        assertEquals(1, pasajero.getNumeroCancelaciones());
+
+        verify(pagoRepository).save(pago);
+        verify(personaRepository).save(pasajero);
+        verify(viajeRepository).save(viaje);
+        verify(notificacionRepository).save(any(Notificacion.class));
+    }
+
+    @Test
+    void cancelarReserva_ok_sinPago_noLlamaAPagoRepository() throws Exception {
+        viaje.setFechaHoraSalida(LocalDateTime.now().plusHours(13));
+
+        Reserva reserva = crearReserva(
+                102L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(102L)).thenReturn(Optional.of(reserva));
+        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva res = reservaService.cancelarReserva("user@compicar.com", 102L);
+
+        assertEquals(EstadoReserva.CANCELADA, res.getEstado());
+        assertEquals(4, viaje.getPlazasDisponibles());
+        assertEquals(1, pasajero.getNumeroCancelaciones());
+
+        verify(notificacionRepository).save(any(Notificacion.class));
+        verify(personaRepository).save(pasajero);
+        verify(viajeRepository).save(viaje);
+        verify(pagoRepository, never()).save(any(Pago.class));
+    }
+
+    @Test
+    void cancelarReserva_error_usuarioNoEncontrado_lanza() {
+        when(personaRepository.findByEmail("missing@compicar.com")).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.cancelarReserva("missing@compicar.com", 100L));
+
+        assertEquals("Usuario no encontrado", ex.getMessage());
+    }
+
+    @Test
+    void cancelarReserva_error_reservaNoEncontrada_lanza() {
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(999L)).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.cancelarReserva("user@compicar.com", 999L));
+
+        assertEquals("Reserva no encontrada", ex.getMessage());
+    }
+
+    @Test
+    void cancelarReserva_error_noPerteneceAlUsuario_lanza() throws Exception {
+        Persona otroPasajero = new Persona("Otro", "Apellido", "B", "pass", "otro@compicar.com", "622222222");
+        setId(otroPasajero, 99L);
+
+        Reserva reserva = crearReserva(
+                103L, otroPasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(103L)).thenReturn(Optional.of(reserva));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.cancelarReserva("user@compicar.com", 103L));
+
+        assertEquals("La reserva no pertenece al usuario", ex.getMessage());
+    }
+
+    @Test
+    void cancelarReserva_error_yaCancelada_noHaceCambiosNiLlamaReposExtra() throws Exception {
+        Reserva reserva = crearReserva(
+                104L, pasajero, viaje, EstadoReserva.CANCELADA, 1, null);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(104L)).thenReturn(Optional.of(reserva));
+
+        Reserva res = reservaService.cancelarReserva("user@compicar.com", 104L);
+
+        assertEquals(EstadoReserva.CANCELADA, res.getEstado());
+        assertEquals(3, viaje.getPlazasDisponibles());
+        assertEquals(0, pasajero.getNumeroCancelaciones());
+
+        verify(personaRepository, never()).save(any(Persona.class));
+        verifyNoInteractions(viajeRepository, pagoRepository, notificacionRepository);
+    }
+
+    @Test
+    void crearReserva_plazasNulas_lanza() {
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.crearReserva("user@compicar.com", 10L, null, 101L, 102L));
+
+        assertEquals("Debes reservar al menos 1 plaza.", ex.getMessage());
+    }
+
+    @Test
+    void crearReserva_viajeNoPendiente_lanza() {
+        viaje.setEstado(EstadoViaje.INICIADO);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
+
+        assertEquals("El viaje no está disponible para reservas (estado: INICIADO)", ex.getMessage());
+    }
+
+    @Test
+    void crearReserva_sinPlazasDisponibles_lanza() {
+        viaje.setPlazasDisponibles(1);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.crearReserva("user@compicar.com", 10L, 2, 101L, 102L));
+
+        assertEquals("Solo quedan 1 plazas disponibles.", ex.getMessage());
+    }
+
+    @Test
+    void crearReserva_noPuedeReservarSuPropioViaje_lanza() {
+        viaje.setPersona(pasajero);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
+
+        assertEquals("No puedes reservar tu propio viaje", ex.getMessage());
+    }
+
+    @Test
+    void actualizarReserva_error_noPerteneceAlUsuario_lanza() throws Exception {
+        Persona otro = new Persona("Otro", "Ape", "B", "pass", "otro@compicar.com", "622222222");
+        setId(otro, 99L);
+
+        Reserva existente = crearReserva(20L, otro, viaje, EstadoReserva.PENDIENTE, 1, null);
+
+        ReservaRequest datosNuevos = new ReservaRequest(viaje.getId(), 1, 101L, 102L);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(20L)).thenReturn(Optional.of(existente));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.actualizarReserva("user@compicar.com", 20L, datosNuevos));
+
+        assertEquals("La reserva no pertenece al usuario", ex.getMessage());
+    }
+
+    @Test
+    void actualizarReserva_error_menosDe12Horas_lanza() throws Exception {
+        viaje.setFechaHoraSalida(LocalDateTime.now().plusHours(11));
+
+        Reserva existente = crearReserva(21L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+        ReservaRequest datosNuevos = new ReservaRequest(viaje.getId(), 1, 101L, 102L);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(21L)).thenReturn(Optional.of(existente));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            reservaService.actualizarReserva("user@compicar.com", 21L, datosNuevos));
+
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals("No se puede modificar la reserva a falta de menos de 12 horas para el viaje", ex.getReason());
+    }
+
+    @Test
+    void actualizarReserva_error_plazasNulas_lanza() throws Exception {
+        Reserva existente = crearReserva(22L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+        ReservaRequest datosNuevos = new ReservaRequest(viaje.getId(), null, 101L, 102L);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(22L)).thenReturn(Optional.of(existente));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            reservaService.actualizarReserva("user@compicar.com", 22L, datosNuevos));
+
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals("El número de plazas no puede estar vacío", ex.getReason());
+    }
+
+    @Test
+    void actualizarReserva_error_noHayPlazasSuficientesParaAmpliar_lanza() throws Exception {
+        viaje.setPlazasDisponibles(0);
+
+        Reserva existente = crearReserva(23L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+        ReservaRequest datosNuevos = new ReservaRequest(viaje.getId(), 3, 101L, 102L);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(23L)).thenReturn(Optional.of(existente));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            reservaService.actualizarReserva("user@compicar.com", 23L, datosNuevos));
+
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals("No hay suficientes plazas disponibles para ampliar la reserva", ex.getReason());
+    }
+
+    @Test
+    void actualizarReserva_error_paradasNulas_lanza() throws Exception {
+        Reserva existente = crearReserva(24L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+        ReservaRequest datosNuevos = new ReservaRequest(viaje.getId(), 1, null, null);
+
+        when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(24L)).thenReturn(Optional.of(existente));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            reservaService.actualizarReserva("user@compicar.com", 24L, datosNuevos));
+
+        assertEquals(HttpStatus.BAD_REQUEST.value(), ex.getStatusCode().value());
+        assertEquals("Las paradas no pueden ser nulas", ex.getReason());
+    }
+
+    @Test
+    void reservaConfirmada_error_sinPermiso_lanza() throws Exception {
+        Reserva r = new Reserva();
+        setId(r, 30L);
+
+        Viaje v = new Viaje();
+        Persona owner = new Persona();
+        owner.setEmail("driver@compicar.com");
+        v.setPersona(owner);
+        r.setViaje(v);
+
+        when(reservaRepository.findById(30L)).thenReturn(Optional.of(r));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.reservaConfirmada("otro@compicar.com", 30L));
+
+        assertEquals("No tienes permiso para confirmar esta reserva", ex.getMessage());
+    }
+
+    @Test
+    void rechazarReserva_error_sinPermiso_lanza() throws Exception {
+        Persona owner = new Persona();
+        owner.setEmail("driver@compicar.com");
+
+        Viaje v = new Viaje();
+        v.setPersona(owner);
+
+        Reserva r = new Reserva();
+        setId(r, 40L);
+        r.setViaje(v);
+        r.setEstado(EstadoReserva.PENDIENTE);
+        r.setCantidadPlazas(1);
+
+        when(reservaRepository.findById(40L)).thenReturn(Optional.of(r));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            reservaService.rechazarReserva("otro@compicar.com", 40L));
+
+        assertEquals("No tienes permiso para rechazar esta reserva", ex.getMessage());
+    }
+
+    @Test
+    void rechazarReserva_estadoNoPendiente_noCambiaPlazas() throws Exception {
+        Persona owner = new Persona();
+        owner.setEmail("driver@compicar.com");
+
+        Viaje v = new Viaje();
+        setId(v, 50L);
+        v.setPersona(owner);
+        v.setPlazasDisponibles(2);
+
+        Reserva r = new Reserva();
+        setId(r, 51L);
+        r.setViaje(v);
+        r.setEstado(EstadoReserva.CONFIRMADA);
+        r.setCantidadPlazas(1);
+
+        when(reservaRepository.findById(51L)).thenReturn(Optional.of(r));
+        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Reserva res = reservaService.rechazarReserva("driver@compicar.com", 51L);
+
+        assertEquals(EstadoReserva.CONFIRMADA, res.getEstado());
+        assertEquals(2, v.getPlazasDisponibles());
+        verify(viajeRepository, never()).save(any(Viaje.class));
+    }
+
+    @Test
+    void marcarNoPresentadoPorConductor_error_siNoEsElConductorDelViaje() throws Exception {
+        Persona conductorAutenticado = new Persona();
+        conductorAutenticado.setEmail("driver@compicar.com");
+        setId(conductorAutenticado, 70L);
+
+        Persona otroConductor = new Persona();
+        setId(otroConductor, 80L);
+
+        Persona pasaj = new Persona();
+        setId(pasaj, 71L);
+
+        Viaje v = new Viaje();
+        setId(v, 8L);
+        v.setPersona(otroConductor); // No coincide con conductor autenticado
+        v.setEstado(EstadoViaje.INICIADO);
+
+        Reserva r = crearReserva(
+                40L, pasaj, v, EstadoReserva.PENDIENTE, 1, null);
+
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(conductorAutenticado));
+        when(reservaRepository.findById(40L)).thenReturn(Optional.of(r));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.marcarNoPresentadoPorConductor("driver@compicar.com", 40L));
+
+        assertEquals("Solo el conductor del viaje puede marcar no presentado", ex.getMessage());
+        verify(personaRepository, never()).save(any(Persona.class));
+        verify(pagoRepository, never()).save(any(Pago.class));
+        verify(reservaRepository, never()).save(any(Reserva.class));
+    }
+
+    @Test
+    void marcarNoPresentadoPorConductor_error_siViajeNoEstaIniciado() throws Exception {
+        Persona conductorLocal = new Persona();
+        conductorLocal.setEmail("driver@compicar.com");
+        setId(conductorLocal, 70L);
+
+        Persona pasaj = new Persona();
+        setId(pasaj, 71L);
+
+        Viaje v = new Viaje();
+        setId(v, 8L);
+        v.setPersona(conductorLocal);
+        v.setEstado(EstadoViaje.PENDIENTE); // Rama de error
+
+        Reserva r = crearReserva(
+                41L, pasaj, v, EstadoReserva.PENDIENTE, 1, null);
+
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(conductorLocal));
+        when(reservaRepository.findById(41L)).thenReturn(Optional.of(r));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.marcarNoPresentadoPorConductor("driver@compicar.com", 41L));
+
+        assertEquals("Solo se puede marcar no presentado cuando el viaje está INICIADO", ex.getMessage());
+        verify(personaRepository, never()).save(any(Persona.class));
+        verify(pagoRepository, never()).save(any(Pago.class));
+        verify(reservaRepository, never()).save(any(Reserva.class));
+    }
+
+    @Test
+    void marcarNoPresentadoPorConductor_error_siReservaYaCancelada() throws Exception {
+        Persona conductorLocal = new Persona();
+        conductorLocal.setEmail("driver@compicar.com");
+        setId(conductorLocal, 70L);
+
+        Persona pasaj = new Persona();
+        setId(pasaj, 71L);
+
+        Viaje v = new Viaje();
+        setId(v, 8L);
+        v.setPersona(conductorLocal);
+        v.setEstado(EstadoViaje.INICIADO);
+
+        Reserva r = crearReserva(
+                42L, pasaj, v, EstadoReserva.CANCELADA, 1, null);
+
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(conductorLocal));
+        when(reservaRepository.findById(42L)).thenReturn(Optional.of(r));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.marcarNoPresentadoPorConductor("driver@compicar.com", 42L));
+
+        assertEquals("La reserva ya está cancelada o marcada como no presentado", ex.getMessage());
+        verify(personaRepository, never()).save(any(Persona.class));
+        verify(pagoRepository, never()).save(any(Pago.class));
+        verify(reservaRepository, never()).save(any(Reserva.class));
+    }
+
+    @Test
+    void marcarNoPresentadoPorConductor_error_siReservaYaNoPresentado() throws Exception {
+        Persona conductorLocal = new Persona();
+        conductorLocal.setEmail("driver@compicar.com");
+        setId(conductorLocal, 70L);
+
+        Persona pasaj = new Persona();
+        setId(pasaj, 71L);
+
+        Viaje v = new Viaje();
+        setId(v, 8L);
+        v.setPersona(conductorLocal);
+        v.setEstado(EstadoViaje.INICIADO);
+
+        Reserva r = crearReserva(
+                43L, pasaj, v, EstadoReserva.NO_PRESENTADO, 1, null);
+
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(conductorLocal));
+        when(reservaRepository.findById(43L)).thenReturn(Optional.of(r));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.marcarNoPresentadoPorConductor("driver@compicar.com", 43L));
+
+        assertEquals("La reserva ya está cancelada o marcada como no presentado", ex.getMessage());
+        verify(personaRepository, never()).save(any(Persona.class));
+        verify(pagoRepository, never()).save(any(Pago.class));
+        verify(reservaRepository, never()).save(any(Reserva.class));
     }
 }
