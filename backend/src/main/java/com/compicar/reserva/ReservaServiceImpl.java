@@ -121,33 +121,27 @@ public class ReservaServiceImpl implements ReservaService {
             plazasSolicitadas
         );
 
-        // 2. Lógica de PAGO (Aquí es donde solucionamos el error de la DB)
+        // 2. Lógica de PAGO
         Pago pago = new Pago();
-        pago.setReserva(reserva);
-
         // Calculamos el importe total
         BigDecimal total = viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
         pago.setImporteTotal(total);
 
-        // --- IMPORTANTE: Rellenar los campos que la DB exige como NOT NULL ---
-        // Si no tienes una comisión definida, puedes poner 0
-        BigDecimal comision = total.multiply(new BigDecimal("0.10")); // Ejemplo: 10%
+        // Rellenar campos obligatorios
+        BigDecimal comision = total.multiply(new BigDecimal("0.10")); 
         pago.setComision(comision); 
-
-        // El importe que le queda al conductor es el total menos tu comisión
         pago.setImporteConductor(total.subtract(comision)); 
-        // --------------------------------------------------------------------
-
         pago.setEstado(EstadoPago.PENDIENTE);
         pago.setFechaCreacion(LocalDateTime.now());
-
-        // Añade esta línea para satisfacer a la base de datos temporalmente
         pago.setFechaPago(LocalDateTime.now());
 
-        // Establecer la relación en ambos sentidos
+        // --- VITAL: Establecer la relación bidireccional ---
+        pago.setReserva(reserva); 
         reserva.setPago(pago); 
 
         // 3. Guardar en la base de datos
+        // Al tener CascadeType.ALL en Reserva (asumo), al guardar reserva se guarda pago.
+        // Si no, debes guardar el pago manualmente: pagoRepository.save(pago);
         reserva = reservaRepository.save(reserva);
         reserva.setSlug("reserva-" + reserva.getId());
         reserva = reservaRepository.save(reserva);
@@ -367,26 +361,6 @@ public class ReservaServiceImpl implements ReservaService {
         List<Reserva> lista = reservaRepository.findPendientesParaConductor(conductorEmail);
         System.out.println("Reservas encontradas: " + lista.size());
         return lista;
-    }
-
-    @Override
-    public Reserva rechazarReserva(String conductorEmail, Long reservaId) {
-        Reserva reserva = reservaRepository.findById(reservaId)
-            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
-
-        if (!reserva.getViaje().getPersona().getEmail().equals(conductorEmail)) {
-            throw new IllegalArgumentException("No tienes permiso para rechazar esta reserva");
-        }
-
-        if (reserva.getEstado() == EstadoReserva.PENDIENTE) {
-            reserva.setEstado(EstadoReserva.CANCELADA);
-            
-            Viaje viaje = reserva.getViaje();
-            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
-            viajeRepository.save(viaje);
-        }
-
-        return reservaRepository.save(reserva);
     }
 
 }

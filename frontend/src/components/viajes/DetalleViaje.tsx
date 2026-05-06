@@ -8,6 +8,9 @@ import {
   Tooltip
 } from 'react-leaflet';
 import { buildApiUrl } from '../../apiConfig';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import CheckoutForm from '../pagos/CheckoutForm';
 
 interface Parada {
   id: number;
@@ -80,6 +83,9 @@ const DetalleViaje: React.FC = () => {
   const [nuevaFecha, setNuevaFecha] = useState<string>('');
   const [nuevasPlazas, setNuevasPlazas] = useState<number>(0);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const stripePromise = loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u');
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [mostrarStripe, setMostrarStripe] = useState(false);
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
@@ -347,23 +353,48 @@ const cancelarReserva = async () => {
 
   const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
 
-  const reservarPlazas = async () => {
+  // PASO 1: Llamar al backend para preparar el pago
+  const iniciarProcesoPago = async () => {
     setReservaMsg(null);
-
-    if (!isLoggedIn) {
-      navigate('/inicio-sesion');
-      return;
-    }
-
-    if (!viaje) return;
-
     if (!aceptaBloqueoPago) {
       setReservaMsg('Debes aceptar el aviso de cobro antes de reservar.');
       return;
     }
 
     setReservando(true);
+    try {
+      const response = await fetch(buildApiUrl('/api/pagos/intentar-reserva'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          viajeId: viaje?.id, 
+          cantidadPlazas: cantidadPlazas 
+        })
+      });
 
+      if (response.ok) {
+        const data = await response.json();
+        setClientSecret(data.clientSecret);
+        setMostrarStripe(true); // Esto cambiará lo que se ve en el modal
+      } else {
+        const data = await response.json().catch(() => null);
+        setReservaMsg(`Error: ${data?.message || 'No se pudo iniciar el pago'}`);
+      }
+    } catch (err) {
+
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      setReservaMsg(`Error: ${msg}`);
+    } finally {
+      setReservando(false);
+    }
+  };
+
+  // PASO 2: Se ejecuta SOLO cuando Stripe confirma que el dinero está retenido
+  const finalizarReservaTrasPago = async (paymentIntentId: string) => {
+    setReservando(true);
     try {
       const response = await fetch(buildApiUrl('/api/reservas/crear'), {
         method: 'POST',
@@ -372,28 +403,27 @@ const cancelarReserva = async () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
-          viajeId: viaje.id, 
+          viajeId: viaje?.id, 
           plazas: cantidadPlazas,
           paradaSubidaId: paradaSubidaId,
-          paradaBajadaId: paradaBajadaId
+          paradaBajadaId: paradaBajadaId,
+          stripePaymentId: paymentIntentId // Enviamos el ID del pago confirmado
         })
       });
 
       if (response.ok) {
-        setReservaMsg(`Reserva completada con éxito por ${cantidadPlazas} plaza(s).`);
+        setReservaMsg(`✅ ¡Pago confirmado! Reserva completada con éxito.`);
         setViaje((prev) =>
-          prev
-            ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas }
-            : prev
+          prev ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas } : prev
         );
-
-        setTimeout(() => setModalReservaAbierto(false), 2000);
-      } else {
-        const data = await response.json().catch(() => null);
-        setReservaMsg(`Error: ${data?.message || 'No se pudo realizar la reserva'}`);
+        setTimeout(() => {
+          setModalReservaAbierto(false);
+          setMostrarStripe(false); // Reset para la próxima vez
+        }, 2500);
       }
     } catch (err) {
-      setReservaMsg('Error de conexión con el servidor.');
+      const msg = err instanceof Error ? err.message : 'Error al registrar la reserva en el sistema.';
+      setReservaMsg(`Error: ${msg}`);
     } finally {
       setReservando(false);
     }
@@ -408,7 +438,7 @@ const cancelarReserva = async () => {
     setReservaMsg(null);
     setReservando(true);
 
-    const reservaId = miReserva.id || (miReserva as any).reservaId;
+    const reservaId = miReserva.id || null;
 
     console.log("Datos que saldrán hacia el Backend:", {
       urlId: reservaId,
@@ -454,16 +484,18 @@ const cancelarReserva = async () => {
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorMessage;
-        } catch (e) {
-          errorMessage = errorText || errorMessage;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Error al parsear el error del servidor';
+          errorMessage = msg || errorText || errorMessage;
         }
 
         console.error("Error del servidor (Status " + response.status + "):", errorMessage);
         setReservaMsg(`❌ Error: ${errorMessage}`);
       }
-    } catch (error: any) {
-      console.error("DETALLE DEL FALLO DE RED:", error);
-      setReservaMsg(`❌ Error de conexión: ${error.message || 'El servidor no responde'}`);
+    } catch (err) {
+      console.error("DETALLE DEL FALLO DE RED:", err);
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      setReservaMsg(`❌ Error de conexión: ${msg}`);
     } finally {
       setReservando(false);
     }
@@ -580,6 +612,7 @@ const handleGuardarCambiosViaje = async () => {
         setEditando(false);
     }
 };
+
 
   return (
     <div className="min-h-screen bg-gray-100 pb-10 pt-6">
@@ -891,302 +924,326 @@ const handleGuardarCambiosViaje = async () => {
         </div>
 
         {/* MODAL DE RESERVA */}
-        {modalReservaAbierto && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 flex flex-col max-h-[90vh]">
+{modalReservaAbierto && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 flex flex-col max-h-[90vh]">
+      
+      {/* Header Modal (Fijo) */}
+      <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-white rounded-t-2xl">
+        <h2 className="text-xl font-bold text-slate-900">
+          {mostrarStripe ? 'Finalizar Pago con Tarjeta' : (
+            reservaMsg?.includes('✅') 
+              ? (miReserva ? 'Actualización completada' : '¡Reserva realizada!') 
+              : (miReserva ? 'Modificar mi reserva' : 'Reservar viaje')
+          )}
+        </h2>
+        <button
+          type="button"
+          onClick={() => { setModalReservaAbierto(false); setMostrarStripe(false); }}
+          className="text-slate-400 hover:text-slate-900 text-2xl p-2"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Body Modal (CON SCROLL) */}
+      <div className="px-6 py-4 overflow-y-auto flex-1 space-y-6 custom-scrollbar">
+        {!token || !navState.rol ? (
+          <div className="space-y-4">
+            <p className="text-slate-700 mb-4">
+              Debes iniciar sesión o registrarte para poder reservar un viaje.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setModalReservaAbierto(false);
+                navigate('/inicio-sesion');
+              }}
+              className="w-full rounded-lg bg-gradient-compi px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+            >
+              Iniciar sesión
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setModalReservaAbierto(false);
+                navigate('/registro');
+              }}
+              className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
+            >
+              Registrarse
+            </button>
+          </div>
+        ) : mostrarStripe ? (
+          /* --- VISTA DE STRIPE (INYECTADA) --- */
+          <div className="py-4 animate-in fade-in duration-300">
+            <div className="mb-6 text-center">
+              <p className="text-sm font-medium text-slate-600">Importe a autorizar:</p>
+              <p className="text-3xl font-black text-slate-900">
+                {(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€
+              </p>
+            </div>
+            {clientSecret && (
+              <Elements stripe={stripePromise} options={{ clientSecret }}>
+                <CheckoutForm 
+                  clientSecret={clientSecret} 
+                  onSuccess={finalizarReservaTrasPago} 
+                  monto={cantidadPlazas * (viaje?.precio || 0)} 
+                />
+              </Elements>
+            )}
+          </div>
+        ) : (
+          /* --- TU VISTA ORIGINAL --- */
+          <div className="space-y-6">
+            
+            {/* Resumen de ruta visual */}
+            <div className="relative pl-8 py-1">
+              <div className="absolute left-[11px] top-3 bottom-3 w-0.5 border-l-2 border-dashed border-slate-200"></div>
               
-              {/* Header Modal (Fijo) */}
-              <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-white rounded-t-2xl">
-                <h2 className="text-xl font-bold text-slate-900">
-                  {reservaMsg?.includes('✅') 
-                    ? (miReserva ? 'Actualización completada' : '¡Reserva realizada!') 
-                    : (miReserva ? 'Modificar mi reserva' : 'Reservar viaje')
-                  }
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setModalReservaAbierto(false)}
-                  className="text-slate-400 hover:text-slate-900 text-2xl p-2"
-                >
-                  ✕
-                </button>
+              <div className="relative mb-4">
+                <div className="absolute -left-[27px] top-1 w-4 h-4 rounded-full border-4 border-white bg-indigo-600 shadow-sm"></div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Origen</p>
+                <p className="text-sm font-semibold text-slate-700">{origen}</p>
               </div>
 
-              {/* Body Modal (CON SCROLL) */}
-              <div className="px-6 py-4 overflow-y-auto flex-1 space-y-6 custom-scrollbar">
-                {!isLoggedIn ? (
-                  <div className="space-y-4">
-                    <p className="text-slate-700 mb-4">
-                      Debes iniciar sesión o registrarte para poder reservar un viaje.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModalReservaAbierto(false);
-                        navigate('/inicio-sesion');
-                      }}
-                      className="w-full rounded-lg bg-gradient-compi px-4 py-2 text-sm font-bold text-white hover:opacity-90"
-                    >
-                      Iniciar sesión
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModalReservaAbierto(false);
-                        navigate('/registro');
-                      }}
-                      className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50"
-                    >
-                      Registrarse
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    
-                    {/* Resumen de ruta visual */}
-                    <div className="relative pl-8 py-1">
-                      <div className="absolute left-[11px] top-3 bottom-3 w-0.5 border-l-2 border-dashed border-slate-200"></div>
-                      
-                      <div className="relative mb-4">
-                        <div className="absolute -left-[27px] top-1 w-4 h-4 rounded-full border-4 border-white bg-indigo-600 shadow-sm"></div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Origen</p>
-                        <p className="text-sm font-semibold text-slate-700">{origen}</p>
-                      </div>
-
-                      <div className="relative">
-                        <div className="absolute -left-[27px] top-1 w-4 h-4 rounded-full border-4 border-white bg-emerald-600 shadow-sm"></div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Destino</p>
-                        <p className="text-sm font-semibold text-slate-700">{destino}</p>
-                      </div>
-                      
-                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-slate-500">
-                        <span className="text-xs">📅 {formatFecha(viaje.fechaHoraSalida)}</span>
-                      </div>
-                    </div>
-
-                    {/* Selectores de Paradas */}
-                    <div className="grid grid-cols-1 gap-4 py-2 border-y border-slate-100">
-                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de subida</label>
-                        <select 
-                          value={paradaSubidaId || ''} 
-                          onChange={(e) => setParadaSubidaId(Number(e.target.value))}
-                          className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          {viaje.paradas
-                            .sort((a, b) => a.orden - b.orden)
-                            .filter(p => p.tipo !== 'DESTINO')
-                            .map(p => (
-                              <option key={p.id} value={p.id}>{p.localizacion}</option>
-                            ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de bajada</label>
-                        <select 
-                          value={paradaBajadaId || ''} 
-                          onChange={(e) => setParadaBajadaId(Number(e.target.value))}
-                          className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          {viaje.paradas
-                            .sort((a, b) => a.orden - b.orden)
-                            .filter(p => {
-                              const paradaSubida = viaje.paradas.find(s => s.id === paradaSubidaId);
-                              return p.tipo !== 'ORIGEN' && (paradaSubida ? p.orden > paradaSubida.orden : true);
-                            })
-                            .map(p => (
-                              <option key={p.id} value={p.id}>{p.localizacion}</option>
-                            ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Selector de plazas */}
-                    <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-slate-700">Número de plazas</label>
-                      {(() => {
-                        const misPlazasActuales = miReserva?.cantidadPlazas || 0;
-                        const plazasLibresTotales = (viaje?.plazasDisponibles || 0) + misPlazasActuales;
-
-                        return (
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
-                              disabled={reservando || cantidadPlazas <= 1}
-                              className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
-                            > − </button>
-                            <input
-                              type="number"
-                              readOnly
-                              value={cantidadPlazas}
-                              className="w-16 rounded-lg border border-slate-300 h-10 text-center font-bold bg-slate-50"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setCantidadPlazas(Math.min(plazasLibresTotales, cantidadPlazas + 1))}
-                              disabled={reservando || cantidadPlazas >= plazasLibresTotales}
-                              className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
-                            > + </button>
-                            <span className="text-xs text-slate-500 font-medium">Máximo: {plazasLibresTotales}</span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* SECCIÓN DE PAGO Y CONCILIACIÓN */}
-                    <div className="pt-2">
-                      {miReserva ? (
-                        (() => {
-                          const precioUnitario = Number(viaje?.precio || 0);
-                          const plazasOriginales = miReserva.cantidadPlazas;
-                          const diferencia = (cantidadPlazas - plazasOriginales) * precioUnitario;
-
-                          return (
-                            <div className="space-y-4">
-                              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                                <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider">
-                                  <span>Importe anterior</span>
-                                  <span>{(plazasOriginales * precioUnitario).toFixed(2)}€</span>
-                                </div>
-                                <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider border-b border-slate-200 pb-2">
-                                  <span>Nuevo importe</span>
-                                  <span>{(cantidadPlazas * precioUnitario).toFixed(2)}€</span>
-                                </div>
-
-                                {diferencia !== 0 ? (
-                                  <div className={`flex justify-between items-center pt-1 ${diferencia > 0 ? 'text-amber-700' : 'text-green-700'}`}>
-                                    <span className="text-xs font-black uppercase">{diferencia > 0 ? 'Cargo adicional:' : 'Devolución:'}</span>
-                                    <span className="text-xl font-black">{diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)}€</span>
-                                  </div>
-                                ) : (
-                                  <p className="text-center pt-1 text-xs text-slate-400 italic font-medium">Sin cambios en el coste</p>
-                                )}
-                              </div>
-
-                              {diferencia !== 0 && (
-                                <label className="flex items-start gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100 cursor-pointer group">
-                                  <input
-                                    type="checkbox"
-                                    checked={aceptaBloqueoPago}
-                                    onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
-                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                  <span className="text-xs text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
-                                    <strong>Confirmar:</strong> Entiendo que se realizará un {diferencia > 0 ? 'cargo' : 'reembolso'} de <strong>{Math.abs(diferencia).toFixed(2)}€</strong> de forma inmediata.
-                                  </span>
-                                </label>
-                              )}
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
-                            <div>
-                              <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest leading-none mb-1">Total a pagar ahora</p>
-                              <p className="text-2xl font-black text-indigo-900">{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</p>
-                            </div>
-                          </div>
-                          <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={aceptaBloqueoPago}
-                              onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
-                              className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                            />
-                            <span className="text-xs text-slate-700 leading-snug">
-                              Acepto el cargo de <strong>{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</strong> para confirmar mi plaza en el viaje.
-                            </span>
-                          </label>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Mensaje de error/éxito */}
-                    {reservaMsg && (
-                      <div className={`p-3 rounded-xl text-xs font-bold border animate-in fade-in slide-in-from-top-2 ${
-                        reservaMsg.includes('✅') || reservaMsg.toLowerCase().includes('éxito') 
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                          : 'bg-red-50 border-red-200 text-red-700'
-                      }`}>
-                        {reservaMsg}
-                      </div>
-                    )}
-                  </div>
-                )}
+              <div className="relative">
+                <div className="absolute -left-[27px] top-1 w-4 h-4 rounded-full border-4 border-white bg-emerald-600 shadow-sm"></div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">Destino</p>
+                <p className="text-sm font-semibold text-slate-700">{destino}</p>
               </div>
-
-              {/* Footer Modal (Fijo abajo) */}
-              <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex flex-col gap-2">
-                {isLoggedIn && (
-                  (() => {
-                    const precioUnitario = Number(viaje?.precio || 0);
-                    const diferencia = (cantidadPlazas - (miReserva?.cantidadPlazas || 0)) * precioUnitario;
-                    
-                    // 1. Detectar si hay algún cambio real (Plazas O Paradas)
-                    const haCambiadoPlazas = miReserva && cantidadPlazas !== miReserva.cantidadPlazas;
-                    const haCambiadoParadas = miReserva && (
-                      Number(paradaSubidaId) !== Number(miReserva.paradaSubidaId) || 
-                      Number(paradaBajadaId) !== Number(miReserva.paradaBajadaId)
-                    );
-
-                    const hayCambios = haCambiadoPlazas || haCambiadoParadas;
-
-                    // 2. Lógica del Botón:
-                    // Si es edición (miReserva existe), se bloquea si:
-                    // - No hay ningún cambio (hayCambios es false)
-                    // - O si hay cambio de precio (diferencia !== 0) y no ha marcado el check
-                    // Si es reserva nueva, se bloquea si no ha marcado el check.
-                    const botonBloqueado = 
-                      reservando || 
-                      (miReserva 
-                        ? (!hayCambios || (diferencia !== 0 && !aceptaBloqueoPago))
-                        : !aceptaBloqueoPago
-                      );
-
-                    return (
-                      <button
-                        type="button"
-                        onClick={miReserva ? actualizarReserva : reservarPlazas}
-                        disabled={botonBloqueado}
-                        className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-[0.98] ${
-                          botonBloqueado 
-                            ? 'bg-slate-300 cursor-not-allowed shadow-none' 
-                            : 'bg-gradient-compi hover:opacity-95 shadow-indigo-200'
-                        }`}
-                      >
-                        {reservando ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            Procesando...
-                          </span>
-                        ) : reservaMsg?.includes('✅') ? (
-                          "✨ ¡Todo listo!"
-                        ) : miReserva ? (
-                          "Confirmar y Guardar Cambios"
-                        ) : (
-                          `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`
-                        )}
-                      </button>
-                    );
-                  })()
-                )}
-                <button
-                  type="button"
-                  onClick={() => setModalReservaAbierto(false)}
-                  className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  Cancelar y volver
-                </button>
+              
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-slate-500">
+                <span className="text-xs">📅 {formatFecha(viaje.fechaHoraSalida)}</span>
               </div>
             </div>
+
+            {/* Selectores de Paradas */}
+            <div className="grid grid-cols-1 gap-4 py-2 border-y border-slate-100">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de subida</label>
+                <select 
+                  value={paradaSubidaId || ''} 
+                  onChange={(e) => setParadaSubidaId(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {viaje.paradas
+                    .sort((a, b) => a.orden - b.orden)
+                    .filter(p => p.tipo !== 'DESTINO')
+                    .map(p => (
+                      <option key={p.id} value={p.id}>{p.localizacion}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de bajada</label>
+                <select 
+                  value={paradaBajadaId || ''} 
+                  onChange={(e) => setParadaBajadaId(Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {viaje.paradas
+                    .sort((a, b) => a.orden - b.orden)
+                    .filter(p => {
+                      const paradaSubida = viaje.paradas.find(s => s.id === paradaSubidaId);
+                      return p.tipo !== 'ORIGEN' && (paradaSubida ? p.orden > paradaSubida.orden : true);
+                    })
+                    .map(p => (
+                      <option key={p.id} value={p.id}>{p.localizacion}</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Selector de plazas */}
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-slate-700">Número de plazas</label>
+              {(() => {
+                const misPlazasActuales = miReserva?.cantidadPlazas || 0;
+                const plazasLibresTotales = (viaje?.plazasDisponibles || 0) + misPlazasActuales;
+
+                return (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
+                      disabled={reservando || cantidadPlazas <= 1}
+                      className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                    > − </button>
+                    <input
+                      type="number"
+                      readOnly
+                      value={cantidadPlazas}
+                      className="w-16 rounded-lg border border-slate-300 h-10 text-center font-bold bg-slate-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCantidadPlazas(Math.min(plazasLibresTotales, cantidadPlazas + 1))}
+                      disabled={reservando || cantidadPlazas >= plazasLibresTotales}
+                      className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                    > + </button>
+                    <span className="text-xs text-slate-500 font-medium">Máximo: {plazasLibresTotales}</span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* SECCIÓN DE PAGO Y CONCILIACIÓN */}
+            <div className="pt-2">
+              {miReserva ? (
+                (() => {
+                  const precioUnitario = Number(viaje?.precio || 0);
+                  const plazasOriginales = miReserva.cantidadPlazas;
+                  const diferencia = (cantidadPlazas - plazasOriginales) * precioUnitario;
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider">
+                          <span>Importe anterior</span>
+                          <span>{(plazasOriginales * precioUnitario).toFixed(2)}€</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider border-b border-slate-200 pb-2">
+                          <span>Nuevo importe</span>
+                          <span>{(cantidadPlazas * precioUnitario).toFixed(2)}€</span>
+                        </div>
+
+                        {diferencia !== 0 ? (
+                          <div className={`flex justify-between items-center pt-1 ${diferencia > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                            <span className="text-xs font-black uppercase">{diferencia > 0 ? 'Cargo adicional:' : 'Devolución:'}</span>
+                            <span className="text-xl font-black">{diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)}€</span>
+                          </div>
+                        ) : (
+                          <p className="text-center pt-1 text-xs text-slate-400 italic font-medium">Sin cambios en el coste</p>
+                        )}
+                      </div>
+
+                      {diferencia !== 0 && (
+                        <label className="flex items-start gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={aceptaBloqueoPago}
+                            onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-xs text-slate-700 leading-snug group-hover:text-slate-900 transition-colors">
+                            <strong>Confirmar:</strong> Entiendo que se realizará un {diferencia > 0 ? 'cargo' : 'reembolso'} de <strong>{Math.abs(diferencia).toFixed(2)}€</strong> de forma inmediata.
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
+                    <div>
+                      <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest leading-none mb-1">Total a pagar ahora</p>
+                      <p className="text-2xl font-black text-indigo-900">{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</p>
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aceptaBloqueoPago}
+                      onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-xs text-slate-700 leading-snug">
+                      Acepto el cargo de <strong>{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</strong> para confirmar mi plaza en el viaje.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Mensaje de error/éxito */}
+            {reservaMsg && (
+              <div className={`p-3 rounded-xl text-xs font-bold border animate-in fade-in slide-in-from-top-2 ${
+                reservaMsg.includes('✅') || reservaMsg.toLowerCase().includes('éxito') 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}>
+                {reservaMsg}
+              </div>
+            )}
           </div>
         )}
+      </div>
+
+      {/* Footer Modal (Fijo abajo) */}
+      <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex flex-col gap-2">
+        {token && navState.rol === 'pasajero' && (
+          (() => {
+            const precioUnitario = Number(viaje?.precio || 0);
+            const diferencia = (cantidadPlazas - (miReserva?.cantidadPlazas || 0)) * precioUnitario;
+            
+            const haCambiadoPlazas = miReserva && cantidadPlazas !== miReserva.cantidadPlazas;
+            const haCambiadoParadas = miReserva && (
+              Number(paradaSubidaId) !== Number(miReserva.paradaSubidaId) || 
+              Number(paradaBajadaId) !== Number(miReserva.paradaBajadaId)
+            );
+
+            // 1. Calculamos si hay cambios comparando con lo que había en la reserva original
+            const hayCambios = haCambiadoPlazas || haCambiadoParadas;
+
+            const botonBloqueado = 
+              reservando || 
+              (miReserva 
+                ? (!hayCambios || (diferencia !== 0 && !aceptaBloqueoPago))
+                : !aceptaBloqueoPago
+              );
+
+            return !mostrarStripe ? (
+              <button
+                type="button"
+                onClick={miReserva ? actualizarReserva : iniciarProcesoPago}
+                disabled={botonBloqueado}
+                className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-[0.98] ${
+                  botonBloqueado 
+                    ? 'bg-slate-300 cursor-not-allowed shadow-none' 
+                    : 'bg-gradient-compi hover:opacity-95 shadow-indigo-200'
+                }`}
+              >
+                {reservando ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Procesando...
+                  </span>
+                ) : reservaMsg?.includes('✅') ? (
+                  "✨ ¡Todo listo!"
+                ) : miReserva ? (
+                  "Confirmar y Guardar Cambios"
+                ) : (
+                  `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`
+                )}
+              </button>
+            ) : (
+              <button 
+                type="button"
+                onClick={() => setMostrarStripe(false)} 
+                className="w-full py-3 rounded-xl font-bold text-slate-500 border border-slate-300 hover:bg-slate-100 transition-all"
+              >
+                « Volver a ajustar reserva
+              </button>
+            );
+          })()
+        )}
+        <button
+          type="button"
+          onClick={() => { setModalReservaAbierto(false); setMostrarStripe(false); }}
+          className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          Cancelar y volver
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       </div>
       {modalEditarViajeAbierto && viaje && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">

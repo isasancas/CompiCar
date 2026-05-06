@@ -90,26 +90,6 @@ public class PagoServiceImpl implements PagoService {
     }
 
     @Override
-    public Pago crearPago(String usuarioEmail, Long reservaId) {
-        
-        Persona persona = personaRepository.findByEmail(usuarioEmail)
-            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));
-        
-        Reserva reserva = reservaRepository.findById(reservaId)
-            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
-            
-        if (!reserva.getPersona().getId().equals(persona.getId())) {
-            throw new IllegalArgumentException("La reserva no pertenece al usuario con email: " + usuarioEmail); 
-    }  
-        
-        Pago pago = new Pago();
-        pago.setReserva(reserva);
-        pago.setEstado(EstadoPago.PENDIENTE);
-        return pagoRepository.save(pago);
-    
-    }
-
-    @Override
     public List<Pago> obtenerPagosPorPersona(Persona persona) {
         Persona personaExistente = personaRepository.findById(persona.getId())
             .orElseThrow(() -> new IllegalArgumentException("Persona no encontrada con ID: " + persona.getId()));

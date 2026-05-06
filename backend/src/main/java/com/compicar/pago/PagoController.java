@@ -52,18 +52,6 @@ public class PagoController {
         }
     }
 
-    @RequestMapping("/crear")
-    public Pago crearPago(String usuarioEmail, Long reservaId) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.UNAUTHORIZED, "No autenticado"
-            );
-        }
-        String usuarioEmailAuth = auth.getName();
-        return pagoService.crearPago(usuarioEmailAuth, reservaId);
-    }
-
     @PutMapping("/completar")
     public Pago completarPago(Long pagoId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

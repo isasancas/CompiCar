@@ -8,7 +8,6 @@ import com.stripe.exception.StripeException;
 
 public interface PagoService {
     
-    Pago crearPago(String usuarioEmail, Long reservaId);
     List<Pago> obtenerPagosPorPersona(Persona persona);
     Pago obtenerPagoPorId(Long pagoId);
     Pago pagoCompletado(Long pagoId);

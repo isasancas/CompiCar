@@ -145,14 +145,5 @@ public class ReservaController {
         List<Reserva> pendientes = reservaService.obtenerReservasComoConductor(principal.getName());
         return ResponseEntity.ok(pendientes);
     }
-
-    @RequestMapping("/rechazar")
-    public ResponseEntity<Reserva> rechazarReserva(@RequestParam Long reservaId, Principal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-        Reserva rechazada = reservaService.rechazarReserva(principal.getName(), reservaId);
-        return ResponseEntity.ok(rechazada);
-    }
     
 }
