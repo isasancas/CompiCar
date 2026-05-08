@@ -29,10 +29,9 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({ clientSecret, onSuccess, mo
     if (error) {
       setErrorMessage(error.message || "Ocurrió un error inesperado.");
       setIsProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      // Si el pago es exitoso, notificamos al padre para que cree la reserva en Java
-      onSuccess(paymentIntent.id);
-    }
+    } else if (paymentIntent && (paymentIntent.status === 'requires_capture' || paymentIntent.status === 'succeeded')) {
+  onSuccess(paymentIntent.id);
+}
   };
 
   return (

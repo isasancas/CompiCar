@@ -77,82 +77,70 @@ public class ReservaServiceImpl implements ReservaService {
 }
 
     @Override
-    @Transactional // Importante para que si Stripe falla, la reserva no se guarde
+    @Transactional
     public String crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
-        
+
         // 1. Obtener entidades
         Persona persona = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
-        
         Viaje viaje = viajeRepository.findById(viajeId)
                 .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado"));
-        
+
         // 2. Validaciones de negocio
-        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+        if (plazasSolicitadas == null || plazasSolicitadas < 1)
             throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
-        }
-
-        if (viaje.getEstado() != EstadoViaje.PENDIENTE) {
+        if (viaje.getEstado() != EstadoViaje.PENDIENTE)
             throw new IllegalArgumentException("El viaje no está disponible (estado: " + viaje.getEstado() + ")");
-        }
-
-        if (viaje.getPlazasDisponibles() < plazasSolicitadas) {
+        if (viaje.getPlazasDisponibles() < plazasSolicitadas)
             throw new IllegalArgumentException("Solo quedan " + viaje.getPlazasDisponibles() + " plazas disponibles.");
-        }
-        
-        if (viaje.getPersona().getId().equals(persona.getId())) {
+        if (viaje.getPersona().getId().equals(persona.getId()))
             throw new IllegalArgumentException("No puedes reservar tu propio viaje");
-        }
 
         Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
-                .orElseThrow(() -> new IllegalArgumentException("La parada de subida no existe."));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
         Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
-                .orElseThrow(() -> new IllegalArgumentException("La parada de bajada no existe."));
+                .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
 
-        // 1. Crear la instancia de Reserva
+        // 3. Crear y guardar la Reserva PRIMERO (sin Pago) para obtener su ID
         Reserva reserva = new Reserva(
-            EstadoReserva.PENDIENTE, 
-            LocalDateTime.now(), 
-            persona, 
-            paradaSubida, 
-            paradaBajada, 
-            viaje, 
+            EstadoReserva.PENDIENTE,
+            LocalDateTime.now(),
+            persona,
+            paradaSubida,
+            paradaBajada,
+            viaje,
             plazasSolicitadas
         );
+        reserva.setSlug("reserva-tmp-" + System.currentTimeMillis()); // evita constraint unique
+        reserva = reservaRepository.saveAndFlush(reserva);
 
-        // 2. Lógica de PAGO
+        // 4. Ahora sí tenemos ID → slug definitivo
+        reserva.setSlug("reserva-" + reserva.getId());
+        reserva = reservaRepository.saveAndFlush(reserva);
+
+        // 5. Crear el Pago con la Reserva ya persistida
         Pago pago = new Pago();
-        // Calculamos el importe total
         BigDecimal total = viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
         pago.setImporteTotal(total);
-
-        // Rellenar campos obligatorios
-        BigDecimal comision = total.multiply(new BigDecimal("0.10")); 
-        pago.setComision(comision); 
-        pago.setImporteConductor(total.subtract(comision)); 
+        BigDecimal comision = total.multiply(new BigDecimal("0.10"));
+        pago.setComision(comision);
+        pago.setImporteConductor(total.subtract(comision));
         pago.setEstado(EstadoPago.PENDIENTE);
         pago.setFechaCreacion(LocalDateTime.now());
         pago.setFechaPago(LocalDateTime.now());
+        pago.setReserva(reserva); // ← Reserva ya tiene ID en BD
 
-        // --- VITAL: Establecer la relación bidireccional ---
-        pago.setReserva(reserva); 
-        reserva.setPago(pago); 
+        // 6. Guardar el Pago (es el lado dueño de la FK en BD)
+        pago = pagoRepository.saveAndFlush(pago);
+        reserva.setPago(pago); // coherencia en memoria
 
-        // 3. Guardar en la base de datos
-        // Al tener CascadeType.ALL en Reserva (asumo), al guardar reserva se guarda pago.
-        // Si no, debes guardar el pago manualmente: pagoRepository.save(pago);
-        reserva = reservaRepository.save(reserva);
-        reserva.setSlug("reserva-" + reserva.getId());
-        reserva = reservaRepository.save(reserva);
-
-        // 4. Actualizar plazas del viaje
+        // 7. Actualizar plazas del viaje
         viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - plazasSolicitadas);
         viajeRepository.save(viaje);
 
-        // 5. Llamar a Stripe
+        // 8. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
         try {
-            return pagoService.crearIntentoDePago(reserva); 
+            return pagoService.crearIntentoDePago(reserva);
         } catch (StripeException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
         }

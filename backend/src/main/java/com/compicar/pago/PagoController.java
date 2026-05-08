@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 
@@ -30,11 +31,13 @@ public class PagoController {
 
     private final PagoService pagoService;
     private final PersonaRepository personaRepository;
+    private final ReservaRepository reservaRepository;
 
     @Autowired
-    public PagoController(PagoService pagoService, PersonaRepository personaRepository) {
+    public PagoController(PagoService pagoService, PersonaRepository personaRepository, ReservaRepository reservaRepository) {
         this.pagoService = pagoService;
         this.personaRepository = personaRepository;
+        this.reservaRepository = reservaRepository;
     }
 
     @Autowired
@@ -43,6 +46,23 @@ public class PagoController {
     @PostMapping("/intentar-reserva")
     public ResponseEntity<Map<String, String>> iniciarPago(@RequestBody Reserva reserva) {
         try {
+            PaymentIntent intent = stripeService.crearAutorizacion(reserva);
+            Map<String, String> response = new HashMap<>();
+            response.put("clientSecret", intent.getClientSecret());
+            return ResponseEntity.ok(response);
+        } catch (StripeException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PostMapping("/intentar-reserva-id")
+    public ResponseEntity<Map<String, String>> iniciarPagoPorId(@RequestBody Map<String, Long> body) {
+        try {
+            Long reservaId = body.get("id");
+            // Carga la reserva completa desde BD
+            Reserva reserva = reservaRepository.findById(reservaId)
+                .orElseThrow(() -> new EntityNotFoundException("Reserva no encontrada"));
+            
             PaymentIntent intent = stripeService.crearAutorizacion(reserva);
             Map<String, String> response = new HashMap<>();
             response.put("clientSecret", intent.getClientSecret());

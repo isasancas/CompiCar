@@ -1,5 +1,6 @@
 package com.compicar.pago;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -68,24 +69,39 @@ public class PagoServiceImpl implements PagoService {
     @Override
     @Transactional
     public String crearIntentoDePago(Reserva reserva) throws StripeException {
-        // 1. Llamamos al StripeService que creamos antes para obtener el PaymentIntent
-        // El capture_method ya es MANUAL en el StripeService
+        // VALIDACIÓN DE SEGURIDAD
+        if (reserva.getId() == null) {
+            throw new IllegalStateException("No se puede crear un pago para una reserva que aún no ha sido guardada (ID nulo).");
+        }
+
+        // 1. Obtener el PaymentIntent de Stripe
+        // Aquí es donde fallaba antes si dentro de crearAutorizacion usabas reserva.getPago()
         PaymentIntent intent = stripeService.crearAutorizacion(reserva);
 
-        // 2. Creamos o actualizamos la entidad Pago en nuestra DB
+        // 2. Gestión del Pago
+        // Importante: Si la reserva es nueva, reserva.getPago() probablemente devuelva null
+        // o intente disparar una consulta a la DB que falla por el ID nulo.
         Pago pago = reserva.getPago();
+        
         if (pago == null) {
             pago = new Pago();
             pago.setReserva(reserva);
+            
+            // Calculamos el importe aquí si no viene en el objeto
+            BigDecimal total = reserva.getViaje().getPrecio().multiply(new BigDecimal(reserva.getCantidadPlazas()));
+            pago.setImporteTotal(total);
+            
+            // Rellena los campos obligatorios (Not Null) de tu tabla Pago
+            pago.setComision(total.multiply(new BigDecimal("0.10"))); // Ejemplo 10%
+            pago.setImporteConductor(total.subtract(pago.getComision()));
         }
         
         pago.setStripePaymentIntentId(intent.getId());
-        pago.setEstado(EstadoPago.PENDIENTE); // Aún no sabemos si la tarjeta pasó
+        pago.setEstado(EstadoPago.PENDIENTE);
         pago.setFechaCreacion(LocalDateTime.now());
         
         pagoRepository.save(pago);
 
-        // 3. Devolvemos el clientSecret que el Frontend necesita para completar el pago
         return intent.getClientSecret();
     }
 
