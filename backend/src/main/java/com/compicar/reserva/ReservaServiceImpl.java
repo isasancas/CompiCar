@@ -195,12 +195,15 @@ public class ReservaServiceImpl implements ReservaService {
 
         Viaje viaje = reserva.getViaje();
 
+        // Solo devolver plazas si la reserva se había pagado
+        if (reserva.getEstado() == EstadoReserva.PAGADA) {
+            int plazasADevolver = reserva.getCantidadPlazas();
+            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + plazasADevolver);
+            viajeRepository.save(viaje);
+        }
+
         String msj = pasajero.getNombre() + " ha cancelado su reserva en tu viaje.";
         notificacionRepository.save(new Notificacion(msj, viaje.getPersona(), TipoNotificacion.RESERVA_CANCELADA));
-
-        int plazasADevolver = reserva.getCantidadPlazas();
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + plazasADevolver);
-        viajeRepository.save(viaje);
 
         LocalDateTime ahora = LocalDateTime.now();
         long horasHastaSalida = Duration.between(ahora, viaje.getFechaHoraSalida()).toHours();
