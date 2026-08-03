@@ -260,8 +260,10 @@ public class ReservaServiceImpl implements ReservaService {
         }
 
         Viaje viaje = reserva.getViaje();
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
-        viajeRepository.save(viaje);
+        if (reserva.getEstado() == EstadoReserva.PENDIENTE) {
+            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+            viajeRepository.save(viaje);
+        }
 
         notificacionRepository.save(new Notificacion(
                 "El conductor ha rechazado tu reserva en el viaje " + viaje.getSlug() + ".",

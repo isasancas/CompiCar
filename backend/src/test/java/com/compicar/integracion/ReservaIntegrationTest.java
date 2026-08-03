@@ -40,10 +40,10 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").exists())
+            .andExpect(jsonPath("$.reservaId").exists())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
         mockMvc.perform(get("/api/reservas/" + reservaId)
             .header("Authorization", "Bearer " + passengerToken))
@@ -93,7 +93,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isOk())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
         String otherToken = registerAndLogin();
 
@@ -129,7 +129,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isOk())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
         mockMvc.perform(get("/api/reservas/pendientes-conductor")
             .header("Authorization", "Bearer " + driverToken))
@@ -176,7 +176,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isOk())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
         mockMvc.perform(put("/api/reservas/cancelar")
             .param("reservaId", String.valueOf(reservaId))
@@ -309,7 +309,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isOk())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
         Map<String, Object> updatePayload = Map.of(
             "viajeId", viajeId,
@@ -368,7 +368,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isOk())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
         String otherToken = registerAndLogin();
 
@@ -413,9 +413,9 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isOk())
             .andReturn();
 
-        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.id")).longValue();
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
-        mockMvc.perform(get("/api/reservas/rechazar")
+        mockMvc.perform(put("/api/reservas/rechazar")
             .param("reservaId", String.valueOf(reservaId))
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())
@@ -424,7 +424,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void rechazarReserva_sinToken_401() throws Exception {
-        mockMvc.perform(get("/api/reservas/rechazar")
+        mockMvc.perform(put("/api/reservas/rechazar")
             .param("reservaId", "1"))
             .andExpect(status().isForbidden());
     }
