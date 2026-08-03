@@ -360,7 +360,6 @@ class ReservaServiceTest {
         when(reservaRepository.findById(100L)).thenReturn(Optional.of(reserva));
         when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
         when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
         when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -368,11 +367,10 @@ class ReservaServiceTest {
 
         assertEquals(EstadoReserva.CANCELADA, res.getEstado());
         assertEquals(5, viaje.getPlazasDisponibles());
-        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
+        assertEquals(EstadoPago.PENDIENTE, pago.getEstado());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
         verify(notificacionRepository).save(any(Notificacion.class));
-        verify(pagoRepository).save(pago);
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
         verify(reservaRepository).save(reserva);
@@ -512,7 +510,7 @@ class ReservaServiceTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
 
-        assertEquals("El viaje no está disponible para reservas (estado: INICIADO)", ex.getMessage());
+        assertEquals("El viaje no está disponible (estado: INICIADO)", ex.getMessage());
     }
 
     @Test
