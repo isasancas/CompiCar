@@ -36,7 +36,7 @@ public class Pago {
     @Column(nullable = false)
     private LocalDateTime fechaCreacion;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private LocalDateTime fechaPago;
 
     @Column(nullable = false)

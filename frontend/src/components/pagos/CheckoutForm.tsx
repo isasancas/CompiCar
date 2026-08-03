@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { buildApiUrl } from '../../apiConfig';
 
 interface CheckoutFormProps {
   clientSecret: string;
   onSuccess: (paymentIntentId: string) => void;
+  onError?: (message: string) => void;
   monto: number;
 }
 
-const CheckoutForm: React.FC<CheckoutFormProps> = ({ clientSecret, onSuccess, monto }) => {
+const CheckoutForm: React.FC<CheckoutFormProps> = ({ clientSecret, onSuccess, onError, monto }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -29,6 +29,7 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({ clientSecret, onSuccess, mo
     if (error) {
       setErrorMessage(error.message || "Ocurrió un error inesperado.");
       setIsProcessing(false);
+      onError?.(error.message || "Ocurrió un error inesperado.");
     } else if (paymentIntent && (paymentIntent.status === 'requires_capture' || paymentIntent.status === 'succeeded')) {
   onSuccess(paymentIntent.id);
 }

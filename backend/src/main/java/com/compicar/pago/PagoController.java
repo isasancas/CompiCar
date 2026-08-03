@@ -1,6 +1,5 @@
 package com.compicar.pago;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -12,16 +11,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
-import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
-import com.stripe.exception.StripeException;
-import com.stripe.model.PaymentIntent;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -38,38 +33,6 @@ public class PagoController {
         this.pagoService = pagoService;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
-    }
-
-    @Autowired
-    private StripeService stripeService;
-
-    @PostMapping("/intentar-reserva")
-    public ResponseEntity<Map<String, String>> iniciarPago(@RequestBody Reserva reserva) {
-        try {
-            PaymentIntent intent = stripeService.crearAutorizacion(reserva);
-            Map<String, String> response = new HashMap<>();
-            response.put("clientSecret", intent.getClientSecret());
-            return ResponseEntity.ok(response);
-        } catch (StripeException e) {
-            return ResponseEntity.badRequest().build();
-        }
-    }
-
-    @PostMapping("/intentar-reserva-id")
-    public ResponseEntity<Map<String, String>> iniciarPagoPorId(@RequestBody Map<String, Long> body) {
-        try {
-            Long reservaId = body.get("id");
-            // Carga la reserva completa desde BD
-            Reserva reserva = reservaRepository.findById(reservaId)
-                .orElseThrow(() -> new EntityNotFoundException("Reserva no encontrada"));
-            
-            PaymentIntent intent = stripeService.crearAutorizacion(reserva);
-            Map<String, String> response = new HashMap<>();
-            response.put("clientSecret", intent.getClientSecret());
-            return ResponseEntity.ok(response);
-        } catch (StripeException e) {
-            return ResponseEntity.badRequest().build();
-        }
     }
 
     @PutMapping("/completar")

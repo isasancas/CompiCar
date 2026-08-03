@@ -59,10 +59,10 @@ public class PagoServiceImpl implements PagoService {
     @Transactional
     public void cancelarPago(String stripePaymentIntentId) throws StripeException {
         // Lógica para liberar el dinero (Refund/Cancel)
-        stripeService.liberarFondos(stripePaymentIntentId);
+        EstadoPago nuevoEstado = stripeService.liberarFondos(stripePaymentIntentId);
         
         Pago pago = pagoRepository.findByStripePaymentIntentId(stripePaymentIntentId).get();
-        pago.setEstado(EstadoPago.FALLIDO);
+        pago.setEstado(nuevoEstado);
         pagoRepository.save(pago);
     }
 
@@ -99,6 +99,7 @@ public class PagoServiceImpl implements PagoService {
         pago.setStripePaymentIntentId(intent.getId());
         pago.setEstado(EstadoPago.PENDIENTE);
         pago.setFechaCreacion(LocalDateTime.now());
+        pago.setFechaPago(null);
         
         pagoRepository.save(pago);
 
@@ -205,7 +206,7 @@ public class PagoServiceImpl implements PagoService {
                 // ACTIVAR RESERVA
                 pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
                     Reserva r = pago.getReserva();
-                    r.setEstado(EstadoReserva.CONFIRMADA); // O el estado que uses para "Válida"
+                    r.setEstado(EstadoReserva.CONFIRMADA);
                     reservaRepository.save(r);
                 });
             break;

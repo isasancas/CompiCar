@@ -64,18 +64,21 @@ public class StripeService {
      * PASO 3: Cancelar y liberar fondos
      * Se llama si el viaje se cancela. El dinero vuelve al pasajero sin comisiones.
      */
-    public void liberarFondos(String stripePaymentIntentId) throws StripeException {
+    public EstadoPago liberarFondos(String stripePaymentIntentId) throws StripeException {
         PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
         
-        // Si aún no se ha cobrado, cancelamos la intención de pago
-        if ("requires_capture".equals(intent.getStatus())) {
-            intent.cancel();
-        } else if ("succeeded".equals(intent.getStatus())) {
-            // Si ya se había capturado por error, hay que hacer un Reembolso (Refund)
+        if ("succeeded".equals(intent.getStatus())) {
             RefundCreateParams params = RefundCreateParams.builder()
                     .setPaymentIntent(stripePaymentIntentId)
                     .build();
             Refund.create(params);
+            return EstadoPago.REEMBOLSADO;
         }
+
+        if (!"canceled".equals(intent.getStatus())) {
+            intent.cancel();
+        }
+
+        return EstadoPago.FALLIDO;
     }
 }

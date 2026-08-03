@@ -87,6 +87,7 @@ const DetalleViaje: React.FC = () => {
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
   const [mostrarStripe, setMostrarStripe] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [reservaEnProcesoId, setReservaEnProcesoId] = useState<number | null>(null);
   const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
@@ -389,41 +390,10 @@ const cancelarReserva = async () => {
         throw new Error(data?.message || 'No se pudo crear la reserva');
       }
 
-      // El backend devuelve el slug de la reserva como String
-      const reservaSlug = await resReserva.text();
-
-      // PASO 2: Obtener la reserva completa por slug para tener su ID
-      const resDetalle = await fetch(buildApiUrl(`/api/reservas/mis-reservas`), {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!resDetalle.ok) throw new Error('No se pudo obtener las reservas');
-
-      const reservas = await resDetalle.json();
-      const reservaCreada = reservas.find(
-        (r: Reserva) => r.viajeId === viaje?.id && r.estado !== 'CANCELADA'
-      );
-
-      if (!reservaCreada) throw new Error('No se encontró la reserva recién creada');
-
-      // Actualizamos miReserva para que el estado sea coherente
-      setMiReserva(reservaCreada);
-
-      // PASO 3: Pedir la autorización de Stripe con la reserva ya persistida
-      const resStripe = await fetch(buildApiUrl('/api/pagos/intentar-reserva-id'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ id: reservaCreada.id })  // solo necesita el ID para cargarlo de BD
-      });
-
-      if (!resStripe.ok) throw new Error('Error al conectar con la pasarela de pago');
-
-      const data = await resStripe.json();
+      const data = await resReserva.json();
       if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
 
+      setReservaEnProcesoId(data.reservaId);
       setClientSecret(data.clientSecret);
       setMostrarStripe(true);
 
@@ -440,10 +410,36 @@ const cancelarReserva = async () => {
     // La reserva ya fue creada en iniciarProcesoPago.
     // Solo actualizamos la UI.
     setReservaMsg('✅ Pago confirmado. ¡Tu plaza está reservada!');
+    setReservaEnProcesoId(null);
     setViaje((prev) =>
       prev ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas } : prev
     );
     setTimeout(() => setModalReservaAbierto(false), 2000);
+  };
+
+  const deshacerReservaPorFalloPago = async (motivo: string) => {
+    if (!reservaEnProcesoId) {
+      setReservaMsg(`❌ ${motivo}`);
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/reservas/anular-pago-fallido?reservaId=${reservaEnProcesoId}`), {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo revertir la reserva');
+      }
+
+      setReservaEnProcesoId(null);
+      setClientSecret(null);
+      setMostrarStripe(false);
+      setReservaMsg(`❌ ${motivo}`);
+    } catch {
+      setReservaMsg(`❌ ${motivo}`);
+    }
   };
   
   const actualizarReserva = async () => {
@@ -994,10 +990,13 @@ const handleGuardarCambiosViaje = async () => {
                           <CheckoutForm 
                             clientSecret={clientSecret} 
                             monto={cantidadPlazas * (viaje?.precio || 0)}
-                            onSuccess={(id) => { console.log("Pago confirmado con ID:", id); // Así ya lo usas
+                        onSuccess={(id) => { console.log("Pago autorizado con ID:", id);
                                 setMostrarStripe(false);
                                 reservarPlazas(); 
-                                }} 
+                          }}
+                        onError={(message) => {
+                          void deshacerReservaPorFalloPago(message || 'El pago no pudo completarse');
+                        }}
                           />
                       </Elements>
                     </div>

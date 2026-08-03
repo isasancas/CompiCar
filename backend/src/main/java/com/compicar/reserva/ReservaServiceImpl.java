@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.reserva.dto.ReservaDTO;
+import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
@@ -78,7 +79,7 @@ public class ReservaServiceImpl implements ReservaService {
 
     @Override
     @Transactional
-    public String crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
+    public ReservaCreadaResponse crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
 
         // 1. Obtener entidades
         Persona persona = personaRepository.findByEmail(usuarioEmail)
@@ -127,7 +128,7 @@ public class ReservaServiceImpl implements ReservaService {
         pago.setImporteConductor(total.subtract(comision));
         pago.setEstado(EstadoPago.PENDIENTE);
         pago.setFechaCreacion(LocalDateTime.now());
-        pago.setFechaPago(LocalDateTime.now());
+        pago.setFechaPago(null);
         pago.setReserva(reserva); // ← Reserva ya tiene ID en BD
 
         // 6. Guardar el Pago (es el lado dueño de la FK en BD)
@@ -140,10 +141,45 @@ public class ReservaServiceImpl implements ReservaService {
 
         // 8. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
         try {
-            return pagoService.crearIntentoDePago(reserva);
+            String clientSecret = pagoService.crearIntentoDePago(reserva);
+            return new ReservaCreadaResponse(reserva.getId(), reserva.getSlug(), clientSecret);
         } catch (StripeException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional
+    public Reserva anularReservaPorFalloPago(String usuarioEmail, Long reservaId) {
+        Persona pasajero = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
+
+        if (!reserva.getPersona().getId().equals(pasajero.getId())) {
+            throw new IllegalArgumentException("La reserva no pertenece al usuario");
+        }
+
+        if (reserva.getEstado() == EstadoReserva.CANCELADA) {
+            return reserva;
+        }
+
+        Pago pago = reserva.getPago();
+        if (pago != null && pago.getStripePaymentIntentId() != null) {
+            try {
+                pagoService.cancelarPago(pago.getStripePaymentIntentId());
+            } catch (StripeException e) {
+                throw new RuntimeException("Error al cancelar el pago fallido", e);
+            }
+        }
+
+        Viaje viaje = reserva.getViaje();
+        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+        viajeRepository.save(viaje);
+
+        reserva.setEstado(EstadoReserva.CANCELADA);
+        return reservaRepository.save(reserva);
     }
 
     @Override
@@ -194,6 +230,46 @@ public class ReservaServiceImpl implements ReservaService {
 
         reserva.setEstado(EstadoReserva.CANCELADA);
         
+        return reservaRepository.save(reserva);
+    }
+
+    @Override
+    @Transactional
+    public Reserva rechazarReservaComoConductor(String usuarioEmail, Long reservaId) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
+
+        if (!reserva.getViaje().getPersona().getId().equals(conductor.getId())) {
+            throw new IllegalArgumentException("Solo el conductor del viaje puede rechazar esta reserva");
+        }
+
+        if (reserva.getEstado() == EstadoReserva.CANCELADA) {
+            return reserva;
+        }
+
+        Pago pago = reserva.getPago();
+        if (pago != null && pago.getStripePaymentIntentId() != null) {
+            try {
+                pagoService.cancelarPago(pago.getStripePaymentIntentId());
+            } catch (StripeException e) {
+                throw new RuntimeException("Error al cancelar el pago de la reserva rechazada", e);
+            }
+        }
+
+        Viaje viaje = reserva.getViaje();
+        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+        viajeRepository.save(viaje);
+
+        notificacionRepository.save(new Notificacion(
+                "El conductor ha rechazado tu reserva en el viaje " + viaje.getSlug() + ".",
+                reserva.getPersona(),
+                TipoNotificacion.RESERVA_RECHAZADA
+        ));
+
+        reserva.setEstado(EstadoReserva.CANCELADA);
         return reservaRepository.save(reserva);
     }
 
