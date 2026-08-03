@@ -36,7 +36,7 @@ public class Pago {
     @Column(nullable = false)
     private LocalDateTime fechaCreacion;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private LocalDateTime fechaPago;
 
     @Column(nullable = false)
@@ -47,12 +47,16 @@ public class Pago {
     @JoinColumn(name = "reserva_id", nullable = false, unique = true)
     private Reserva reserva;
 
+    // Identificador de la transacción en Stripe para poder "congelar/capturar"
+    @Column(name = "stripe_payment_intent_id", unique = true)
+    private String stripePaymentIntentId;
+
     // Constructores
     public Pago() {
     }
 
     public Pago(BigDecimal importeTotal, BigDecimal importeConductor, BigDecimal comision, LocalDateTime fechaCreacion,
-            LocalDateTime fechaPago, EstadoPago estado, Reserva reserva) {
+            LocalDateTime fechaPago, EstadoPago estado, Reserva reserva, String stripePaymentIntentId) {
         this.importeTotal = importeTotal;
         this.importeConductor = importeConductor;
         this.comision = comision;
@@ -60,6 +64,7 @@ public class Pago {
         this.fechaPago = fechaPago;
         this.estado = estado;
         this.reserva = reserva;
+        this.stripePaymentIntentId = stripePaymentIntentId;
     }
 
     // Getters
@@ -95,6 +100,10 @@ public class Pago {
         return reserva;
     }
 
+    public String getStripePaymentIntentId() {
+        return stripePaymentIntentId;
+    }
+
     // Setters
     public void setImporteTotal(BigDecimal importeTotal) {
         this.importeTotal = importeTotal;
@@ -124,11 +133,15 @@ public class Pago {
         this.reserva = reserva;
     }
 
+    public void setStripePaymentIntentId(String stripePaymentIntentId) {
+        this.stripePaymentIntentId = stripePaymentIntentId;
+    }
+
     @Override
     public String toString() {
         return "Pago{id=" + id + ", importeTotal=" + importeTotal + ", importeConductor=" + importeConductor
                 + ", comision=" + comision + ", fechaCreacion=" + fechaCreacion + ", fechaPago=" + fechaPago
-                + ", estado=" + estado + ", reservaId=" + (reserva != null ? reserva.getId() : null) + "}";
+                + ", estado=" + estado + ", reservaId=" + (reserva != null ? reserva.getId() : null) + ", stripePaymentIntentId=" + stripePaymentIntentId + "}";
     }
     
 }

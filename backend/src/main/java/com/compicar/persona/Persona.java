@@ -76,6 +76,12 @@ public class Persona {
     @Column(name = "preferencia")
     private List<String> preferenciasViaje = new ArrayList<>();
 
+    @Column(name = "stripe_customer_id", unique = true)
+    private String stripeCustomerId; // Para el que paga (pasajero)
+
+    @Column(name = "stripe_account_id", unique = true)
+    private String stripeAccountId; // Para el que recibe (conductor - Stripe Connect)
+
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
             return 0.0;
@@ -88,7 +94,7 @@ public class Persona {
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
-            String telefono) {
+            String telefono, String stripeCustomerId, String stripeAccountId) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
         this.segundoApellido = segundoApellido;
@@ -97,11 +103,13 @@ public class Persona {
         this.telefono = telefono;
         this.slug = "persona-" + id;
         this.numeroCancelaciones = 0;
+        this.stripeCustomerId = stripeCustomerId;
+        this.stripeAccountId = stripeAccountId;
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
             String telefono, List<Vehiculo> vehiculos, List<Reserva> reservas, List<Viaje> viajes,
-            List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas) {
+            List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas, String stripeCustomerId, String stripeAccountId) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
         this.segundoApellido = segundoApellido;
@@ -115,6 +123,8 @@ public class Persona {
         this.valoracionesEmitidas = valoracionesEmitidas;
         this.valoracionesRecibidas = valoracionesRecibidas;
         this.numeroCancelaciones = 0;
+        this.stripeCustomerId = stripeCustomerId;
+        this.stripeAccountId = stripeAccountId;
     }
 
     public Long getId() {
@@ -179,6 +189,14 @@ public class Persona {
 
     public Integer getNumeroCancelaciones() {
         return numeroCancelaciones;
+    }
+
+    public String getStripeCustomerId() {
+        return stripeCustomerId;
+    }
+
+    public String getStripeAccountId() {
+        return stripeAccountId;
     }
 
     public void incrementarCancelaciones() {
@@ -255,10 +273,18 @@ public class Persona {
         this.numeroCancelaciones = numeroCancelaciones;
     }
 
+    public void setStripeCustomerId(String stripeCustomerId) {
+        this.stripeCustomerId = stripeCustomerId;
+    }
+
+    public void setStripeAccountId(String stripeAccountId) {
+        this.stripeAccountId = stripeAccountId;
+    }   
+
     @Override
     public String toString() {
         return "Persona{id=" + id + ", nombre='" + nombre + "', primerApellido='" + primerApellido
                 + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono
-                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + slug + "}";
+                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + slug +  ", stripeCustomerId=" + stripeCustomerId + ", stripeAccountId=" + stripeAccountId + "}";
     }
 }

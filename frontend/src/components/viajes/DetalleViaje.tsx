@@ -8,6 +8,11 @@ import {
   Tooltip
 } from 'react-leaflet';
 import { buildApiUrl } from '../../apiConfig';
+import { Elements } from '@stripe/react-stripe-js';
+import CheckoutForm from '../pagos/CheckoutForm';
+import { loadStripe } from '@stripe/stripe-js';
+
+const stripePromise = loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u');
 
 interface Parada {
   id: number;
@@ -80,6 +85,10 @@ const DetalleViaje: React.FC = () => {
   const [nuevaFecha, setNuevaFecha] = useState<string>('');
   const [nuevasPlazas, setNuevasPlazas] = useState<number>(0);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const [mostrarStripe, setMostrarStripe] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [reservaEnProcesoId, setReservaEnProcesoId] = useState<number | null>(null);
+  const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
@@ -101,7 +110,7 @@ const DetalleViaje: React.FC = () => {
     if (!slug) {
       setError('No se pudo cargar el viaje');
       setLoading(false);
-      return;
+      return
     }
 
     try {
@@ -345,57 +354,91 @@ const cancelarReserva = async () => {
     );
   }
 
-  const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
-
-  const reservarPlazas = async () => {
+    const iniciarProcesoPago = async () => {
     setReservaMsg(null);
-
-    if (!isLoggedIn) {
-      navigate('/inicio-sesion');
-      return;
-    }
-
-    if (!viaje) return;
 
     if (!aceptaBloqueoPago) {
       setReservaMsg('Debes aceptar el aviso de cobro antes de reservar.');
       return;
     }
 
+    if (!paradaSubidaId || !paradaBajadaId) {
+      setReservaMsg('Selecciona los puntos de subida y bajada.');
+      return;
+    }
+
     setReservando(true);
 
     try {
-      const response = await fetch(buildApiUrl('/api/reservas/crear'), {
+      // PASO 1: Crear la reserva en el backend (esto también crea el Pago en BD)
+      const resReserva = await fetch(buildApiUrl('/api/reservas/crear'), {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
-          viajeId: viaje.id, 
+        body: JSON.stringify({
+          viajeId: viaje?.id,
           plazas: cantidadPlazas,
           paradaSubidaId: paradaSubidaId,
-          paradaBajadaId: paradaBajadaId
+          paradaBajadaId: paradaBajadaId,
         })
       });
 
-      if (response.ok) {
-        setReservaMsg(`Reserva completada con éxito por ${cantidadPlazas} plaza(s).`);
-        setViaje((prev) =>
-          prev
-            ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas }
-            : prev
-        );
-
-        setTimeout(() => setModalReservaAbierto(false), 2000);
-      } else {
-        const data = await response.json().catch(() => null);
-        setReservaMsg(`Error: ${data?.message || 'No se pudo realizar la reserva'}`);
+      if (!resReserva.ok) {
+        const data = await resReserva.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo crear la reserva');
       }
+
+      const data = await resReserva.json();
+      if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
+
+      setReservaEnProcesoId(data.reservaId);
+      setClientSecret(data.clientSecret);
+      setMostrarStripe(true);
+
     } catch (err) {
-      setReservaMsg('Error de conexión con el servidor.');
+      setReservaMsg(`❌ ${err instanceof Error ? err.message : 'Error inesperado'}`);
     } finally {
       setReservando(false);
+    }
+  };
+
+  const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
+
+    const reservarPlazas = async () => {
+    // La reserva ya fue creada en iniciarProcesoPago.
+    // Solo actualizamos la UI.
+    setReservaMsg('✅ Pago confirmado. ¡Tu plaza está reservada!');
+    setReservaEnProcesoId(null);
+    setViaje((prev) =>
+      prev ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas } : prev
+    );
+    setTimeout(() => setModalReservaAbierto(false), 2000);
+  };
+
+  const deshacerReservaPorFalloPago = async (motivo: string) => {
+    if (!reservaEnProcesoId) {
+      setReservaMsg(`❌ ${motivo}`);
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/reservas/anular-pago-fallido?reservaId=${reservaEnProcesoId}`), {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo revertir la reserva');
+      }
+
+      setReservaEnProcesoId(null);
+      setClientSecret(null);
+      setMostrarStripe(false);
+      setReservaMsg(`❌ ${motivo}`);
+    } catch {
+      setReservaMsg(`❌ ${motivo}`);
     }
   };
   
@@ -940,7 +983,24 @@ const handleGuardarCambiosViaje = async () => {
                       Registrarse
                     </button>
                   </div>
-                ) : (
+                ) : mostrarStripe && clientSecret ?(
+                    /* BLOQUE INYECTADO: PASARELA DE STRIPE */
+                    <div className="py-4 animate-in fade-in">
+                      <Elements stripe={stripePromise} options={{ clientSecret }}>
+                          <CheckoutForm 
+                            clientSecret={clientSecret} 
+                            monto={cantidadPlazas * (viaje?.precio || 0)}
+                        onSuccess={(id) => { console.log("Pago autorizado con ID:", id);
+                                setMostrarStripe(false);
+                                reservarPlazas(); 
+                          }}
+                        onError={(message) => {
+                          void deshacerReservaPorFalloPago(message || 'El pago no pudo completarse');
+                        }}
+                          />
+                      </Elements>
+                    </div>
+                  ) : (
                   <div className="space-y-6">
                     
                     {/* Resumen de ruta visual */}
@@ -1149,40 +1209,32 @@ const handleGuardarCambiosViaje = async () => {
                     return (
                       <button
                         type="button"
-                        onClick={miReserva ? actualizarReserva : reservarPlazas}
-                        disabled={botonBloqueado}
+                        // CAMBIO AQUÍ: Si no es edición y no estamos en Stripe, llamamos a iniciarProcesoPago
+                        onClick={miReserva ? actualizarReserva : (mostrarStripe ? undefined : iniciarProcesoPago)}
+                        disabled={botonBloqueado || (mostrarStripe)}
                         className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-[0.98] ${
                           botonBloqueado 
                             ? 'bg-slate-300 cursor-not-allowed shadow-none' 
                             : 'bg-gradient-compi hover:opacity-95 shadow-indigo-200'
                         }`}
                       >
-                        {reservando ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            Procesando...
-                          </span>
-                        ) : reservaMsg?.includes('✅') ? (
-                          "✨ ¡Todo listo!"
-                        ) : miReserva ? (
-                          "Confirmar y Guardar Cambios"
-                        ) : (
-                          `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`
-                        )}
+                        {mostrarStripe ? "Esperando pago..." 
+                        : (miReserva ? "Guardar Cambios" 
+                        : `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`)
+                      }
                       </button>
+                      
                     );
                   })()
                 )}
-                <button
-                  type="button"
-                  onClick={() => setModalReservaAbierto(false)}
-                  className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  Cancelar y volver
-                </button>
+                {mostrarStripe && (
+                  <button 
+                    onClick={() => setMostrarStripe(false)}
+                    className="text-xs text-indigo-600 mt-2"
+                  >
+                    « Volver a editar reserva
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -17,11 +17,13 @@ import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
+import com.compicar.pago.PagoService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.ParadaRepository;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
@@ -57,6 +59,9 @@ class ReservaServiceTest {
     @Mock
     private ParadaRepository paradaRepository;
 
+    @Mock
+    private PagoService pagoService;
+
     @InjectMocks
     private ReservaServiceImpl reservaService;
 
@@ -66,8 +71,8 @@ class ReservaServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        pasajero = new Persona("Nombre","Ape","B","pass","user@compicar.com","600000000");
-        conductor = new Persona("Cond","A","B","p","driver@compicar.com","611111111");
+        pasajero = new Persona("Nombre","Ape","B","pass","user@compicar.com","600000000", null, null);
+        conductor = new Persona("Cond","A","B","p","driver@compicar.com","611111111", null, null);
 
         setId(pasajero, 2L);
         setId(conductor, 3L);
@@ -77,6 +82,7 @@ class ReservaServiceTest {
         
         viaje.setEstado(EstadoViaje.PENDIENTE);
         viaje.setPlazasDisponibles(3);
+        viaje.setPrecio(java.math.BigDecimal.TEN);
         viaje.setPersona(conductor);
         viaje.setFechaHoraSalida(LocalDateTime.now().plusDays(1)); 
     }
@@ -116,16 +122,18 @@ class ReservaServiceTest {
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
         when(paradaRepository.findById(origenId)).thenReturn(Optional.of(pOrigen));
         when(paradaRepository.findById(destinoId)).thenReturn(Optional.of(pDestino));
-        
-        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> {
+        when(reservaRepository.saveAndFlush(any(Reserva.class))).thenAnswer(inv -> {
             Reserva r = inv.getArgument(0);
             setId(r, 1L);
             return r;
         });
+        when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pagoService.crearIntentoDePago(any(Reserva.class))).thenReturn("client-secret");
 
-        Reserva res = reservaService.crearReserva("user@compicar.com", 10L, 1, origenId, destinoId);
+        ReservaCreadaResponse res = reservaService.crearReserva("user@compicar.com", 10L, 1, origenId, destinoId);
 
-        assertEquals(1L, res.getId());
+        assertEquals(1L, res.reservaId());
         assertEquals(2, viaje.getPlazasDisponibles());
     }
 
@@ -321,6 +329,7 @@ class ReservaServiceTest {
         try {
             Persona owner = new Persona();
             owner.setEmail("driver@compicar.com");
+            setId(owner, 3L);
 
             Viaje v = new Viaje();
             v.setPersona(owner);
@@ -334,11 +343,11 @@ class ReservaServiceTest {
             r.setEstado(EstadoReserva.PENDIENTE);
             r.setCantidadPlazas(1);
 
+            when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(owner));
             when(reservaRepository.findById(70L)).thenReturn(Optional.of(r));
             when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
             when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
-
-            Reserva res = reservaService.rechazarReserva("driver@compicar.com", 70L);
+            Reserva res = reservaService.rechazarReservaComoConductor("driver@compicar.com", 70L);
             assertEquals(EstadoReserva.CANCELADA, res.getEstado());
             assertEquals(3, v.getPlazasDisponibles());
         } catch (Exception e) {
@@ -352,6 +361,7 @@ class ReservaServiceTest {
 
         Pago pago = new Pago();
         pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setStripePaymentIntentId("pi_test_100");
 
         Reserva reserva = crearReserva(
                 100L, pasajero, viaje, EstadoReserva.PENDIENTE, 2, pago);
@@ -360,22 +370,22 @@ class ReservaServiceTest {
         when(reservaRepository.findById(100L)).thenReturn(Optional.of(reserva));
         when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
         when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
         when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.doNothing().when(pagoService).cancelarPago(any(String.class));
 
         Reserva res = reservaService.cancelarReserva("user@compicar.com", 100L);
 
         assertEquals(EstadoReserva.CANCELADA, res.getEstado());
         assertEquals(5, viaje.getPlazasDisponibles());
-        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
+        assertEquals(EstadoPago.PENDIENTE, pago.getEstado());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
         verify(notificacionRepository).save(any(Notificacion.class));
-        verify(pagoRepository).save(pago);
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
         verify(reservaRepository).save(reserva);
+        verify(pagoService).cancelarPago(any(String.class));
     }
 
     @Test
@@ -384,6 +394,7 @@ class ReservaServiceTest {
 
         Pago pago = new Pago();
         pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setStripePaymentIntentId("pi_test_101");
 
         Reserva reserva = crearReserva(
                 101L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, pago);
@@ -392,18 +403,18 @@ class ReservaServiceTest {
         when(reservaRepository.findById(101L)).thenReturn(Optional.of(reserva));
         when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
         when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(pagoRepository.save(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
         when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.doNothing().when(pagoService).capturarPago(any(String.class));
 
         Reserva res = reservaService.cancelarReserva("user@compicar.com", 101L);
 
         assertEquals(EstadoReserva.CANCELADA, res.getEstado());
-        assertEquals(EstadoPago.COMPLETADO, pago.getEstado());
+        assertEquals(EstadoPago.PENDIENTE, pago.getEstado());
         assertEquals(4, viaje.getPlazasDisponibles());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
-        verify(pagoRepository).save(pago);
+        verify(pagoService).capturarPago(any(String.class));
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
         verify(notificacionRepository).save(any(Notificacion.class));
@@ -432,7 +443,8 @@ class ReservaServiceTest {
         verify(notificacionRepository).save(any(Notificacion.class));
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
-        verify(pagoRepository, never()).save(any(Pago.class));
+        verify(pagoService, never()).capturarPago(any(String.class));
+        verify(pagoService, never()).cancelarPago(any(String.class));
     }
 
     @Test
@@ -458,7 +470,7 @@ class ReservaServiceTest {
 
     @Test
     void cancelarReserva_error_noPerteneceAlUsuario_lanza() throws Exception {
-        Persona otroPasajero = new Persona("Otro", "Apellido", "B", "pass", "otro@compicar.com", "622222222");
+        Persona otroPasajero = new Persona("Otro", "Apellido", "B", "pass", "otro@compicar.com", "622222222", null, null);
         setId(otroPasajero, 99L);
 
         Reserva reserva = crearReserva(
@@ -512,7 +524,7 @@ class ReservaServiceTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
 
-        assertEquals("El viaje no está disponible para reservas (estado: INICIADO)", ex.getMessage());
+        assertEquals("El viaje no está disponible (estado: INICIADO)", ex.getMessage());
     }
 
     @Test
@@ -543,7 +555,7 @@ class ReservaServiceTest {
 
     @Test
     void actualizarReserva_error_noPerteneceAlUsuario_lanza() throws Exception {
-        Persona otro = new Persona("Otro", "Ape", "B", "pass", "otro@compicar.com", "622222222");
+        Persona otro = new Persona("Otro", "Ape", "B", "pass", "otro@compicar.com", "622222222", null, null);
         setId(otro, 99L);
 
         Reserva existente = crearReserva(20L, otro, viaje, EstadoReserva.PENDIENTE, 1, null);
@@ -646,6 +658,7 @@ class ReservaServiceTest {
     void rechazarReserva_error_sinPermiso_lanza() throws Exception {
         Persona owner = new Persona();
         owner.setEmail("driver@compicar.com");
+        setId(owner, 3L);
 
         Viaje v = new Viaje();
         v.setPersona(owner);
@@ -656,18 +669,24 @@ class ReservaServiceTest {
         r.setEstado(EstadoReserva.PENDIENTE);
         r.setCantidadPlazas(1);
 
+        Persona conductorAutenticado = new Persona();
+        conductorAutenticado.setEmail("otro@compicar.com");
+        setId(conductorAutenticado, 99L);
+
+        when(personaRepository.findByEmail("otro@compicar.com")).thenReturn(Optional.of(conductorAutenticado));
         when(reservaRepository.findById(40L)).thenReturn(Optional.of(r));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-            reservaService.rechazarReserva("otro@compicar.com", 40L));
+            reservaService.rechazarReservaComoConductor("otro@compicar.com", 40L));
 
-        assertEquals("No tienes permiso para rechazar esta reserva", ex.getMessage());
+        assertEquals("Solo el conductor del viaje puede rechazar esta reserva", ex.getMessage());
     }
 
     @Test
     void rechazarReserva_estadoNoPendiente_noCambiaPlazas() throws Exception {
         Persona owner = new Persona();
         owner.setEmail("driver@compicar.com");
+        setId(owner, 3L);
 
         Viaje v = new Viaje();
         setId(v, 50L);
@@ -680,12 +699,13 @@ class ReservaServiceTest {
         r.setEstado(EstadoReserva.CONFIRMADA);
         r.setCantidadPlazas(1);
 
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(owner));
         when(reservaRepository.findById(51L)).thenReturn(Optional.of(r));
         when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Reserva res = reservaService.rechazarReserva("driver@compicar.com", 51L);
+        Reserva res = reservaService.rechazarReservaComoConductor("driver@compicar.com", 51L);
 
-        assertEquals(EstadoReserva.CONFIRMADA, res.getEstado());
+        assertEquals(EstadoReserva.CANCELADA, res.getEstado());
         assertEquals(2, v.getPlazasDisponibles());
         verify(viajeRepository, never()).save(any(Viaje.class));
     }

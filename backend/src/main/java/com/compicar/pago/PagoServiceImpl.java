@@ -1,15 +1,27 @@
 package com.compicar.pago;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
+import com.stripe.exception.SignatureVerificationException;
+import com.stripe.exception.StripeException;
+import com.stripe.model.Event;
+import com.stripe.model.EventDataObjectDeserializer;
+import com.stripe.model.PaymentIntent;
+import com.stripe.net.Webhook;
+
+import jakarta.persistence.EntityNotFoundException;
 
 @Service
 @Transactional
@@ -18,32 +30,80 @@ public class PagoServiceImpl implements PagoService {
     private final PagoRepository pagoRepository;
     private final PersonaRepository personaRepository;
     private final ReservaRepository reservaRepository;
+    private final StripeService stripeService; // La clase que creamos antes
 
     @Autowired
-    public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, ReservaRepository reservaRepository) {
+    public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, ReservaRepository reservaRepository, StripeService stripeService) {
         this.pagoRepository = pagoRepository;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
+        this.stripeService = stripeService;
     }
 
     @Override
-    public Pago crearPago(String usuarioEmail, Long reservaId) {
+    @Transactional
+    public void capturarPago(String stripePaymentIntentId) throws StripeException {
+        Pago pago = pagoRepository.findByStripePaymentIntentId(stripePaymentIntentId)
+                .orElseThrow(() -> new EntityNotFoundException("Pago no encontrado"));
+
+        // Llamada a Stripe para cobrar el dinero congelado
+        stripeService.confirmarCaptura(stripePaymentIntentId);
+
+        // Actualizamos nuestra DB
+        pago.setEstado(EstadoPago.CAPTURADO);
+        pago.setFechaPago(LocalDateTime.now());
+        pagoRepository.save(pago);
+    }
+
+    @Override
+    @Transactional
+    public void cancelarPago(String stripePaymentIntentId) throws StripeException {
+        // Lógica para liberar el dinero (Refund/Cancel)
+        EstadoPago nuevoEstado = stripeService.liberarFondos(stripePaymentIntentId);
         
-        Persona persona = personaRepository.findByEmail(usuarioEmail)
-            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));
+        Pago pago = pagoRepository.findByStripePaymentIntentId(stripePaymentIntentId).get();
+        pago.setEstado(nuevoEstado);
+        pagoRepository.save(pago);
+    }
+
+    @Override
+    @Transactional
+    public String crearIntentoDePago(Reserva reserva) throws StripeException {
+        // VALIDACIÓN DE SEGURIDAD
+        if (reserva.getId() == null) {
+            throw new IllegalStateException("No se puede crear un pago para una reserva que aún no ha sido guardada (ID nulo).");
+        }
+
+        // 1. Obtener el PaymentIntent de Stripe
+        // Aquí es donde fallaba antes si dentro de crearAutorizacion usabas reserva.getPago()
+        PaymentIntent intent = stripeService.crearAutorizacion(reserva);
+
+        // 2. Gestión del Pago
+        // Importante: Si la reserva es nueva, reserva.getPago() probablemente devuelva null
+        // o intente disparar una consulta a la DB que falla por el ID nulo.
+        Pago pago = reserva.getPago();
         
-        Reserva reserva = reservaRepository.findById(reservaId)
-            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
+        if (pago == null) {
+            pago = new Pago();
+            pago.setReserva(reserva);
             
-        if (!reserva.getPersona().getId().equals(persona.getId())) {
-            throw new IllegalArgumentException("La reserva no pertenece al usuario con email: " + usuarioEmail); 
-    }  
+            // Calculamos el importe aquí si no viene en el objeto
+            BigDecimal total = reserva.getViaje().getPrecio().multiply(new BigDecimal(reserva.getCantidadPlazas()));
+            pago.setImporteTotal(total);
+            
+            // Rellena los campos obligatorios (Not Null) de tu tabla Pago
+            pago.setComision(total.multiply(new BigDecimal("0.10"))); // Ejemplo 10%
+            pago.setImporteConductor(total.subtract(pago.getComision()));
+        }
         
-        Pago pago = new Pago();
-        pago.setReserva(reserva);
+        pago.setStripePaymentIntentId(intent.getId());
         pago.setEstado(EstadoPago.PENDIENTE);
-        return pagoRepository.save(pago);
-    
+        pago.setFechaCreacion(LocalDateTime.now());
+        pago.setFechaPago(null);
+        
+        pagoRepository.save(pago);
+
+        return intent.getClientSecret();
     }
 
     @Override
@@ -100,7 +160,7 @@ public class PagoServiceImpl implements PagoService {
     public Pago pagoCompletado(Long pagoId) {
         Pago pago = pagoRepository.findById(pagoId)
             .orElseThrow(() -> new IllegalArgumentException("Pago no encontrado con ID: " + pagoId));
-        pago.setEstado(EstadoPago.COMPLETADO);
+        pago.setEstado(EstadoPago.CAPTURADO);
         return pagoRepository.save(pago);
     }
 
@@ -120,4 +180,57 @@ public class PagoServiceImpl implements PagoService {
         return pagoRepository.save(pago);
     }
     
+    @Value("${stripe.webhook.secret}")
+    private String endpointSecret;
+
+    @Override
+    @Transactional
+    public void procesarEventoWebhook(String payload, String sigHeader) {
+        Event event;
+        try {
+            // Validamos que el mensaje realmente viene de Stripe
+            event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
+        } catch (SignatureVerificationException e) {
+            throw new RuntimeException("Firma de Webhook inválida");
+        }
+
+        // Analizamos qué pasó
+        EventDataObjectDeserializer dataObjectDeserializer = event.getDataObjectDeserializer();
+        if (dataObjectDeserializer.getObject().isEmpty()) return;
+
+        PaymentIntent intent = (PaymentIntent) dataObjectDeserializer.getObject().get();
+
+        switch (event.getType()) {
+            case "payment_intent.amount_capturable_updated":
+                actualizarEstadoPago(intent.getId(), EstadoPago.AUTORIZADO);
+                // ACTIVAR RESERVA
+                pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
+                    Reserva r = pago.getReserva();
+                    r.setEstado(EstadoReserva.CONFIRMADA);
+                    reservaRepository.save(r);
+                });
+            break;
+                
+            case "payment_intent.payment_failed":
+                // El banco rechazó la operación
+                actualizarEstadoPago(intent.getId(), EstadoPago.FALLIDO);
+                break;
+                
+            case "payment_intent.succeeded":
+                // Esto ocurre después de que tú llamas a capturarPago() y sale bien
+                actualizarEstadoPago(intent.getId(), EstadoPago.CAPTURADO);
+                break;
+        }
+    }
+
+    private void actualizarEstadoPago(String stripeId, EstadoPago nuevoEstado) {
+        pagoRepository.findByStripePaymentIntentId(stripeId).ifPresent(pago -> {
+            pago.setEstado(nuevoEstado);
+            if (nuevoEstado == EstadoPago.CAPTURADO) {
+                pago.setFechaPago(LocalDateTime.now());
+            }
+            pagoRepository.save(pago);
+        });
+    }
+
 }

@@ -38,7 +38,7 @@ const Notificaciones: React.FC = () => {
     try {
       const endpoint = accion === 'confirmar' 
         ? `/api/reservas/confirmar?reservaId=${id}` 
-        : `/api/reservas/cancelar?reservaId=${id}`;
+        : `/api/reservas/rechazar?reservaId=${id}`;
 
       const response = await fetch(buildApiUrl(endpoint), {
         method: 'PUT',

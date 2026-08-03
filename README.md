@@ -103,8 +103,9 @@ Abre **otra terminal** en la carpeta `frontend` y ejecuta:
 ```bash
 cd frontend
 npm install       # Solo la primera vez: instala las dependencias
-npm install leaflet react-leaflet         # Solo la primera vez
-npm install -D @types/leaflet             # Solo la primera vez
+npm install leaflet react-leaflet                       # Solo la primera vez
+npm install -D @types/leaflet                           # Solo la primera vez
+npm install @stripe/stripe-js @stripe/react-stripe-js   # Solo la primera vez
 npm run dev
 ```
 

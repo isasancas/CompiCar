@@ -1,5 +1,6 @@
 package com.compicar.reserva;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.reserva.dto.ReservaDTO;
+import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
@@ -18,6 +20,7 @@ import com.compicar.notificacion.TipoNotificacion;
 import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
+import com.compicar.pago.PagoService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.ParadaRepository;
 import com.compicar.persona.Persona;
@@ -25,6 +28,7 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.stripe.exception.StripeException;
 
 @Service
 @Transactional
@@ -38,6 +42,8 @@ public class ReservaServiceImpl implements ReservaService {
     private final PagoRepository pagoRepository;
     private final NotificacionRepository notificacionRepository;
     private final ParadaRepository paradaRepository;
+    // 1. Inyecta el PagoService en el constructor
+    private final PagoService pagoService;
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
@@ -45,13 +51,15 @@ public class ReservaServiceImpl implements ReservaService {
                               ViajeRepository viajeRepository,
                               PagoRepository pagoRepository,
                               NotificacionRepository notificacionRepository,
-                              ParadaRepository paradaRepository) {
+                              ParadaRepository paradaRepository,
+                              PagoService pagoService) {
         this.reservaRepository = reservaRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
         this.pagoRepository = pagoRepository;
         this.notificacionRepository = notificacionRepository;
         this.paradaRepository = paradaRepository;
+        this.pagoService = pagoService;
     }
 
     public ReservaDTO toDTO(Reserva r) {
@@ -70,51 +78,107 @@ public class ReservaServiceImpl implements ReservaService {
 }
 
     @Override
-    public Reserva crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
+    @Transactional
+    public ReservaCreadaResponse crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
+
+        // 1. Obtener entidades
         Persona persona = personaRepository.findByEmail(usuarioEmail)
-            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         Viaje viaje = viajeRepository.findById(viajeId)
-            .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado"));
+                .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado"));
 
-        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+        // 2. Validaciones de negocio
+        if (plazasSolicitadas == null || plazasSolicitadas < 1)
             throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
-        }
-
-        if (viaje.getEstado() != EstadoViaje.PENDIENTE) {
-            throw new IllegalArgumentException("El viaje no está disponible para reservas (estado: " + viaje.getEstado() + ")");
-        }
-
-        if (viaje.getPlazasDisponibles() < plazasSolicitadas) {
+        if (viaje.getEstado() != EstadoViaje.PENDIENTE)
+            throw new IllegalArgumentException("El viaje no está disponible (estado: " + viaje.getEstado() + ")");
+        if (viaje.getPlazasDisponibles() < plazasSolicitadas)
             throw new IllegalArgumentException("Solo quedan " + viaje.getPlazasDisponibles() + " plazas disponibles.");
-        }
-        
-        if (viaje.getPersona().getId().equals(persona.getId())) {
+        if (viaje.getPersona().getId().equals(persona.getId()))
             throw new IllegalArgumentException("No puedes reservar tu propio viaje");
-        }
 
         Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
-            .orElseThrow(() -> new IllegalArgumentException("La parada de subida seleccionada no existe."));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
         Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
-            .orElseThrow(() -> new IllegalArgumentException("La parada de bajada seleccionada no existe."));
+                .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
 
+        // 3. Crear y guardar la Reserva PRIMERO (sin Pago) para obtener su ID
         Reserva reserva = new Reserva(
-            EstadoReserva.PENDIENTE, 
-            LocalDateTime.now(), 
-            persona, 
-            paradaSubida, 
-            paradaBajada, 
-            viaje, 
+            EstadoReserva.PENDIENTE,
+            LocalDateTime.now(),
+            persona,
+            paradaSubida,
+            paradaBajada,
+            viaje,
             plazasSolicitadas
         );
+        reserva.setSlug("reserva-tmp-" + System.currentTimeMillis()); // evita constraint unique
+        reserva = reservaRepository.saveAndFlush(reserva);
 
-        reserva = reservaRepository.save(reserva);
+        // 4. Ahora sí tenemos ID → slug definitivo
+        reserva.setSlug("reserva-" + reserva.getId());
+        reserva = reservaRepository.saveAndFlush(reserva);
 
+        // 5. Crear el Pago con la Reserva ya persistida
+        Pago pago = new Pago();
+        BigDecimal total = viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
+        pago.setImporteTotal(total);
+        BigDecimal comision = total.multiply(new BigDecimal("0.10"));
+        pago.setComision(comision);
+        pago.setImporteConductor(total.subtract(comision));
+        pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setFechaCreacion(LocalDateTime.now());
+        pago.setFechaPago(null);
+        pago.setReserva(reserva); // ← Reserva ya tiene ID en BD
+
+        // 6. Guardar el Pago (es el lado dueño de la FK en BD)
+        pago = pagoRepository.saveAndFlush(pago);
+        reserva.setPago(pago); // coherencia en memoria
+
+        // 7. Actualizar plazas del viaje
         viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - plazasSolicitadas);
         viajeRepository.save(viaje);
 
-        reserva.setSlug("reserva-" + reserva.getId());
+        // 8. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
+        try {
+            String clientSecret = pagoService.crearIntentoDePago(reserva);
+            return new ReservaCreadaResponse(reserva.getId(), reserva.getSlug(), clientSecret);
+        } catch (StripeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public Reserva anularReservaPorFalloPago(String usuarioEmail, Long reservaId) {
+        Persona pasajero = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
+
+        if (!reserva.getPersona().getId().equals(pasajero.getId())) {
+            throw new IllegalArgumentException("La reserva no pertenece al usuario");
+        }
+
+        if (reserva.getEstado() == EstadoReserva.CANCELADA) {
+            return reserva;
+        }
+
+        Pago pago = reserva.getPago();
+        if (pago != null && pago.getStripePaymentIntentId() != null) {
+            try {
+                pagoService.cancelarPago(pago.getStripePaymentIntentId());
+            } catch (StripeException e) {
+                throw new RuntimeException("Error al cancelar el pago fallido", e);
+            }
+        }
+
+        Viaje viaje = reserva.getViaje();
+        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+        viajeRepository.save(viaje);
+
+        reserva.setEstado(EstadoReserva.CANCELADA);
         return reservaRepository.save(reserva);
     }
 
@@ -147,13 +211,18 @@ public class ReservaServiceImpl implements ReservaService {
         long horasHastaSalida = Duration.between(ahora, viaje.getFechaHoraSalida()).toHours();
         
         Pago pago = reserva.getPago();
-        if (pago != null) {
-            if (horasHastaSalida < HORAS_LIMITE_CANCELACION) {
-                pago.setEstado(EstadoPago.COMPLETADO);
-            } else {
-                pago.setEstado(EstadoPago.REEMBOLSADO);
+        if (pago != null && pago.getStripePaymentIntentId() != null) {
+            try {
+                // Si faltan menos de 12h, capturamos el dinero (penalización)
+                if (horasHastaSalida < HORAS_LIMITE_CANCELACION) {
+                    pagoService.capturarPago(pago.getStripePaymentIntentId());
+                } else {
+                    // Si es pronto, liberamos el dinero (el pasajero no paga nada)
+                    pagoService.cancelarPago(pago.getStripePaymentIntentId());
+                }
+            } catch (StripeException e) {
+                throw new RuntimeException("Error al procesar la devolución en Stripe");
             }
-            pagoRepository.save(pago);
         }
 
         pasajero.incrementarCancelaciones();
@@ -161,6 +230,48 @@ public class ReservaServiceImpl implements ReservaService {
 
         reserva.setEstado(EstadoReserva.CANCELADA);
         
+        return reservaRepository.save(reserva);
+    }
+
+    @Override
+    @Transactional
+    public Reserva rechazarReservaComoConductor(String usuarioEmail, Long reservaId) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
+
+        if (!reserva.getViaje().getPersona().getId().equals(conductor.getId())) {
+            throw new IllegalArgumentException("Solo el conductor del viaje puede rechazar esta reserva");
+        }
+
+        if (reserva.getEstado() == EstadoReserva.CANCELADA) {
+            return reserva;
+        }
+
+        Pago pago = reserva.getPago();
+        if (pago != null && pago.getStripePaymentIntentId() != null) {
+            try {
+                pagoService.cancelarPago(pago.getStripePaymentIntentId());
+            } catch (StripeException e) {
+                throw new RuntimeException("Error al cancelar el pago de la reserva rechazada", e);
+            }
+        }
+
+        Viaje viaje = reserva.getViaje();
+        if (reserva.getEstado() == EstadoReserva.PENDIENTE) {
+            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+            viajeRepository.save(viaje);
+        }
+
+        notificacionRepository.save(new Notificacion(
+                "El conductor ha rechazado tu reserva en el viaje " + viaje.getSlug() + ".",
+                reserva.getPersona(),
+                TipoNotificacion.RESERVA_RECHAZADA
+        ));
+
+        reserva.setEstado(EstadoReserva.CANCELADA);
         return reservaRepository.save(reserva);
     }
 
@@ -303,7 +414,7 @@ public class ReservaServiceImpl implements ReservaService {
 
         Pago pago = reserva.getPago();
         if (pago != null) {
-            pago.setEstado(EstadoPago.COMPLETADO);
+            pago.setEstado(EstadoPago.CAPTURADO);
             pagoRepository.save(pago);
         }
 
@@ -316,26 +427,6 @@ public class ReservaServiceImpl implements ReservaService {
         List<Reserva> lista = reservaRepository.findPendientesParaConductor(conductorEmail);
         System.out.println("Reservas encontradas: " + lista.size());
         return lista;
-    }
-
-    @Override
-    public Reserva rechazarReserva(String conductorEmail, Long reservaId) {
-        Reserva reserva = reservaRepository.findById(reservaId)
-            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
-
-        if (!reserva.getViaje().getPersona().getEmail().equals(conductorEmail)) {
-            throw new IllegalArgumentException("No tienes permiso para rechazar esta reserva");
-        }
-
-        if (reserva.getEstado() == EstadoReserva.PENDIENTE) {
-            reserva.setEstado(EstadoReserva.CANCELADA);
-            
-            Viaje viaje = reserva.getViaje();
-            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
-            viajeRepository.save(viaje);
-        }
-
-        return reservaRepository.save(reserva);
     }
 
 }

@@ -86,6 +86,7 @@ public class SecurityConfig {
 
                 .requestMatchers("/api/registro/**").permitAll()
                 .requestMatchers("/api/login/**").permitAll()
+                .requestMatchers("/api/v1/webhooks/**").permitAll()
 
                 // Endpoints publicos de solo lectura para viajes
                 .requestMatchers(HttpMethod.GET, "/api/viajes/publicos/**").permitAll()

@@ -19,4 +19,10 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     @Query("SELECT p FROM Pago p WHERE p.reserva = :reserva")
     Optional<Pago> findByReserva(@Param("reserva") Reserva reserva);
+
+    // Para encontrar el pago cuando Stripe nos envíe una notificación (Webhook)
+    Optional<Pago> findByStripePaymentIntentId(String stripePaymentIntentId);
+    
+    // Para obtener el pago asociado a una reserva específica
+    Optional<Pago> findByReservaId(Long reservaId);
 }
