@@ -29,6 +29,9 @@ public class ValoracionDTO {
 
     private String slug;
 
+    @NotNull(message = "El viaje es obligatorio")
+    private Long viajeId;
+
     public ValoracionDTO() {
     }
 
@@ -40,10 +43,11 @@ public class ValoracionDTO {
         this.autorId = valoracion.getAutor() != null ? valoracion.getAutor().getId() : null;
         this.valoradoId = valoracion.getValorado() != null ? valoracion.getValorado().getId() : null;
         this.slug = valoracion.getSlug();
+        this.viajeId = valoracion.getViaje() != null ? valoracion.getViaje().getId() : null;
     }
 
     public ValoracionDTO(Long id, Integer puntuacion, String comentario, LocalDateTime fecha, Long autorId,
-            Long valoradoId, String slug) {
+            Long valoradoId, String slug, Long viajeId) {
         this.id = id;
         this.puntuacion = puntuacion;
         this.comentario = comentario;
@@ -51,6 +55,7 @@ public class ValoracionDTO {
         this.autorId = autorId;
         this.valoradoId = valoradoId;
         this.slug = slug;
+        this.viajeId = viajeId;
     }
 
     public Long getId() {
@@ -107,5 +112,13 @@ public class ValoracionDTO {
 
     public void setSlug(String slug) {
         this.slug = slug;
+    }
+
+    public Long getViajeId() {
+        return viajeId;
+    }
+
+    public void setViajeId(Long viajeId) {
+        this.viajeId = viajeId;
     }
 }

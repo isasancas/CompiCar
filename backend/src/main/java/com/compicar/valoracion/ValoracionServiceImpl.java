@@ -1,5 +1,6 @@
 package com.compicar.valoracion;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Service;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.valoracion.dto.ValoracionDTO;
+import com.compicar.viaje.Viaje;
+import com.compicar.viaje.ViajeRepository;
 
 import jakarta.transaction.Transactional;
 
@@ -19,23 +22,57 @@ public class ValoracionServiceImpl implements ValoracionService {
 
     private final ValoracionRepository valoracionRepository;
     private final PersonaRepository personaRepository;
+    private final ViajeRepository viajeRepository;
 
     @Autowired
-    public ValoracionServiceImpl(ValoracionRepository valoracionRepository, PersonaRepository personaRepository) {
+    public ValoracionServiceImpl(ValoracionRepository valoracionRepository, PersonaRepository personaRepository, ViajeRepository viajeRepository) {
         this.valoracionRepository = valoracionRepository;
         this.personaRepository = personaRepository;
+        this.viajeRepository = viajeRepository;
     }
 
     @Override
     public ValoracionDTO crearValoracion(ValoracionDTO valoracionDTO) {
+        Viaje viaje = viajeRepository.findById(valoracionDTO.getViajeId())
+                .orElseThrow(() -> new IllegalArgumentException("El viaje especificado no existe"));
+
+        Persona conductor = viaje.getPersona();
+        if (conductor == null) {
+            throw new IllegalArgumentException("El viaje no tiene conductor asignado");
+        }
+
+        if (valoracionDTO.getValoradoId() != null && !conductor.getId().equals(valoracionDTO.getValoradoId())) {
+            throw new IllegalArgumentException("Solo puedes valorar al conductor del viaje realizado");
+        }
+
+        boolean esPasajeroDelViaje = viaje.getReservas().stream()
+                .anyMatch(reserva -> reserva.getPersona().getId().equals(valoracionDTO.getAutorId()));
+
+        if (!esPasajeroDelViaje) {
+            throw new IllegalArgumentException("Solo puedes valorar un viaje en el que hayas participado como pasajero");
+        }
+
+        boolean yaValorado = valoracionRepository.existePorAutorIdAndViajeId(
+                valoracionDTO.getAutorId(), 
+                valoracionDTO.getViajeId()
+        );
+        if (yaValorado) {
+            throw new IllegalArgumentException("Ya has valorado este viaje anteriormente");
+        }
+
         Valoracion valoracion = new Valoracion();
-        aplicarDatos(valoracion, valoracionDTO);
+        valoracion.setPuntuacion(valoracionDTO.getPuntuacion());
+        valoracion.setComentario(valoracionDTO.getComentario());
+        valoracion.setFecha(LocalDateTime.now());
+        valoracion.setAutor(personaRepository.findById(valoracionDTO.getAutorId())
+                .orElseThrow(() -> new IllegalArgumentException("Autor no encontrado")));
+        valoracion.setValorado(conductor);
+        valoracion.setViaje(viaje);
 
-        Valoracion valoracionGuardada = valoracionRepository.save(valoracion);
-        valoracionGuardada.setSlug("valoracion-" + valoracionGuardada.getId());
-        valoracionGuardada = valoracionRepository.save(valoracionGuardada);
-
-        return new ValoracionDTO(valoracionGuardada);
+        Valoracion guardada = valoracionRepository.save(valoracion);
+        guardada.setSlug("valoracion-" + guardada.getId());
+        guardada = valoracionRepository.save(guardada);
+        return new ValoracionDTO(guardada);
     }
 
     @Override
