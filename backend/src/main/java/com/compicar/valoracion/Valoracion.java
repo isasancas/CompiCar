@@ -17,7 +17,7 @@ import jakarta.validation.constraints.Min;
 
 @Entity
 @Table(name = "valoracion")
-public abstract class Valoracion {
+public class Valoracion {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
