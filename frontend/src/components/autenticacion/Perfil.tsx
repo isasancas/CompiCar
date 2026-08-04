@@ -39,6 +39,7 @@ type ResumenActividad = {
 
 const Perfil: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilData | null>(null);
+  const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
   const [vehiculos, setVehiculos] = useState<VehiculoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -241,6 +242,38 @@ const Perfil: React.FC = () => {
     }
   }, [clearLocalSession]);
 
+  const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/valoraciones/valorado/${personaId}`), {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (!response.ok) {
+        return;
+      }
+
+      const valoraciones = await response.json();
+      setTotalValoracionesRecibidas(Array.isArray(valoraciones) ? valoraciones.length : 0);
+    } catch {
+      // Si falla, mantenemos el valor actual para no bloquear la pantalla de perfil.
+    }
+  }, [clearLocalSession]);
+
   useEffect(() => {
     Promise.all([fetchPerfil(), fetchVehiculos(), fetchResumenActividad()])
       .catch(() => {
@@ -248,6 +281,25 @@ const Perfil: React.FC = () => {
       })
       .finally(() => setLoading(false));
   }, [fetchPerfil, fetchVehiculos, fetchResumenActividad]);
+
+  useEffect(() => {
+    if (!perfil?.id) {
+      setTotalValoracionesRecibidas(0);
+      return;
+    }
+
+    const personaId = perfil.id;
+    fetchTotalValoracionesRecibidas(personaId);
+
+    const refreshOnFocus = () => {
+      fetchTotalValoracionesRecibidas(personaId);
+    };
+
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [perfil?.id, fetchTotalValoracionesRecibidas]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -890,8 +942,16 @@ const Perfil: React.FC = () => {
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
               <p className="mt-6 text-xl text-slate-700">
-                Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
+                Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp;
+                ({totalValoracionesRecibidas} {totalValoracionesRecibidas === 1 ? 'reseña' : 'reseñas'})
               </p>
+              <button
+                type="button"
+                className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow hover:opacity-90"
+                onClick={() => navigate('/valoraciones')}
+              >
+                Ver mis valoraciones
+              </button>
             </div>
           </section>
         </div>

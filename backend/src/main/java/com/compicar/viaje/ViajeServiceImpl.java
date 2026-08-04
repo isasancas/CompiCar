@@ -546,6 +546,7 @@ public class ViajeServiceImpl implements ViajeService {
             vehiculoDTO,
             paradasDTO,
             viaje.getSlug(),
+            viaje.getPersona().getId(),
             viaje.getPersona().getNombre(),
             viaje.getPersona().getSlug(),
             reservasDTO
