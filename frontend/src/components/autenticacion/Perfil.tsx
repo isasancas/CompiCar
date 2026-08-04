@@ -892,6 +892,13 @@ const Perfil: React.FC = () => {
               <p className="mt-6 text-xl text-slate-700">
                 Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
               </p>
+              <button
+                type="button"
+                className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow hover:opacity-90"
+                onClick={() => navigate('/valoraciones')}
+              >
+                Ver mis valoraciones
+              </button>
             </div>
           </section>
         </div>

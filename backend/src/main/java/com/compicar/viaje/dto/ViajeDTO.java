@@ -15,6 +15,7 @@ public class ViajeDTO {
     private VehiculoDTO vehiculo;
     private List<ParadaDTO> paradas;
     private String slug;
+    private Long conductorId;
     private String conductorNombre;
     private String conductorSlug;
     private List<ReservaDTO> reservas;
@@ -24,7 +25,7 @@ public class ViajeDTO {
 
     public ViajeDTO(Long id, LocalDateTime fechaHoraSalida, String estado, Integer plazasDisponibles,
                    BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug,
-                   String conductorNombre, String conductorSlug, List<ReservaDTO> reservas) {
+                   Long conductorId, String conductorNombre, String conductorSlug, List<ReservaDTO> reservas) {
         this.id = id;
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
@@ -33,6 +34,7 @@ public class ViajeDTO {
         this.vehiculo = vehiculo;
         this.paradas = paradas;
         this.slug = slug;
+        this.conductorId = conductorId;
         this.conductorNombre = conductorNombre;
         this.conductorSlug = conductorSlug;
         this.reservas = reservas;
@@ -100,6 +102,14 @@ public class ViajeDTO {
 
     public void setSlug(String slug) {
         this.slug = slug;
+    }
+
+    public Long getConductorId() {
+        return conductorId;
+    }
+
+    public void setConductorId(Long conductorId) {
+        this.conductorId = conductorId;
     }
 
     public String getConductorNombre() {

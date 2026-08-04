@@ -4,8 +4,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.compicar.persona.Persona;
@@ -33,6 +36,11 @@ public class ValoracionServiceImpl implements ValoracionService {
 
     @Override
     public ValoracionDTO crearValoracion(ValoracionDTO valoracionDTO) {
+        Persona autorAutenticado = obtenerPersonaAutenticada();
+        if (!autorAutenticado.getId().equals(valoracionDTO.getAutorId())) {
+            throw new AccessDeniedException("Solo puedes crear valoraciones con tu propia cuenta");
+        }
+
         Viaje viaje = viajeRepository.findById(valoracionDTO.getViajeId())
                 .orElseThrow(() -> new IllegalArgumentException("El viaje especificado no existe"));
 
@@ -68,16 +76,18 @@ public class ValoracionServiceImpl implements ValoracionService {
                 .orElseThrow(() -> new IllegalArgumentException("Autor no encontrado")));
         valoracion.setValorado(conductor);
         valoracion.setViaje(viaje);
+        valoracion.setSlug(generarSlugValoracion(viaje.getId(), valoracion.getAutor().getId()));
 
-        Valoracion guardada = valoracionRepository.save(valoracion);
-        guardada.setSlug("valoracion-" + guardada.getId());
-        guardada = valoracionRepository.save(guardada);
-        return new ValoracionDTO(guardada);
+        return new ValoracionDTO(valoracionRepository.save(valoracion));
     }
 
     @Override
     public void eliminarValoracion(Long id) {
-        valoracionRepository.deleteById(id);
+        Valoracion valoracion = valoracionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Valoración no encontrada"));
+
+        asegurarAutorAutenticado(valoracion);
+        valoracionRepository.delete(valoracion);
     }
 
     @Override
@@ -85,8 +95,12 @@ public class ValoracionServiceImpl implements ValoracionService {
         Valoracion valoracionExistente = valoracionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Valoración no encontrada"));
 
-        aplicarDatos(valoracionExistente, valoracionDTO);
-        valoracionExistente.setSlug(valoracionExistente.getSlug() != null ? valoracionExistente.getSlug() : "valoracion-" + id);
+        asegurarAutorAutenticado(valoracionExistente);
+
+        if (valoracionDTO.getPuntuacion() != null) {
+            valoracionExistente.setPuntuacion(valoracionDTO.getPuntuacion());
+        }
+        valoracionExistente.setComentario(valoracionDTO.getComentario());
 
         return new ValoracionDTO(valoracionRepository.save(valoracionExistente));
     }
@@ -111,28 +125,30 @@ public class ValoracionServiceImpl implements ValoracionService {
         return valoracionRepository.findById(id).map(ValoracionDTO::new);
     }
 
-    private void aplicarDatos(Valoracion valoracion, ValoracionDTO valoracionDTO) {
-        Persona autor = personaRepository.findById(valoracionDTO.getAutorId())
-                .orElseThrow(() -> new IllegalArgumentException("Autor no encontrado"));
-        Persona valorado = personaRepository.findById(valoracionDTO.getValoradoId())
-                .orElseThrow(() -> new IllegalArgumentException("Persona valorada no encontrada"));
-
-        valoracion.setPuntuacion(valoracionDTO.getPuntuacion());
-        valoracion.setComentario(valoracionDTO.getComentario());
-        valoracion.setAutor(autor);
-        valoracion.setValorado(valorado);
-
-        if (valoracionDTO.getSlug() != null && !valoracionDTO.getSlug().isBlank()) {
-            valoracion.setSlug(valoracionDTO.getSlug());
-        }
-    }
-
     private List<ValoracionDTO> convertirAListaDTO(List<Valoracion> valoraciones) {
         List<ValoracionDTO> valoracionDTOs = new ArrayList<>();
         for (Valoracion valoracion : valoraciones) {
             valoracionDTOs.add(new ValoracionDTO(valoracion));
         }
         return valoracionDTOs;
+    }
+
+    private Persona obtenerPersonaAutenticada() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return personaRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+    }
+
+    private void asegurarAutorAutenticado(Valoracion valoracion) {
+        Persona autorAutenticado = obtenerPersonaAutenticada();
+        if (valoracion.getAutor() == null || !autorAutenticado.getId().equals(valoracion.getAutor().getId())) {
+            throw new AccessDeniedException("Solo puedes modificar o eliminar tus propias valoraciones");
+        }
+    }
+
+    private String generarSlugValoracion(Long viajeId, Long autorId) {
+        String random = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        return "valoracion-" + viajeId + "-" + autorId + "-" + random;
     }
 
 }

@@ -32,6 +32,10 @@ public class ValoracionDTO {
     @NotNull(message = "El viaje es obligatorio")
     private Long viajeId;
 
+    private String autorNombre;
+
+    private String valoradoNombre;
+
     public ValoracionDTO() {
     }
 
@@ -44,10 +48,12 @@ public class ValoracionDTO {
         this.valoradoId = valoracion.getValorado() != null ? valoracion.getValorado().getId() : null;
         this.slug = valoracion.getSlug();
         this.viajeId = valoracion.getViaje() != null ? valoracion.getViaje().getId() : null;
+        this.autorNombre = valoracion.getAutor() != null ? valoracion.getAutor().getNombre() : null;
+        this.valoradoNombre = valoracion.getValorado() != null ? valoracion.getValorado().getNombre() : null;
     }
 
     public ValoracionDTO(Long id, Integer puntuacion, String comentario, LocalDateTime fecha, Long autorId,
-            Long valoradoId, String slug, Long viajeId) {
+            Long valoradoId, String slug, Long viajeId, String autorNombre, String valoradoNombre) {
         this.id = id;
         this.puntuacion = puntuacion;
         this.comentario = comentario;
@@ -56,6 +62,8 @@ public class ValoracionDTO {
         this.valoradoId = valoradoId;
         this.slug = slug;
         this.viajeId = viajeId;
+        this.autorNombre = autorNombre;
+        this.valoradoNombre = valoradoNombre;
     }
 
     public Long getId() {
@@ -120,5 +128,21 @@ public class ValoracionDTO {
 
     public void setViajeId(Long viajeId) {
         this.viajeId = viajeId;
+    }
+
+    public String getAutorNombre() {
+        return autorNombre;
+    }
+
+    public void setAutorNombre(String autorNombre) {
+        this.autorNombre = autorNombre;
+    }
+
+    public String getValoradoNombre() {
+        return valoradoNombre;
+    }
+
+    public void setValoradoNombre(String valoradoNombre) {
+        this.valoradoNombre = valoradoNombre;
     }
 }
