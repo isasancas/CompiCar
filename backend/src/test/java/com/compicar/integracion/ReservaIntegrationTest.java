@@ -1,7 +1,11 @@
 package com.compicar.integracion;
 
+import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -14,6 +18,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class ReservaIntegrationTest extends BaseIntegrationTest {
+
+    @Autowired
+    private ReservaRepository reservaRepository;
 
     @Test
     void crearReservaYObtenerPorId_ok() throws Exception {
@@ -131,6 +138,11 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
+        // SIMULAR PAGO EXITOSO: Cambiamos el estado a PAGADA en la BDD para avanzar en el flujo
+        Reserva reserva = reservaRepository.findById(reservaId).orElseThrow();
+        reserva.setEstado(EstadoReserva.PAGADA);
+        reservaRepository.save(reserva);
+
         mockMvc.perform(get("/api/reservas/pendientes-conductor")
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())
@@ -212,11 +224,18 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             "paradaBajadaId", pBajada
         );
 
-        mockMvc.perform(post("/api/reservas/crear")
+        MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
             .header("Authorization", "Bearer " + passengerToken)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(payload)))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
+
+        Reserva reserva = reservaRepository.findById(reservaId).orElseThrow();
+        reserva.setEstado(EstadoReserva.PAGADA);
+        reservaRepository.save(reserva);
 
         mockMvc.perform(get("/api/reservas/mis-reservas")
             .header("Authorization", "Bearer " + passengerToken))
@@ -250,6 +269,19 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
+
+        MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
+            .header("Authorization", "Bearer " + passengerToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
+
+        Reserva reserva = reservaRepository.findById(reservaId).orElseThrow();
+        reserva.setEstado(EstadoReserva.PAGADA);
+        reservaRepository.save(reserva);
 
         mockMvc.perform(post("/api/reservas/crear")
             .header("Authorization", "Bearer " + passengerToken)
@@ -415,11 +447,15 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
+        Reserva reserva = reservaRepository.findById(reservaId).orElseThrow();
+        reserva.setEstado(EstadoReserva.PAGADA);
+        reservaRepository.save(reserva);
+
         mockMvc.perform(put("/api/reservas/rechazar")
             .param("reservaId", String.valueOf(reservaId))
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.estado").value("CANCELADA"));
+            .andExpect(jsonPath("$.estado").value("RECHAZADA"));
     }
 
     @Test

@@ -32,7 +32,7 @@ public class LimpiezaReservasScheduler {
     }
 
     /**
-     * 2. Se ejecuta continuamente cada 30 minutos (300.000 ms) mientras la app esté activa.
+     * 2. Se ejecuta continuamente cada 5 minutos (300.000 ms) mientras la app esté activa.
      */
     @Scheduled(fixedRate = 300000)
     @Transactional
