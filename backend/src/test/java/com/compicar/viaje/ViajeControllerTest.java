@@ -186,6 +186,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(10L, "Seat", "Ibiza", "1234ABC"),
                 List.of(new ParadaDTO(1L, "Sevilla", "ORIGEN", 1), new ParadaDTO(2L, "Cadiz", "DESTINO", 2)),
                 "sevilla-cadiz-2026-05-10",
+                1L,
                 "",
                 "",
                 List.of()
@@ -221,6 +222,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(12L, "Hyundai", "i20", "3333MNO"),
                 List.of(),
                 "malaga-granada-2026-05-12",
+                1L,
                 "",
                 "",
                 List.of()
@@ -247,6 +249,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(11L, "Toyota", "Yaris", "9876XYZ"),
                 List.of(),
                 "jerez-cadiz-2026-05-11",
+                1L,
                 "",
                 "",
                 List.of()
@@ -280,6 +283,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(20L, "Kia", "Ceed", "4567DEF"),
                 List.of(),
                 "sevilla-huelva-2026-06-01",
+                1L,
                 "",
                 "",
                 List.of()
@@ -305,17 +309,18 @@ class ViajeControllerTest {
     @Test
     void buscarViajesPublicos_conTodosFiltros_ok() throws Exception {
         ViajeDTO viaje = new ViajeDTO(
-                5L,
-                LocalDateTime.of(2026, 5, 15, 10, 0),
-                "PENDIENTE",
-                4,
-                new BigDecimal("14.50"),
-                new VehiculoDTO(15L, "Ford", "Focus", "5555ABC"),
-                List.of(),
-                "madrid-barcelona-2026-05-15",
-                "",
-                "",
-                List.of()
+            5L,
+            LocalDateTime.of(2026, 5, 15, 10, 0),
+            "PENDIENTE",
+            4,
+            new BigDecimal("14.50"),
+            new VehiculoDTO(15L, "Ford", "Focus", "5555ABC"),
+            List.of(),
+            "madrid-barcelona-2026-05-15",
+            1L,
+            "Nombre Conductor", 
+            "slug-conductor",
+            List.of()  
         );
 
         when(viajeService.buscarViajesPublicos("Madrid", "Barcelona", java.time.LocalDate.of(2026, 5, 15)))
@@ -341,6 +346,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(16L, "Peugeot", "308", "6666XYZ"),
                 List.of(),
                 "valencia-murcia-2026-05-20",
+                1L,
                 "",
                 "",
                 List.of()
@@ -380,6 +386,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(17L, "Renault", "Scenic", "7777DEF"),
                 List.of(),
                 "bilbao-vitoria-2026-05-25",
+                1L,
                 "",
                 "",
                 List.of()
@@ -412,6 +419,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(18L, "Nissan", "Qashqai", "8888GHI"),
                 List.of(),
                 "alicante-ibiza-2026-06-10",
+                1L,
                 "",
                 "",
                 List.of()
@@ -437,6 +445,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(19L, "Opel", "Astra", "9999JKL"),
                 List.of(),
                 "sevilla-jaen-2026-05-30",
+                1L,
                 "",
                 "",
                 List.of()
@@ -495,6 +504,7 @@ class ViajeControllerTest {
                 new VehiculoDTO(10L, "Seat", "Ibiza", "1234ABC"),
                 List.of(),
                 "sevilla-cadiz-2026-06-05",
+                1L,
                 "",
                 "",
                 List.of()
