@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -128,13 +129,12 @@ class ReservaServiceTest {
             return r;
         });
         when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pagoService.crearIntentoDePago(any(Reserva.class))).thenReturn("client-secret");
 
         ReservaCreadaResponse res = reservaService.crearReserva("user@compicar.com", 10L, 1, origenId, destinoId);
 
         assertEquals(1L, res.reservaId());
-        assertEquals(2, viaje.getPlazasDisponibles());
+        assertEquals(3, viaje.getPlazasDisponibles());
     }
 
     @Test
@@ -245,9 +245,10 @@ class ReservaServiceTest {
     void reservaConfirmada_ok_y_permiso() {
         try {
             Reserva r = new Reserva();
-            java.lang.reflect.Field rid = Reserva.class.getDeclaredField("id");
+            Field rid = Reserva.class.getDeclaredField("id");
             rid.setAccessible(true);
             rid.set(r, 30L);
+            r.setEstado(EstadoReserva.PAGADA);
 
             Viaje v = new Viaje();
             Persona owner = new Persona();
@@ -269,7 +270,7 @@ class ReservaServiceTest {
     void reservaNoPresentado_ok() {
         try {
             Reserva r = new Reserva();
-            java.lang.reflect.Field rid = Reserva.class.getDeclaredField("id");
+            Field rid = Reserva.class.getDeclaredField("id");
             rid.setAccessible(true);
             rid.set(r, 31L);
             when(reservaRepository.findById(31L)).thenReturn(Optional.of(r));
@@ -314,7 +315,7 @@ class ReservaServiceTest {
     void obtenerReservasComoConductor_devuelveLista() {
         Reserva r = new Reserva();
         try {
-            java.lang.reflect.Field rid = Reserva.class.getDeclaredField("id");
+            Field rid = Reserva.class.getDeclaredField("id");
             rid.setAccessible(true);
             rid.set(r, 60L);
         } catch (Exception e) {}
@@ -336,11 +337,11 @@ class ReservaServiceTest {
             v.setPlazasDisponibles(2);
 
             Reserva r = new Reserva();
-            java.lang.reflect.Field rid = Reserva.class.getDeclaredField("id");
+            Field rid = Reserva.class.getDeclaredField("id");
             rid.setAccessible(true);
             rid.set(r, 70L);
             r.setViaje(v);
-            r.setEstado(EstadoReserva.PENDIENTE);
+            r.setEstado(EstadoReserva.PAGADA);
             r.setCantidadPlazas(1);
 
             when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(owner));
@@ -348,7 +349,7 @@ class ReservaServiceTest {
             when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
             when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
             Reserva res = reservaService.rechazarReservaComoConductor("driver@compicar.com", 70L);
-            assertEquals(EstadoReserva.CANCELADA, res.getEstado());
+            assertEquals(EstadoReserva.RECHAZADA, res.getEstado());
             assertEquals(3, v.getPlazasDisponibles());
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -364,7 +365,7 @@ class ReservaServiceTest {
         pago.setStripePaymentIntentId("pi_test_100");
 
         Reserva reserva = crearReserva(
-                100L, pasajero, viaje, EstadoReserva.PENDIENTE, 2, pago);
+                100L, pasajero, viaje, EstadoReserva.PAGADA, 2, pago);
 
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(reservaRepository.findById(100L)).thenReturn(Optional.of(reserva));
@@ -397,7 +398,7 @@ class ReservaServiceTest {
         pago.setStripePaymentIntentId("pi_test_101");
 
         Reserva reserva = crearReserva(
-                101L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, pago);
+                101L, pasajero, viaje, EstadoReserva.PAGADA, 1, pago);
 
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(reservaRepository.findById(101L)).thenReturn(Optional.of(reserva));
@@ -425,7 +426,7 @@ class ReservaServiceTest {
         viaje.setFechaHoraSalida(LocalDateTime.now().plusHours(13));
 
         Reserva reserva = crearReserva(
-                102L, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+                102L, pasajero, viaje, EstadoReserva.PAGADA, 1, null);
 
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(reservaRepository.findById(102L)).thenReturn(Optional.of(reserva));
@@ -683,7 +684,7 @@ class ReservaServiceTest {
     }
 
     @Test
-    void rechazarReserva_estadoNoPendiente_noCambiaPlazas() throws Exception {
+    void rechazarReserva_estadoNoPermitido_lanzaExcepcion() throws Exception {
         Persona owner = new Persona();
         owner.setEmail("driver@compicar.com");
         setId(owner, 3L);
@@ -696,16 +697,16 @@ class ReservaServiceTest {
         Reserva r = new Reserva();
         setId(r, 51L);
         r.setViaje(v);
-        r.setEstado(EstadoReserva.CONFIRMADA);
+        r.setEstado(EstadoReserva.CANCELADA); // O PENDIENTE
         r.setCantidadPlazas(1);
 
         when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(owner));
         when(reservaRepository.findById(51L)).thenReturn(Optional.of(r));
-        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Reserva res = reservaService.rechazarReservaComoConductor("driver@compicar.com", 51L);
+        assertThrows(IllegalStateException.class, () -> {
+            reservaService.rechazarReservaComoConductor("driver@compicar.com", 51L);
+        });
 
-        assertEquals(EstadoReserva.CANCELADA, res.getEstado());
         assertEquals(2, v.getPlazasDisponibles());
         verify(viajeRepository, never()).save(any(Viaje.class));
     }

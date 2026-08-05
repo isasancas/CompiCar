@@ -42,7 +42,6 @@ public class ReservaServiceImpl implements ReservaService {
     private final PagoRepository pagoRepository;
     private final NotificacionRepository notificacionRepository;
     private final ParadaRepository paradaRepository;
-    // 1. Inyecta el PagoService en el constructor
     private final PagoService pagoService;
 
     @Autowired
@@ -63,19 +62,19 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     public ReservaDTO toDTO(Reserva r) {
-    return new ReservaDTO(
-        r.getId(),
-        r.getEstado().name(),
-        r.getFechaHoraReserva(),
-        r.getViaje().getId(),
-        r.getPersona().getId(),
-        r.getPersona().getNombre(),
-        r.getPersona().getSlug(),
-        r.getParadaSubida().getId(),
-        r.getParadaBajada().getId(),
-        r.getCantidadPlazas()
-    );
-}
+        return new ReservaDTO(
+            r.getId(),
+            r.getEstado().name(),
+            r.getFechaHoraReserva(),
+            r.getViaje().getId(),
+            r.getPersona().getId(),
+            r.getPersona().getNombre(),
+            r.getPersona().getSlug(),
+            r.getParadaSubida().getId(),
+            r.getParadaBajada().getId(),
+            r.getCantidadPlazas()
+        );
+    }
 
     @Override
     @Transactional
@@ -129,17 +128,13 @@ public class ReservaServiceImpl implements ReservaService {
         pago.setEstado(EstadoPago.PENDIENTE);
         pago.setFechaCreacion(LocalDateTime.now());
         pago.setFechaPago(null);
-        pago.setReserva(reserva); // ← Reserva ya tiene ID en BD
+        pago.setReserva(reserva);
 
         // 6. Guardar el Pago (es el lado dueño de la FK en BD)
         pago = pagoRepository.saveAndFlush(pago);
-        reserva.setPago(pago); // coherencia en memoria
+        reserva.setPago(pago);
 
-        // 7. Actualizar plazas del viaje
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - plazasSolicitadas);
-        viajeRepository.save(viaje);
-
-        // 8. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
+        // 7. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
         try {
             String clientSecret = pagoService.crearIntentoDePago(reserva);
             return new ReservaCreadaResponse(reserva.getId(), reserva.getSlug(), clientSecret);
@@ -200,12 +195,15 @@ public class ReservaServiceImpl implements ReservaService {
 
         Viaje viaje = reserva.getViaje();
 
+        // Solo devolver plazas si la reserva se había pagado
+        if (reserva.getEstado() == EstadoReserva.PAGADA) {
+            int plazasADevolver = reserva.getCantidadPlazas();
+            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + plazasADevolver);
+            viajeRepository.save(viaje);
+        }
+
         String msj = pasajero.getNombre() + " ha cancelado su reserva en tu viaje.";
         notificacionRepository.save(new Notificacion(msj, viaje.getPersona(), TipoNotificacion.RESERVA_CANCELADA));
-
-        int plazasADevolver = reserva.getCantidadPlazas();
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + plazasADevolver);
-        viajeRepository.save(viaje);
 
         LocalDateTime ahora = LocalDateTime.now();
         long horasHastaSalida = Duration.between(ahora, viaje.getFechaHoraSalida()).toHours();
@@ -246,32 +244,37 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalArgumentException("Solo el conductor del viaje puede rechazar esta reserva");
         }
 
-        if (reserva.getEstado() == EstadoReserva.CANCELADA) {
-            return reserva;
-        }
-
-        Pago pago = reserva.getPago();
-        if (pago != null && pago.getStripePaymentIntentId() != null) {
-            try {
-                pagoService.cancelarPago(pago.getStripePaymentIntentId());
-            } catch (StripeException e) {
-                throw new RuntimeException("Error al cancelar el pago de la reserva rechazada", e);
-            }
+        // 1. Validar estado: Solo se rechazan reservas PAGADAS (con el dinero retenido)
+        if (reserva.getEstado() != EstadoReserva.PAGADA) {
+            throw new IllegalStateException("Solo puedes rechazar reservas que están pendientes de tu confirmación.");
         }
 
         Viaje viaje = reserva.getViaje();
-        if (reserva.getEstado() == EstadoReserva.PENDIENTE) {
-            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
-            viajeRepository.save(viaje);
+        
+        // 2. Devolver las plazas al viaje (porque se restaron al pasar a PAGADA)
+        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+        viajeRepository.save(viaje);
+
+        // 3. Cancelar la retención en Stripe (Libera el dinero de la tarjeta)
+        Pago pago = reserva.getPago();
+        if (pago != null && pago.getStripePaymentIntentId() != null) {
+            try {
+                pagoService.cancelarPago(pago.getStripePaymentIntentId()); 
+                pago.setEstado(EstadoPago.REEMBOLSADO);
+            } catch (StripeException e) {
+                throw new RuntimeException("Error al cancelar la retención de pago en Stripe", e);
+            }
         }
 
+        // 4. Notificar al pasajero
         notificacionRepository.save(new Notificacion(
                 "El conductor ha rechazado tu reserva en el viaje " + viaje.getSlug() + ".",
                 reserva.getPersona(),
                 TipoNotificacion.RESERVA_RECHAZADA
         ));
 
-        reserva.setEstado(EstadoReserva.CANCELADA);
+        // 5. Actualizar estado final
+        reserva.setEstado(EstadoReserva.RECHAZADA);
         return reservaRepository.save(reserva);
     }
 
@@ -366,12 +369,20 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     @Override
+    @Transactional
     public Reserva reservaConfirmada(String conductorEmail, Long reservaId) {
         Reserva reserva = reservaRepository.findById(reservaId)
-        .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada")); 
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada")); 
+            
         if (!reserva.getViaje().getPersona().getEmail().equals(conductorEmail)) {
             throw new IllegalArgumentException("No tienes permiso para confirmar esta reserva");
         }
+
+        // NUEVO: Validar que la reserva ya haya sido pagada por el pasajero
+        if (reserva.getEstado() != EstadoReserva.PAGADA) {
+            throw new IllegalStateException("Solo puedes confirmar reservas que ya han sido pagadas por el pasajero.");
+        }
+
         reserva.setEstado(EstadoReserva.CONFIRMADA);
         return reservaRepository.save(reserva);
     }

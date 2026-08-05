@@ -3,6 +3,7 @@ package com.compicar.pago;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,11 +15,15 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
+import com.compicar.viaje.Viaje;
+import com.compicar.viaje.ViajeRepository;
+import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.StripeObject;
 import com.stripe.net.Webhook;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -30,14 +35,17 @@ public class PagoServiceImpl implements PagoService {
     private final PagoRepository pagoRepository;
     private final PersonaRepository personaRepository;
     private final ReservaRepository reservaRepository;
-    private final StripeService stripeService; // La clase que creamos antes
+    private final StripeService stripeService;
+    private final ViajeRepository viajeRepository;
 
     @Autowired
-    public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, ReservaRepository reservaRepository, StripeService stripeService) {
+    public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, 
+        ReservaRepository reservaRepository, StripeService stripeService, ViajeRepository viajeRepository) {
         this.pagoRepository = pagoRepository;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
         this.stripeService = stripeService;
+        this.viajeRepository = viajeRepository;
     }
 
     @Override
@@ -188,36 +196,83 @@ public class PagoServiceImpl implements PagoService {
     public void procesarEventoWebhook(String payload, String sigHeader) {
         Event event;
         try {
-            // Validamos que el mensaje realmente viene de Stripe
             event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
         } catch (SignatureVerificationException e) {
             throw new RuntimeException("Firma de Webhook inválida");
         }
 
-        // Analizamos qué pasó
-        EventDataObjectDeserializer dataObjectDeserializer = event.getDataObjectDeserializer();
-        if (dataObjectDeserializer.getObject().isEmpty()) return;
+        // 1. Filtramos rápido: Si no es un evento de PaymentIntent, lo ignoramos y salimos.
+        if (!event.getType().startsWith("payment_intent.")) {
+            return; 
+        }
 
-        PaymentIntent intent = (PaymentIntent) dataObjectDeserializer.getObject().get();
+        System.out.println("👉 PROCESANDO EVENTO DE PAYMENT INTENT: " + event.getType());
 
+        // 2. Extraemos el objeto de forma segura, a prueba de desajustes de versión
+        EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+        StripeObject stripeObject;
+
+        if (deserializer.getObject().isPresent()) {
+        stripeObject = deserializer.getObject().get();
+        } else {
+            try {
+                stripeObject = deserializer.deserializeUnsafe();
+            } catch (EventDataObjectDeserializationException e) {
+                System.out.println("❌ ERROR deserializando el objeto de Stripe: " + e.getMessage());
+                return;
+            }
+        }
+
+        PaymentIntent intent = (PaymentIntent) stripeObject;
+
+        // 3. Ahora sí, ejecutamos nuestra lógica
         switch (event.getType()) {
             case "payment_intent.amount_capturable_updated":
                 actualizarEstadoPago(intent.getId(), EstadoPago.AUTORIZADO);
-                // ACTIVAR RESERVA
+                
                 pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
-                    Reserva r = pago.getReserva();
-                    r.setEstado(EstadoReserva.CONFIRMADA);
-                    reservaRepository.save(r);
+                    Reserva reserva = pago.getReserva();
+                    
+                    if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
+                        System.out.println("⚠️ La reserva no está PENDIENTE. Estado actual: " + reserva.getEstado());
+                        return; 
+                    }
+
+                    Viaje viaje = reserva.getViaje();
+
+                    if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
+                        reserva.setEstado(EstadoReserva.CANCELADA); 
+                        reservaRepository.save(reserva);
+                        System.out.println("❌ Sobreaforo detectado. Reserva cancelada.");
+                        
+                        try {
+                            actualizarEstadoPago(intent.getId(), EstadoPago.REEMBOLSADO);
+                        } catch (Exception e) {
+                            System.out.println("Error cancelando retención por sobreaforo");
+                        }
+                        return; 
+                    }
+
+                    // Todo OK: Restamos plazas y pasamos a PAGADA
+                    viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
+                    viajeRepository.save(viaje);
+
+                    reserva.setEstado(EstadoReserva.PAGADA);
+                    reservaRepository.save(reserva);
+                    System.out.println("✅ ÉXITO: Reserva PAGADA y plazas restadas.");
                 });
-            break;
+                break;
                 
             case "payment_intent.payment_failed":
-                // El banco rechazó la operación
                 actualizarEstadoPago(intent.getId(), EstadoPago.FALLIDO);
+                pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
+                    Reserva r = pago.getReserva();
+                    r.setEstado(EstadoReserva.CANCELADA);
+                    reservaRepository.save(r);
+                });
                 break;
                 
             case "payment_intent.succeeded":
-                // Esto ocurre después de que tú llamas a capturarPago() y sale bien
                 actualizarEstadoPago(intent.getId(), EstadoPago.CAPTURADO);
                 break;
         }

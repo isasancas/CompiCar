@@ -317,33 +317,15 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
         assertTrue(crearReservaResp.statusCode() == 200 || crearReservaResp.statusCode() == 201,
             "Crear reserva API debe devolver 200/201, devolvió " + crearReservaResp.statusCode());
 
-        // Poll API mis-reservas hasta que aparezca la reserva y obtener su id
-        long reservaId = -1;
-        boolean encontrada = false;
-        for (int i = 0; i < 20; i++) { // ~10s total
-            HttpRequest misReservasReq = HttpRequest.newBuilder()
-                .uri(URI.create(apiBase + "/api/reservas/mis-reservas"))
-                .header("Authorization", "Bearer " + tokenPasajero)
-                .GET()
-                .build();
-            HttpResponse<String> misReservasResp = http.send(misReservasReq, HttpResponse.BodyHandlers.ofString());
-            if (misReservasResp.statusCode() == 200) {
-                JsonNode arr = mapper.readTree(misReservasResp.body());
-                for (JsonNode r : arr) {
-                    long rViajeId = r.path("viajeId").asLong(-1);
-                    if (rViajeId == viajeId) {
-                        reservaId = r.path("id").asLong(-1);
-                        encontrada = true;
-                        break;
-                    }
-                }
-                if (encontrada) break;
-            }
-            Thread.sleep(500);
-        }
-        assertTrue(encontrada && reservaId > 0, "La reserva debería aparecer en /api/reservas/mis-reservas tras crearla");
+        // 🟢 1. Extraemos el reservaId directamente de la respuesta del POST de creación
+        JsonNode crearReservaJson = mapper.readTree(crearReservaResp.body());
+        long reservaId = crearReservaJson.has("reservaId") 
+            ? crearReservaJson.path("reservaId").asLong(-1) 
+            : crearReservaJson.path("id").asLong(-1);
 
-        // Cancelar la reserva vía API
+        assertTrue(reservaId > 0, "Se esperaba un reservaId válido en la respuesta de creación");
+
+        // 🟢 2. Cancelamos la reserva vía API
         HttpRequest cancelarReq = HttpRequest.newBuilder()
             .uri(URI.create(apiBase + "/api/reservas/cancelar?reservaId=" + reservaId))
             .header("Authorization", "Bearer " + tokenPasajero)
@@ -353,7 +335,7 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
         assertTrue(cancelarResp.statusCode() == 200 || cancelarResp.statusCode() == 204,
             "Cancelar reserva API debe devolver 200/204, devolvió " + cancelarResp.statusCode());
 
-        // Esperar a que la cancelación se refleje en la API
+        // 🟢 3. Verificamos que ahora que está CANCELADA, SÍ aparece en mis-reservas
         boolean cancelada = false;
         for (int i = 0; i < 20; i++) { // ~10s total
             HttpRequest misReservasReq = HttpRequest.newBuilder()
@@ -465,31 +447,13 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
         assertTrue(crearReservaResp.statusCode() == 200 || crearReservaResp.statusCode() == 201,
             "Crear reserva API debe devolver 200/201, devolvió " + crearReservaResp.statusCode());
 
-        // Poll API mis-reservas hasta encontrar la reserva y obtener su id
-        long reservaId = -1;
-        for (int i = 0; i < 20; i++) {
-            HttpRequest misReservasReq = HttpRequest.newBuilder()
-                .uri(URI.create(apiBase + "/api/reservas/mis-reservas"))
-                .header("Authorization", "Bearer " + tokenPasajero)
-                .GET()
-                .build();
-            HttpResponse<String> misReservasResp = http.send(misReservasReq, HttpResponse.BodyHandlers.ofString());
-            if (misReservasResp.statusCode() == 200) {
-                JsonNode arr = mapper.readTree(misReservasResp.body());
-                for (JsonNode r : arr) {
-                    long rViajeId = r.path("viajeId").asLong(-1);
-                    if (rViajeId == viajeId) {
-                        reservaId = r.path("id").asLong(-1);
-                        break;
-                    }
-                }
-                if (reservaId > 0) break;
-            }
-            Thread.sleep(500);
-        }
-        assertTrue(reservaId > 0, "No se encontró la reserva creada en /api/reservas/mis-reservas");
+        JsonNode crearReservaJson = mapper.readTree(crearReservaResp.body());
+        long reservaId = crearReservaJson.has("reservaId") 
+            ? crearReservaJson.path("reservaId").asLong(-1) 
+            : crearReservaJson.path("id").asLong(-1);
 
-        // Actualizar la reserva vía API (pasar a 2 plazas)
+        assertTrue(reservaId > 0, "Se esperaba un reservaId válido en la respuesta de creación");
+
         String actualizarBody = """
             {
             "viajeId": %d,
@@ -505,36 +469,17 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
             .header("Content-Type", "application/json")
             .PUT(HttpRequest.BodyPublishers.ofString(actualizarBody))
             .build();
+
         HttpResponse<String> actualizarResp = http.send(actualizarReq, HttpResponse.BodyHandlers.ofString());
         assertTrue(actualizarResp.statusCode() == 200,
             "Actualizar reserva API debe devolver 200, devolvió " + actualizarResp.statusCode());
 
-        // Verificar el cambio en /api/reservas/mis-reservas
-        boolean actualizado = false;
-        for (int i = 0; i < 20; i++) {
-            HttpRequest misReservasReq = HttpRequest.newBuilder()
-                .uri(URI.create(apiBase + "/api/reservas/mis-reservas"))
-                .header("Authorization", "Bearer " + tokenPasajero)
-                .GET()
-                .build();
-            HttpResponse<String> misReservasResp = http.send(misReservasReq, HttpResponse.BodyHandlers.ofString());
-            if (misReservasResp.statusCode() == 200) {
-                JsonNode arr = mapper.readTree(misReservasResp.body());
-                for (JsonNode r : arr) {
-                    if (r.path("id").asLong(-1) == reservaId) {
-                        int plazas = r.path("cantidadPlazas").asInt(-1);
-                        if (plazas == 2 || r.path("estado").asText("").toUpperCase().contains("PENDIENTE")) {
-                            actualizado = true;
-                        }
-                        break;
-                    }
-                }
-                if (actualizado) break;
-            }
-            Thread.sleep(500);
-        }
+        JsonNode actualizadoJson = mapper.readTree(actualizarResp.body());
+        int plazasActuales = actualizadoJson.has("cantidadPlazas")
+            ? actualizadoJson.path("cantidadPlazas").asInt(-1)
+            : actualizadoJson.path("plazas").asInt(-1);
 
-        assertTrue(actualizado, "La reserva actualizada debe mostrarse con 2 plazas o en estado PENDIENTE");
+        assertTrue(plazasActuales == 2, "La reserva debe haberse actualizado correctamente a 2 plazas");
     }
 
     private String crearViajePorApiYObtenerSlug(String token, long vehiculoId, String origen, String destino, LocalDateTime fechaHora) throws Exception {
