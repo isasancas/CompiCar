@@ -133,4 +133,15 @@ public class ViajeController {
         return ResponseEntity.ok(actualizado);
     }
 
+    @PutMapping("/{slug}/finalizar")
+    public ViajeDTO finalizarViaje(@PathVariable String slug) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.finalizarViaje(usuarioEmail, slug);
+    }
+
 }

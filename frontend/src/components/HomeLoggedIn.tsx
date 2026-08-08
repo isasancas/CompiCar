@@ -65,7 +65,7 @@ const HomeLoggedIn: React.FC = () => {
         <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Hola, {nombreMostrado}</h1>
 
         <div className="mt-4 rounded-2xl border border-slate-400 bg-gray-100 p-5">
-          <h2 className="text-3xl md:text-4xl font-medium text-slate-900">A donde quieres ir hoy?</h2>
+          <h2 className="text-3xl md:text-4xl font-medium text-slate-900">¿A dónde quieres ir?</h2>
 
           <form onSubmit={handleBuscar} className="mt-5 grid gap-3 md:grid-cols-4">
             <input

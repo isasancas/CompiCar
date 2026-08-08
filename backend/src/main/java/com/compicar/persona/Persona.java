@@ -1,5 +1,6 @@
 package com.compicar.persona;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -81,6 +82,12 @@ public class Persona {
 
     @Column(name = "stripe_account_id", unique = true)
     private String stripeAccountId; // Para el que recibe (conductor - Stripe Connect)
+
+    @Column(name = "fondos_totales", nullable = false)
+    private BigDecimal fondosTotales = BigDecimal.ZERO;
+
+    @Column(name = "fondos_actuales", nullable = false)
+    private BigDecimal fondosActuales = BigDecimal.ZERO;
 
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
@@ -199,6 +206,14 @@ public class Persona {
         return stripeAccountId;
     }
 
+    public BigDecimal getFondosTotales() {
+        return fondosTotales;
+    }
+
+    public BigDecimal getFondosActuales() {
+        return fondosActuales;
+    }
+
     public void incrementarCancelaciones() {
         if (this.numeroCancelaciones == null) {
             this.numeroCancelaciones = 0;
@@ -279,7 +294,15 @@ public class Persona {
 
     public void setStripeAccountId(String stripeAccountId) {
         this.stripeAccountId = stripeAccountId;
-    }   
+    }
+
+    public void setFondosTotales(BigDecimal fondosTotales) {
+        this.fondosTotales = fondosTotales;
+    }
+
+    public void setFondosActuales(BigDecimal fondosActuales) {
+        this.fondosActuales = fondosActuales;
+    }
 
     @Override
     public String toString() {
