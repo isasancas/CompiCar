@@ -429,6 +429,48 @@ public class ViajeServiceImpl implements ViajeService {
         return convertirADTO(viaje);
     }
 
+    /**
+     * INICIAR VIAJE:
+     * Verifica que sea el conductor, que el viaje esté publicado y que haya
+     * llegado la fecha/hora de salida programada para cambiar su estado a INICIADO.
+     */
+    @Override
+    public ViajeDTO iniciarViaje(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        // 1. Validar que la persona sea el conductor de este viaje
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede iniciar este viaje");
+        }
+
+        // 2. Validar estado actual del viaje
+        if (viaje.getEstado() == EstadoViaje.INICIADO || viaje.getEstado() == EstadoViaje.EN_CURSO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya se encuentra iniciado");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede iniciar un viaje en estado " + viaje.getEstado());
+        }
+
+        // 3. Validar que la fecha y hora de salida hayan llegado
+        if (LocalDateTime.now().isBefore(viaje.getFechaHoraSalida())) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, 
+                "Aún no ha llegado la fecha u hora de salida programada"
+            );
+        }
+
+        // 4. Cambiar estado a INICIADO (o EstadoViaje.EN_CURSO según la constante de tu Enum)
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
     private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {
         List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
 

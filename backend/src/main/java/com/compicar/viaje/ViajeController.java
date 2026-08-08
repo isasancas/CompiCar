@@ -1,5 +1,6 @@
 package com.compicar.viaje;
 
+import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -142,6 +143,12 @@ public class ViajeController {
 
         String usuarioEmail = auth.getName();
         return viajeService.finalizarViaje(usuarioEmail, slug);
+    }
+
+    @PutMapping("/{slug}/iniciar")
+    public ResponseEntity<ViajeDTO> iniciarViaje(Principal principal, @PathVariable String slug) {
+        ViajeDTO viaje = viajeService.iniciarViaje(principal.getName(), slug);
+        return ResponseEntity.ok(viaje);
     }
 
 }
