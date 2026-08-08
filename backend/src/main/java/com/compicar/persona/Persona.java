@@ -77,11 +77,11 @@ public class Persona {
     @Column(name = "preferencia")
     private List<String> preferenciasViaje = new ArrayList<>();
 
-    @Column(name = "stripe_customer_id", unique = true)
-    private String stripeCustomerId; // Para el que paga (pasajero)
+    @Column(name = "stripe_pasajero_id", unique = true)
+    private String stripePasajeroId;
 
-    @Column(name = "stripe_account_id", unique = true)
-    private String stripeAccountId; // Para el que recibe (conductor - Stripe Connect)
+    @Column(name = "stripe_conductor_id", unique = true)
+    private String stripeConductorId;
 
     @Column(name = "fondos_totales", nullable = false)
     private BigDecimal fondosTotales = BigDecimal.ZERO;
@@ -101,7 +101,7 @@ public class Persona {
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
-            String telefono, String stripeCustomerId, String stripeAccountId) {
+            String telefono, String stripePasajeroId, String stripeConductorId) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
         this.segundoApellido = segundoApellido;
@@ -110,13 +110,13 @@ public class Persona {
         this.telefono = telefono;
         this.slug = "persona-" + id;
         this.numeroCancelaciones = 0;
-        this.stripeCustomerId = stripeCustomerId;
-        this.stripeAccountId = stripeAccountId;
+        this.stripePasajeroId = stripePasajeroId;
+        this.stripeConductorId = stripeConductorId;
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
             String telefono, List<Vehiculo> vehiculos, List<Reserva> reservas, List<Viaje> viajes,
-            List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas, String stripeCustomerId, String stripeAccountId) {
+            List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas, String stripePasajeroId, String stripeConductorId) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
         this.segundoApellido = segundoApellido;
@@ -130,8 +130,8 @@ public class Persona {
         this.valoracionesEmitidas = valoracionesEmitidas;
         this.valoracionesRecibidas = valoracionesRecibidas;
         this.numeroCancelaciones = 0;
-        this.stripeCustomerId = stripeCustomerId;
-        this.stripeAccountId = stripeAccountId;
+        this.stripePasajeroId = stripePasajeroId;
+        this.stripeConductorId = stripeConductorId;
     }
 
     public Long getId() {
@@ -198,12 +198,12 @@ public class Persona {
         return numeroCancelaciones;
     }
 
-    public String getStripeCustomerId() {
-        return stripeCustomerId;
+    public String getStripePasajeroId() {
+        return stripePasajeroId;
     }
 
-    public String getStripeAccountId() {
-        return stripeAccountId;
+    public String getStripeConductorId() {
+        return stripeConductorId;
     }
 
     public BigDecimal getFondosTotales() {
@@ -288,12 +288,12 @@ public class Persona {
         this.numeroCancelaciones = numeroCancelaciones;
     }
 
-    public void setStripeCustomerId(String stripeCustomerId) {
-        this.stripeCustomerId = stripeCustomerId;
+    public void setStripePasajeroId(String stripePasajeroId) {
+        this.stripePasajeroId = stripePasajeroId;
     }
 
-    public void setStripeAccountId(String stripeAccountId) {
-        this.stripeAccountId = stripeAccountId;
+    public void setStripeConductorId(String stripeConductorId) {
+        this.stripeConductorId = stripeConductorId;
     }
 
     public void setFondosTotales(BigDecimal fondosTotales) {
@@ -308,6 +308,8 @@ public class Persona {
     public String toString() {
         return "Persona{id=" + id + ", nombre='" + nombre + "', primerApellido='" + primerApellido
                 + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono
-                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + slug +  ", stripeCustomerId=" + stripeCustomerId + ", stripeAccountId=" + stripeAccountId + "}";
+                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + 
+                slug +  ", stripePasajeroId=" + stripePasajeroId + ", stripeConductorId=" + stripeConductorId + 
+                ", fondosTotales=" + fondosTotales + ", fondosActuales=" + fondosActuales + "}";
     }
 }

@@ -1,5 +1,8 @@
 package com.compicar.persona;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -11,6 +14,13 @@ import org.springframework.security.core.Authentication;
 
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
+import com.stripe.exception.StripeException;
+import com.stripe.model.Account;
+import com.stripe.model.AccountLink;
+import com.stripe.model.Transfer;
+import com.stripe.param.AccountCreateParams;
+import com.stripe.param.AccountLinkCreateParams;
+import com.stripe.param.TransferCreateParams;
 import com.compicar.autenticacion.registro.Registro;
 import com.compicar.config.SlugUtils;
 
@@ -146,6 +156,105 @@ public class PersonaServiceImpl implements PersonaService {
         
         persona.setFoto(fotoBase64);
         personaRepository.save(persona);
+    }
+
+    /**
+     * Permite al usuario retirar sus fondos acumulados.
+     * Restricción: Saldo mínimo de 10.00€.
+     */
+    @Override
+    @Transactional
+    public Map<String, Object> retirarFondos(String email) {
+        Persona persona = personaRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        BigDecimal fondosActuales = persona.getFondosActuales() != null 
+                ? persona.getFondosActuales() 
+                : BigDecimal.ZERO;
+
+        BigDecimal minimoRetirada = new BigDecimal("10.00");
+
+        // 1. Validar que tenga al menos 10€
+        if (fondosActuales.compareTo(minimoRetirada) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, 
+                    "Se requiere un saldo mínimo de 10.00€ para realizar la retirada. Saldo actual: " + fondosActuales + "€"
+            );
+        }
+
+        try {
+            boolean necesitaOnboarding = false;
+            Account account = null;
+
+            // 1. Si no tiene ID en BD, hay que crearlo
+            if (persona.getStripeConductorId() == null || persona.getStripeConductorId().isBlank()) {
+                AccountCreateParams accountParams = AccountCreateParams.builder()
+                        .setType(AccountCreateParams.Type.EXPRESS)
+                        .setCountry("ES")
+                        .setEmail(persona.getEmail())
+                        .setCapabilities(AccountCreateParams.Capabilities.builder()
+                                .setTransfers(AccountCreateParams.Capabilities.Transfers.builder()
+                                        .setRequested(true)
+                                        .build())
+                                .build())
+                        .build();
+
+                account = Account.create(accountParams);
+                persona.setStripeConductorId(account.getId());
+                personaRepository.save(persona);
+                necesitaOnboarding = true;
+            } else {
+                // 2. Si ya tiene ID, consultamos a Stripe si completó todos sus datos (IBAN, etc.)
+                account = Account.retrieve(persona.getStripeConductorId());
+                if (!Boolean.TRUE.equals(account.getDetailsSubmitted())) {
+                    necesitaOnboarding = true;
+                }
+            }
+
+            // Si la cuenta es nueva O si dejó el onboarding a mitad de camino:
+            if (necesitaOnboarding) {
+                AccountLinkCreateParams linkParams = AccountLinkCreateParams.builder()
+                        .setAccount(account.getId())
+                        .setRefreshUrl("http://localhost:5173/perfil?stripe=refresh")
+                        .setReturnUrl("http://localhost:5173/perfil?stripe=success")
+                        .setType(AccountLinkCreateParams.Type.ACCOUNT_ONBOARDING)
+                        .build();
+
+                AccountLink accountLink = AccountLink.create(linkParams);
+
+                return Map.of(
+                    "status", "REQUIRES_ONBOARDING",
+                    "url", accountLink.getUrl()
+                );
+            }
+
+            // 3. Si llegó aquí, los datos están completados y la capacidad activa -> Ejecutar transferencia
+            long amountInCents = fondosActuales.multiply(new BigDecimal("100")).longValue();
+
+            TransferCreateParams transferParams = TransferCreateParams.builder()
+                    .setAmount(amountInCents)
+                    .setCurrency("eur")
+                    .setDestination(persona.getStripeConductorId())
+                    .setDescription("Retiro de saldo de " + persona.getNombre())
+                    .build();
+
+            Transfer transfer = Transfer.create(transferParams);
+
+            persona.setFondosActuales(BigDecimal.ZERO);
+            personaRepository.save(persona);
+
+            return Map.of(
+                "status", "SUCCESS",
+                "mensaje", "Retiro completado con éxito",
+                "transferId", transfer.getId()
+            );
+
+        } catch (StripeException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error al comunicarse con Stripe: " + e.getMessage()
+            );
+        }
     }
 
     private String generarSlugUnico(String baseSlug) {
