@@ -46,11 +46,21 @@ const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose }) => {
 
             <section>
               <h3 className="font-bold text-slate-900 text-base mb-2">3. Reservas y Pagos</h3>
-              <p>Los pagos se realizan a través de la plataforma mediante <strong>Braintree</strong>. El importe se retiene en el momento de la reserva y se transfiere al conductor una vez finalizado el viaje sin incidencias.</p>
+              <p>Los pagos se realizan a través de la plataforma mediante pasarela de pagos segura. El importe se retiene en el momento de la reserva y se transfiere al conductor una vez finalizado el viaje sin incidencias.</p>
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">4. Política de Cancelación</h3>
+              <h3 className="font-bold text-slate-900 text-base mb-2">4. Cálculo de Costes y Comisión de la Plataforma</h3>
+              <p>El precio orientativo por plaza se calcula en función de la distancia, el consumo estimado del vehículo y el precio del combustible:</p>
+              <ul className="list-disc pl-5 space-y-2 mt-2">
+                <li><strong>Comisión de CompiCar:</strong> Se aplica una comisión del <strong>20%</strong> sobre el coste operativo base (que incluye el combustible estimado y el desgaste del vehículo) para el mantenimiento y soporte de la plataforma.</li>
+                <li><strong>Costes de Pasarela de Pago:</strong> El precio final de la reserva incluye de manera proporcional los cargos asociados a la gestión de cobro de la entidad de pagos (porcentaje aplicable más coste fijo por transacción).</li>
+                <li>Dichas comisiones de gestión son estrictamente necesarias para el servicio y no son reembolsables en caso de cancelaciones fuera de plazo.</li>
+              </ul>
+            </section>
+
+            <section>
+              <h3 className="font-bold text-slate-900 text-base mb-2">5. Política de Cancelación</h3>
               <ul className="list-disc pl-5 space-y-2">
                 <li><strong>Pasajero:</strong> Devolución del 100% si se cancela con más de 24h de antelación. 50% si es entre 24h y 2h. Sin devolución si es menos de 2h.</li>
                 <li><strong>Conductor:</strong> La cancelación injustificada puede conllevar penalizaciones en la valoración y suspensión de la cuenta.</li>
@@ -58,12 +68,12 @@ const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onClose }) => {
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">5. Normas de Comportamiento</h3>
+              <h3 className="font-bold text-slate-900 text-base mb-2">6. Normas de Comportamiento</h3>
               <p>Se exige puntualidad, respeto y cumplimiento de las normas de tráfico. Queda prohibido el transporte de sustancias ilegales o el comportamiento inadecuado que ponga en riesgo la seguridad.</p>
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">6. Responsabilidad</h3>
+              <h3 className="font-bold text-slate-900 text-base mb-2">7. Responsabilidad</h3>
               <p>CompiCar no se hace responsable de los incidentes ocurridos durante el trayecto, siendo responsabilidad del seguro del vehículo y de los usuarios implicados.</p>
             </section>
 

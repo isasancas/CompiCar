@@ -145,26 +145,39 @@ public class ViajeServiceImpl implements ViajeService {
             detalle = "Gemini no disponible, se usa precio fallback";
         }
 
-        // Coste de combustible
-        BigDecimal costeCombustible = litrosEstimados.multiply(precioLitro).setScale(2, RoundingMode.HALF_UP);
+        // 1. Coste de combustible
+        BigDecimal costeCombustible = litrosEstimados.multiply(precioLitro).setScale(4, RoundingMode.HALF_UP);
 
-        // Coste de desgaste (Gemini estima coste por km)
+        // 2. Coste de desgaste
         BigDecimal costeDesgaste = obtenerCosteDesgasteConGemini(vehiculo, distanciaKm);
         
-        // Coste total: combustible + desgaste
-        BigDecimal costeTotal = costeCombustible.add(costeDesgaste).setScale(2, RoundingMode.HALF_UP);
+        // 3. Coste operativo base: combustible + desgaste
+        BigDecimal costeOperativoBase = costeCombustible.add(costeDesgaste);
         
-        BigDecimal precioMin = costeTotal.multiply(BigDecimal.valueOf(0.80)).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal precioMax = costeTotal.multiply(BigDecimal.valueOf(1.20)).setScale(2, RoundingMode.HALF_UP);
+        // 4. Aplicar nuestra comisión del 20%
+        BigDecimal comisionPlataforma = costeOperativoBase.multiply(BigDecimal.valueOf(0.20));
+        BigDecimal subtotalConComision = costeOperativoBase.add(comisionPlataforma);
+
+        // 5. Aplicar comisión de Stripe (Ejemplo: 1.5% + 0.25€)
+        // Formula inversa o directa aproximada para cubrir pasarela: (Subtotal + 0.25) / (1 - 0.015)
+        BigDecimal porcentajeStripe = BigDecimal.valueOf(0.015);
+        BigDecimal fijoStripe = BigDecimal.valueOf(0.25);
+        BigDecimal precioFinalConStripe = subtotalConComision.add(fijoStripe)
+            .divide(BigDecimal.ONE.subtract(porcentajeStripe), 2, RoundingMode.HALF_UP);
+
+        // Márgenes orientativos para el pasajero basados en el precio final calculado
+        BigDecimal precioMin = precioFinalConStripe.multiply(BigDecimal.valueOf(0.90)).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal precioMax = precioFinalConStripe.multiply(BigDecimal.valueOf(1.10)).setScale(2, RoundingMode.HALF_UP);
 
         PrecioTrayectoResponseDTO response = new PrecioTrayectoResponseDTO();
         response.setLitrosEstimados(litrosEstimados.setScale(2, RoundingMode.HALF_UP));
         response.setPrecioCombustibleLitro(precioLitro.setScale(3, RoundingMode.HALF_UP));
-        response.setCosteTotalCombustible(costeCombustible);
+        response.setCosteTotalCombustible(costeCombustible.setScale(2, RoundingMode.HALF_UP));
         response.setPrecioMinimoPasajero(precioMin);
         response.setPrecioMaximoPasajero(precioMax);
         response.setFuente(fuente);
         response.setDetalle(detalle);
+        
         return response;
     }
 
