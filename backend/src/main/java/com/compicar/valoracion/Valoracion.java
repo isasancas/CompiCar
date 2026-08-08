@@ -47,6 +47,7 @@ public class Valoracion {
 
     @ManyToOne
     @JoinColumn(name = "viaje_id", nullable = false)
+    @JsonIgnore
     private Viaje viaje;
 
     @Column(nullable = false, unique = true, length = 180)

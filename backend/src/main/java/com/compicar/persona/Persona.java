@@ -8,6 +8,7 @@ import com.compicar.reserva.Reserva;
 import com.compicar.valoracion.Valoracion;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.viaje.Viaje;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -46,18 +47,23 @@ public class Persona {
     private String telefono;
 
     @OneToMany(mappedBy = "persona")
+    @JsonIgnore
     private List<Vehiculo> vehiculos;
 
     @OneToMany(mappedBy = "persona")
+    @JsonIgnore
     private List<Reserva> reservas;
 
     @OneToMany(mappedBy = "persona")
+    @JsonIgnore
     private List<Viaje> viajes;
 
     @OneToMany(mappedBy = "autor")
+    @JsonIgnore
     private List<Valoracion> valoracionesEmitidas;
 
     @OneToMany(mappedBy = "valorado")
+    @JsonIgnore
     private List<Valoracion> valoracionesRecibidas;
 
     @Column(nullable = false, unique = true, length = 180)

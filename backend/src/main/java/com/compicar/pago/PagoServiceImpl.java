@@ -10,6 +10,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.notificacion.TipoNotificacion;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.EstadoReserva;
@@ -37,15 +40,17 @@ public class PagoServiceImpl implements PagoService {
     private final ReservaRepository reservaRepository;
     private final StripeService stripeService;
     private final ViajeRepository viajeRepository;
+    private final NotificacionRepository notificacionRepository;
 
     @Autowired
     public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, 
-        ReservaRepository reservaRepository, StripeService stripeService, ViajeRepository viajeRepository) {
+        ReservaRepository reservaRepository, StripeService stripeService, ViajeRepository viajeRepository, NotificacionRepository notificacionRepository) {
         this.pagoRepository = pagoRepository;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
         this.stripeService = stripeService;
         this.viajeRepository = viajeRepository;
+        this.notificacionRepository = notificacionRepository;
     }
 
     @Override
@@ -259,7 +264,21 @@ public class PagoServiceImpl implements PagoService {
 
                     reserva.setEstado(EstadoReserva.PAGADA);
                     reservaRepository.save(reserva);
-                    System.out.println("✅ ÉXITO: Reserva PAGADA y plazas restadas.");
+
+                    Persona conductor = viaje.getPersona();
+                    Persona pasajero = reserva.getPersona();
+
+                    String mensaje = pasajero.getNombre() + " ha pagado y reservado " + reserva.getCantidadPlazas() + " plaza(s).";
+
+                    Notificacion notificacion = new Notificacion(
+                        mensaje,
+                        conductor,
+                        TipoNotificacion.NUEVA_RESERVA
+                    );
+
+                    notificacionRepository.save(notificacion);
+
+                    System.out.println("ÉXITO: Reserva PAGADA, plazas restadas y notificación enviada al conductor.");
                 });
                 break;
                 
