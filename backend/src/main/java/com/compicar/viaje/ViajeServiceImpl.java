@@ -99,6 +99,9 @@ public class ViajeServiceImpl implements ViajeService {
         viaje.setPersona(conductor);
         viaje.setVehiculo(vehiculo);
 
+        // Generar checkin aleatorio de 6 caracteres alfanuméricos
+        viaje.setCheckin(generarCheckin());
+
         if (viaje.getParadas() != null) {
             for (int i = 0; i < viaje.getParadas().size(); i++) {
                 Parada parada = viaje.getParadas().get(i);
@@ -435,7 +438,7 @@ public class ViajeServiceImpl implements ViajeService {
      * llegado la fecha/hora de salida programada para cambiar su estado a INICIADO.
      */
     @Override
-    public ViajeDTO iniciarViaje(String usuarioEmail, String slug) {
+    public ViajeDTO iniciarViaje(String usuarioEmail, String slug, String checkin) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
 
@@ -447,9 +450,9 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede iniciar este viaje");
         }
 
-        // 2. Validar estado actual del viaje
-        if (viaje.getEstado() == EstadoViaje.INICIADO || viaje.getEstado() == EstadoViaje.EN_CURSO) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya se encuentra iniciado");
+        // 2. Validar estado actual del viaje: no permitir si ya está en curso, finalizado o cancelado
+        if (viaje.getEstado() == EstadoViaje.EN_CURSO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está en curso");
         }
 
         if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
@@ -464,11 +467,26 @@ public class ViajeServiceImpl implements ViajeService {
             );
         }
 
-        // 4. Cambiar estado a INICIADO (o EstadoViaje.EN_CURSO según la constante de tu Enum)
-        viaje.setEstado(EstadoViaje.INICIADO);
+        // 5. Validar el checkin introducido por el conductor
+        if (viaje.getCheckin() == null || !viaje.getCheckin().equalsIgnoreCase(checkin)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin inválido");
+        }
+
+        // 6. Cambiar estado a EN_CURSO
+        viaje.setEstado(EstadoViaje.EN_CURSO);
         viajeRepository.save(viaje);
 
         return convertirADTO(viaje);
+    }
+
+    private String generarCheckin() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder sb = new StringBuilder(6);
+        java.util.Random rnd = new java.util.Random();
+        for (int i = 0; i < 6; i++) {
+            sb.append(chars.charAt(rnd.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
     private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {

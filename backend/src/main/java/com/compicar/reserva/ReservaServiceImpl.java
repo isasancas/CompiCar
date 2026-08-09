@@ -385,13 +385,19 @@ public class ReservaServiceImpl implements ReservaService {
 
         reserva.setEstado(EstadoReserva.CONFIRMADA);
 
+        String mensaje = "El conductor ha confirmado tu reserva en el viaje " + reserva.getViaje().getSlug() + ".";
+        if (reserva.getViaje().getCheckin() != null) {
+            mensaje += " Código de checkin: " + reserva.getViaje().getCheckin() + ".";
+        }
         notificacionRepository.save(new Notificacion(
-                "El conductor ha confirmado tu reserva en el viaje " + reserva.getViaje().getSlug() + ".",
-                reserva.getPersona(),
-                TipoNotificacion.RESERVA_ACEPTADA
+            mensaje,
+            reserva.getPersona(),
+            TipoNotificacion.RESERVA_ACEPTADA
         ));
         return reservaRepository.save(reserva);
     }
+
+    
 
     @Override
     public Reserva reservaNoPresentado(Long reservaId) {

@@ -268,10 +268,17 @@ const DetalleViaje: React.FC = () => {
 
     setIniciando(true);
     setIniciarMsg(null);
-
     try {
+      // Preguntar al conductor por el código de checkin antes de iniciar
+      const code = window.prompt('Introduce el código de checkin proporcionado por el pasajero');
+      if (!code) {
+        setIniciarMsg('❌ Iniciación cancelada (código no proporcionado)');
+        setIniciando(false);
+        return;
+      }
+
       const response = await fetch(
-        buildApiUrl(`/api/viajes/${viaje.slug}/iniciar`),
+        buildApiUrl(`/api/viajes/${viaje.slug}/iniciar?checkin=${encodeURIComponent(code)}`),
         {
           method: 'PUT',
           headers: {
@@ -297,6 +304,8 @@ const DetalleViaje: React.FC = () => {
       setIniciando(false);
     }
   };
+
+  
 
   const finalizarViaje = async () => {
     if (!viaje) return;
@@ -456,6 +465,7 @@ const DetalleViaje: React.FC = () => {
       }
 
       const data = await resReserva.json();
+      console.debug('Respuesta creación reserva:', data);
       if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
 
       setReservaEnProcesoId(data.reservaId);
@@ -879,6 +889,7 @@ const DetalleViaje: React.FC = () => {
                     >
                       {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
                     </button>
+                    
                   </div>
                 )}
               </>
@@ -914,15 +925,21 @@ const DetalleViaje: React.FC = () => {
                   </div>
                 )}
 
-                {/* BOTÓN CHECK-IN (VISIBLE SOLO CUANDO EL VIAJE ESTÁ INICIADO) */}
-                {viaje.estado === 'INICIADO' && (
-                  <button
-                    type="button"
-                    className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
-                  >
-                    📲 Realizar Check-in
-                  </button>
-                )}
+                    {/* Cuando el viaje está EN ESTADO INICIADO, permitir al conductor introducir el checkin para pasar a EN_CURSO */}
+                    {viaje.estado === 'INICIADO' && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={iniciarViaje}
+                          disabled={iniciando}
+                          className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
+                        >
+                          {iniciando ? 'Verificando check-in...' : '📲 Introducir check-in y comenzar viaje'}
+                        </button>
+                      </div>
+                    )}
+
+                {/* El conductor ya introduce el código al iniciar el viaje; el check-in de pasajero está disponible en la vista de pasajero */}
 
                 {/* BOTÓN FINALIZAR VIAJE (UNA VEZ EN CURSO) */}
                 {viaje.estado === 'EN_CURSO' && (

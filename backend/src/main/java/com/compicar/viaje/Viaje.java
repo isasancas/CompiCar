@@ -67,6 +67,9 @@ public class Viaje {
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
 
+    @Column(nullable = false, length = 6)
+    private String checkin;
+
     // Constructores
     public Viaje() {
     }
@@ -123,6 +126,10 @@ public class Viaje {
         return slug;
     }
 
+    public String getCheckin() {
+        return checkin;
+    }
+
     // Setters
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
         this.fechaHoraSalida = fechaHoraSalida;
@@ -152,6 +159,10 @@ public class Viaje {
         this.paradas = paradas;
     }
 
+    public void setCheckin(String checkin) {
+        this.checkin = checkin;
+    }
+
     public void setSlug(String slug) {
         this.slug = slug;
     }
@@ -159,7 +170,7 @@ public class Viaje {
     @Override
     public String toString() {
         return "Viaje{id=" + id + ", fechaHoraSalida=" + fechaHoraSalida + ", estado=" + estado
-                + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + ", slug=" + slug + "}";
+            + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + ", slug=" + slug + ", checkin=" + checkin + "}";
     }
 
 }
