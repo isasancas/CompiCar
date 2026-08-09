@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,6 +33,9 @@ public class PersonaServiceImpl implements PersonaService {
 
     private final PersonaRepository personaRepository;
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.frontend.url}")
+    private String frontendUrl;
 
     @Autowired
     public PersonaServiceImpl(PersonaRepository personaRepository, PasswordEncoder passwordEncoder) {
@@ -215,8 +219,8 @@ public class PersonaServiceImpl implements PersonaService {
             if (necesitaOnboarding) {
                 AccountLinkCreateParams linkParams = AccountLinkCreateParams.builder()
                         .setAccount(account.getId())
-                        .setRefreshUrl("http://localhost:5173/perfil?stripe=refresh")
-                        .setReturnUrl("http://localhost:5173/perfil?stripe=success")
+                        .setRefreshUrl(frontendUrl + "/perfil?stripe=refresh")
+                        .setReturnUrl(frontendUrl + "/perfil?stripe=success")
                         .setType(AccountLinkCreateParams.Type.ACCOUNT_ONBOARDING)
                         .build();
 
