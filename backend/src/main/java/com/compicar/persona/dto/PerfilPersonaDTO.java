@@ -1,5 +1,6 @@
 package com.compicar.persona.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.compicar.persona.Persona;
@@ -15,6 +16,8 @@ public class PerfilPersonaDTO {
     private Double reputacion;
     private String slug;
     private List<String> preferenciasViaje;
+    private BigDecimal fondosTotales;
+    private BigDecimal fondosActuales;
 
     public PerfilPersonaDTO() {
     }
@@ -29,10 +32,12 @@ public class PerfilPersonaDTO {
         this.reputacion = persona.getReputacion();
         this.slug = persona.getSlug();
         this.preferenciasViaje = persona.getPreferenciasViaje();
+        this.fondosTotales = persona.getFondosTotales();
+        this.fondosActuales = persona.getFondosActuales();
     }
 
     public PerfilPersonaDTO(Long id, String nombre, String primerApellido, String segundoApellido, String email,
-            String telefono, Double reputacion, String slug, List<String> preferenciasViaje) {
+            String telefono, Double reputacion, String slug, List<String> preferenciasViaje, BigDecimal fondosTotales, BigDecimal fondosActuales) {
         this.id = id;
         this.nombre = nombre;
         this.primerApellido = primerApellido;
@@ -42,6 +47,8 @@ public class PerfilPersonaDTO {
         this.reputacion = reputacion;
         this.slug = slug;
         this.preferenciasViaje = preferenciasViaje;
+        this.fondosTotales = fondosTotales;
+        this.fondosActuales = fondosActuales;
     }
 
     public Long getId() {
@@ -80,6 +87,14 @@ public class PerfilPersonaDTO {
         return preferenciasViaje;
     }
 
+    public BigDecimal getFondosTotales() {
+        return fondosTotales;
+    }
+
+    public BigDecimal getFondosActuales() {
+        return fondosActuales;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -116,6 +131,14 @@ public class PerfilPersonaDTO {
         this.preferenciasViaje = preferenciasViaje;
     }
 
+    public void setFondosTotales(BigDecimal fondosTotales) {
+        this.fondosTotales = fondosTotales;
+    }
+
+    public void setFondosActuales(BigDecimal fondosActuales) {
+        this.fondosActuales = fondosActuales;
+    }
+
     @Override
     public String toString() {
         return "PerfilPersonaDTO{" +
@@ -128,6 +151,8 @@ public class PerfilPersonaDTO {
                 ", reputacion=" + reputacion +
                 ", slug='" + slug + '\'' +
                 ", preferenciasViaje=" + preferenciasViaje +
+                ", fondosTotales=" + fondosTotales +
+                ", fondosActuales=" + fondosActuales +
                 '}';
     }
 

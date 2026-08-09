@@ -2,6 +2,8 @@ package com.compicar.notificacion;
 
 import java.time.LocalDateTime;
 import com.compicar.persona.Persona;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.*;
 
 @Entity
@@ -23,6 +25,7 @@ public class Notificacion {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "receptor_id", nullable = false)
+    @JsonIgnore
     private Persona receptor;
 
     @Enumerated(EnumType.STRING)

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.compicar.persona.Persona;
 import com.compicar.viaje.Viaje; // <-- IMPORTANTE: Importar la entidad Viaje
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -36,14 +37,17 @@ public class Valoracion {
 
     @ManyToOne
     @JoinColumn(name = "autor_id", nullable = false)
+    @JsonIgnore
     private Persona autor;
 
     @ManyToOne
     @JoinColumn(name = "valorado_id", nullable = false)
+    @JsonIgnore
     private Persona valorado;
 
     @ManyToOne
     @JoinColumn(name = "viaje_id", nullable = false)
+    @JsonIgnore
     private Viaje viaje;
 
     @Column(nullable = false, unique = true, length = 180)

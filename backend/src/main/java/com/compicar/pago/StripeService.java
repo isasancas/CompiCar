@@ -38,7 +38,7 @@ public class StripeService {
         PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
                 .setAmount(montoCentavos)
                 .setCurrency("eur")
-                .setCustomer(reserva.getPersona().getStripeCustomerId())
+                .setCustomer(reserva.getPersona().getStripePasajeroId())
                 .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.MANUAL) // Clave para congelar
                 .build();
 
