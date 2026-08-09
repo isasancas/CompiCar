@@ -434,11 +434,11 @@ public class ViajeServiceImpl implements ViajeService {
 
     /**
      * INICIAR VIAJE:
-     * Verifica que sea el conductor, que el viaje esté publicado y que haya
-     * llegado la fecha/hora de salida programada para cambiar su estado a INICIADO.
+     * Verifica que sea el conductor y que haya llegado la fecha/hora de salida
+     * para cambiar su estado a INICIADO.
      */
     @Override
-    public ViajeDTO iniciarViaje(String usuarioEmail, String slug, String checkin) {
+    public ViajeDTO iniciarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
 
@@ -467,12 +467,37 @@ public class ViajeServiceImpl implements ViajeService {
             );
         }
 
-        // 5. Validar el checkin introducido por el conductor
-        if (viaje.getCheckin() == null || !viaje.getCheckin().equalsIgnoreCase(checkin)) {
+        // 4. Cambiar estado a INICIADO. El check-in se valida en una segunda acción.
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
+    /**
+     * CONFIRMAR CHECK-IN:
+     * Solo permite pasar de INICIADO a EN_CURSO si el código es correcto.
+     */
+    @Override
+    public ViajeDTO confirmarCheckin(String usuarioEmail, String slug, String checkin) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede realizar el check-in de este viaje");
+        }
+
+        if (viaje.getEstado() != EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje debe estar iniciado para realizar el check-in");
+        }
+
+        if (viaje.getCheckin() == null || checkin == null || !viaje.getCheckin().equalsIgnoreCase(checkin.trim())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin inválido");
         }
 
-        // 6. Cambiar estado a EN_CURSO
         viaje.setEstado(EstadoViaje.EN_CURSO);
         viajeRepository.save(viaje);
 

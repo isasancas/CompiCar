@@ -89,6 +89,10 @@ const DetalleViaje: React.FC = () => {
   const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
   const [iniciando, setIniciando] = useState(false);
   const [iniciarMsg, setIniciarMsg] = useState<string | null>(null);
+  const [modalCheckinAbierto, setModalCheckinAbierto] = useState(false);
+  const [codigoCheckin, setCodigoCheckin] = useState('');
+  const [verificandoCheckin, setVerificandoCheckin] = useState(false);
+  const [checkinMsg, setCheckinMsg] = useState<string | null>(null);
   const [finalizando, setFinalizando] = useState(false);
   const [finalizarMsg, setFinalizarMsg] = useState<string | null>(null);
 
@@ -269,16 +273,8 @@ const DetalleViaje: React.FC = () => {
     setIniciando(true);
     setIniciarMsg(null);
     try {
-      // Preguntar al conductor por el código de checkin antes de iniciar
-      const code = window.prompt('Introduce el código de checkin proporcionado por el pasajero');
-      if (!code) {
-        setIniciarMsg('❌ Iniciación cancelada (código no proporcionado)');
-        setIniciando(false);
-        return;
-      }
-
       const response = await fetch(
-        buildApiUrl(`/api/viajes/${viaje.slug}/iniciar?checkin=${encodeURIComponent(code)}`),
+        buildApiUrl(`/api/viajes/${viaje.slug}/iniciar`),
         {
           method: 'PUT',
           headers: {
@@ -302,6 +298,50 @@ const DetalleViaje: React.FC = () => {
       setIniciarMsg(`❌ ${msg}`);
     } finally {
       setIniciando(false);
+    }
+  };
+
+  const confirmarCheckin = async () => {
+    if (!viaje) return;
+
+    const checkinNormalizado = codigoCheckin.trim();
+    if (!checkinNormalizado) {
+      setCheckinMsg('❌ Debes introducir el código de check-in');
+      return;
+    }
+
+    setVerificandoCheckin(true);
+    setCheckinMsg(null);
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/checkin?checkin=${encodeURIComponent(checkinNormalizado)}`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'No se pudo validar el check-in';
+        throw new Error(msg);
+      }
+
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setCodigoCheckin('');
+      setModalCheckinAbierto(false);
+      setCheckinMsg(null);
+      setIniciarMsg('✅ Check-in validado correctamente. El viaje ha pasado a EN_CURSO.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al validar el check-in';
+      setCheckinMsg(`❌ ${msg}`);
+    } finally {
+      setVerificandoCheckin(false);
     }
   };
 
@@ -925,21 +965,24 @@ const DetalleViaje: React.FC = () => {
                   </div>
                 )}
 
-                    {/* Cuando el viaje está EN ESTADO INICIADO, permitir al conductor introducir el checkin para pasar a EN_CURSO */}
-                    {viaje.estado === 'INICIADO' && (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={iniciarViaje}
-                          disabled={iniciando}
-                          className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
-                        >
-                          {iniciando ? 'Verificando check-in...' : '📲 Introducir check-in y comenzar viaje'}
-                        </button>
-                      </div>
-                    )}
-
-                {/* El conductor ya introduce el código al iniciar el viaje; el check-in de pasajero está disponible en la vista de pasajero */}
+                {viaje.estado === 'INICIADO' && (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCheckinMsg(null);
+                        setCodigoCheckin('');
+                        setModalCheckinAbierto(true);
+                      }}
+                      className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      📲 Realizar check-in
+                    </button>
+                    <p className="text-xs text-slate-500 text-center">
+                      El viaje ya está iniciado. Ahora puedes validar el código para pasar a EN_CURSO.
+                    </p>
+                  </div>
+                )}
 
                 {/* BOTÓN FINALIZAR VIAJE (UNA VEZ EN CURSO) */}
                 {viaje.estado === 'EN_CURSO' && (
@@ -1430,6 +1473,70 @@ const DetalleViaje: React.FC = () => {
                   onClick={handleGuardarCambiosViaje}
                 >
                   {editando ? 'Guardando...' : errorEdicion?.includes('✅') ? '✨ ¡Todo listo!' : 'Confirmar cambios'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalCheckinAbierto && viaje && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Realizar check-in</h3>
+                <p className="text-xs text-slate-500">Introduce el código para pasar el viaje a EN_CURSO.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setModalCheckinAbierto(false);
+                  setCheckinMsg(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Código de check-in
+                </label>
+                <input
+                  type="text"
+                  value={codigoCheckin}
+                  onChange={(e) => setCodigoCheckin(e.target.value)}
+                  placeholder="Introduce el código"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 uppercase tracking-[0.2em]"
+                  autoComplete="off"
+                />
+              </div>
+
+              {checkinMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${checkinMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {checkinMsg}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => {
+                    setModalCheckinAbierto(false);
+                    setCheckinMsg(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarCheckin}
+                  disabled={verificandoCheckin}
+                  className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-all disabled:bg-slate-300"
+                >
+                  {verificandoCheckin ? 'Verificando...' : 'Confirmar check-in'}
                 </button>
               </div>
             </div>

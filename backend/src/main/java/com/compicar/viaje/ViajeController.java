@@ -146,8 +146,14 @@ public class ViajeController {
     }
 
     @PutMapping("/{slug}/iniciar")
-    public ResponseEntity<ViajeDTO> iniciarViaje(Principal principal, @PathVariable String slug, @RequestParam("checkin") String checkin) {
-        ViajeDTO viaje = viajeService.iniciarViaje(principal.getName(), slug, checkin);
+    public ResponseEntity<ViajeDTO> iniciarViaje(Principal principal, @PathVariable String slug) {
+        ViajeDTO viaje = viajeService.iniciarViaje(principal.getName(), slug);
+        return ResponseEntity.ok(viaje);
+    }
+
+    @PutMapping("/{slug}/checkin")
+    public ResponseEntity<ViajeDTO> confirmarCheckin(Principal principal, @PathVariable String slug, @RequestParam("checkin") String checkin) {
+        ViajeDTO viaje = viajeService.confirmarCheckin(principal.getName(), slug, checkin);
         return ResponseEntity.ok(viaje);
     }
 
