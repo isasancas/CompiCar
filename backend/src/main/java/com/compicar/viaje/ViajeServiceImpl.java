@@ -450,7 +450,11 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede iniciar este viaje");
         }
 
-        // 2. Validar estado actual del viaje: no permitir si ya está en curso, finalizado o cancelado
+        // 2. Validar estado actual del viaje: no permitir si ya está iniciado,en curso, finalizado o cancelado
+        if (viaje.getEstado() == EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está iniciado");
+        }
+
         if (viaje.getEstado() == EstadoViaje.EN_CURSO) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está en curso");
         }

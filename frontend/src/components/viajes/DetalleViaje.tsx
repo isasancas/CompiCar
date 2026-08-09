@@ -95,6 +95,8 @@ const DetalleViaje: React.FC = () => {
   const [checkinMsg, setCheckinMsg] = useState<string | null>(null);
   const [finalizando, setFinalizando] = useState(false);
   const [finalizarMsg, setFinalizarMsg] = useState<string | null>(null);
+  const [modalCancelarReservaAbierto, setModalCancelarReservaAbierto] = useState(false);
+  const [modalCancelarViajeAbierto, setModalCancelarViajeAbierto] = useState(false);
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
@@ -221,11 +223,8 @@ const DetalleViaje: React.FC = () => {
     fetchMiReserva();
   }, [viaje, isLoggedIn]);
 
-  const cancelarReserva = async () => {
+  const confirmarCancelarReserva = async () => {
     if (!miReserva) return;
-
-    const confirmacion = window.confirm('¿Cancelar tu reserva?');
-    if (!confirmacion) return;
 
     setCancelandoReserva(true);
     setCancelReservaMsg(null);
@@ -258,6 +257,10 @@ const DetalleViaje: React.FC = () => {
       );
 
       setCancelReservaMsg('✅ Reserva cancelada correctamente');
+      setTimeout(() => {
+        setModalCancelarReservaAbierto(false);
+        setCancelReservaMsg(null);
+      }, 1500);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error inesperado';
@@ -344,8 +347,6 @@ const DetalleViaje: React.FC = () => {
       setVerificandoCheckin(false);
     }
   };
-
-  
 
   const finalizarViaje = async () => {
     if (!viaje) return;
@@ -620,11 +621,8 @@ const DetalleViaje: React.FC = () => {
     }
   };
 
-  const cancelarViaje = async () => {
+  const confirmarCancelarViaje = async () => {
     if (!viaje) return;
-
-    const confirmacion = window.confirm('¿Estás seguro de que quieres cancelar este viaje?');
-    if (!confirmacion) return;
 
     setCancelando(true);
     setCancelMsg(null);
@@ -650,6 +648,10 @@ const DetalleViaje: React.FC = () => {
       const viajeActualizado = await response.json();
       setViaje(viajeActualizado);
       setCancelMsg('✅ Viaje cancelado correctamente.');
+      setTimeout(() => {
+        setModalCancelarViajeAbierto(false);
+        setCancelMsg(null);
+      }, 1500);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al cancelar viaje';
@@ -923,7 +925,10 @@ const DetalleViaje: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={cancelarReserva}
+                      onClick={() => {
+                        setCancelReservaMsg(null);
+                        setModalCancelarReservaAbierto(true);
+                      }}
                       disabled={cancelandoReserva}
                       className="w-full rounded-lg bg-yellow-500 px-6 py-3 text-base font-bold text-white hover:bg-yellow-600 disabled:opacity-60 transition-all shadow-sm"
                     >
@@ -1026,7 +1031,10 @@ const DetalleViaje: React.FC = () => {
                 {(viaje.estado === 'PENDIENTE' || viaje.estado === 'PUBLICADO') && (
                   <button
                     type="button"
-                    onClick={() => { cancelarViaje(); }}
+                    onClick={() => {
+                      setCancelMsg(null);
+                      setModalCancelarViajeAbierto(true);
+                    }}
                     disabled={cancelando}
                     className="w-full rounded-lg bg-red-600 px-6 py-3 text-base font-bold text-white hover:bg-red-700 disabled:opacity-60 transition-all shadow-sm"
                   >
@@ -1480,6 +1488,7 @@ const DetalleViaje: React.FC = () => {
         </div>
       )}
 
+      {/* Modal Checkin */}
       {modalCheckinAbierto && viaje && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -1537,6 +1546,128 @@ const DetalleViaje: React.FC = () => {
                   className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-all disabled:bg-slate-300"
                 >
                   {verificandoCheckin ? 'Verificando...' : 'Confirmar check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN: CANCELAR RESERVA */}
+      {modalCancelarReservaAbierto && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cancelar reserva</h3>
+                <p className="text-xs text-slate-500">Confirma la cancelación de tus plazas</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalCancelarReservaAbierto(false);
+                  setCancelReservaMsg(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-700">
+                ¿Estás seguro de que deseas cancelar tu reserva para este viaje? Liberarás tus plazas asignadas.
+              </p>
+
+              {cancelReservaMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${
+                  cancelReservaMsg.includes('✅') 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {cancelReservaMsg}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalCancelarReservaAbierto(false);
+                    setCancelReservaMsg(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarCancelarReserva}
+                  disabled={cancelandoReserva}
+                  className="rounded-lg bg-yellow-500 px-6 py-2 text-sm font-bold text-white hover:bg-yellow-600 transition-all disabled:bg-slate-300"
+                >
+                  {cancelandoReserva ? 'Procesando...' : 'Confirmar cancelación'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN: CANCELAR VIAJE */}
+      {modalCancelarViajeAbierto && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cancelar viaje</h3>
+                <p className="text-xs text-slate-500">Confirma la cancelación total del trayecto</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalCancelarViajeAbierto(false);
+                  setCancelMsg(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-700">
+                ¿Estás seguro de que quieres cancelar este viaje? Esta acción no se puede deshacer y notificará a todos los pasajeros con reservas asociadas.
+              </p>
+
+              {cancelMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${
+                  cancelMsg.includes('✅') 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {cancelMsg}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalCancelarViajeAbierto(false);
+                    setCancelMsg(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarCancelarViaje}
+                  disabled={cancelando}
+                  className="rounded-lg bg-red-600 px-6 py-2 text-sm font-bold text-white hover:bg-red-700 transition-all disabled:bg-slate-300"
+                >
+                  {cancelando ? 'Procesando...' : 'Sí, cancelar viaje'}
                 </button>
               </div>
             </div>

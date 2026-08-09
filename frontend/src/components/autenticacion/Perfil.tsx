@@ -63,6 +63,7 @@ const Perfil: React.FC = () => {
   // Estados para retirada de fondos
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [withdrawSuccess, setWithdrawSuccess] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -297,6 +298,7 @@ const Perfil: React.FC = () => {
   const handleRetirarFondos = async () => {
     setIsWithdrawing(true);
     setWithdrawError(null);
+    setWithdrawSuccess(null);
 
     const token = getValidToken();
     if (!token) {
@@ -333,7 +335,10 @@ const Perfil: React.FC = () => {
         setPerfil((prevPerfil) => 
           prevPerfil ? { ...prevPerfil, fondosActuales: 0 } : null
         );
-        alert('¡Retiro completado con éxito!');
+        setWithdrawSuccess('¡Retiro completado con éxito!');
+        setTimeout(() => {
+          setWithdrawSuccess(null);
+        }, 4000);
       }
     } catch (err) {
       console.error("Error en la petición:", err);
@@ -878,6 +883,12 @@ const Perfil: React.FC = () => {
 
               {withdrawError && (
                 <p className="text-xs text-red-600 font-medium">{withdrawError}</p>
+              )}
+
+              {withdrawSuccess && (
+                <div className="rounded-lg bg-green-100 border border-green-300 p-2 text-center text-xs font-semibold text-green-800 transition-all">
+                  {withdrawSuccess}
+                </div>
               )}
 
               <div className="pt-1 flex flex-col items-stretch gap-1">
