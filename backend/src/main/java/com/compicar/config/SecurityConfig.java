@@ -8,6 +8,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,22 +19,20 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
-    public SecurityConfig(com.compicar.autenticacion.inicioSesion.JwtAuthenticationFilter jwtAuthenticationFilter, CustomAccessDeniedHandler customAccessDeniedHandler) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, CustomAccessDeniedHandler customAccessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.customAccessDeniedHandler = customAccessDeniedHandler;
     }
 
-    /**
-     * Define el bean PasswordEncoder para encriptar contraseñas
-     * Usa BCrypt que es el estándar de seguridad recomendado
-     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -51,48 +50,55 @@ public class SecurityConfig {
         );
     }
 
-    /**
-     * Configura CORS para Spring Security
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOrigin("*");
-        configuration.addAllowedMethod("*");
-        configuration.addAllowedHeader("*");
-        configuration.setAllowCredentials(false);
+        
+        // Permitir producción y desarrollo local
         configuration.setAllowedOriginPatterns(List.of(
-            "https://compicar.koyeb.app"
+            "https://compicar.koyeb.app",
+            "http://localhost:*",
+            "http://127.0.0.1:*"
         ));
+        
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
-    /**
-     * Configura la cadena de filtros de seguridad
-     * Permitir acceso sin autenticación a los endpoints de registro y login
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable()) // Deshabilitado para APIs JWT
+            
+            // 1. FORZAR STATELESS: Evita cookies JSESSIONID y conflictos entre usuarios
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            
             .authorizeHttpRequests(authz -> authz
+                // Recursos estáticos
                 .requestMatchers("/", "/index.html", "/static/**", "/assets/**",
-                                "/images/**",
-                                "/*.js", "/*.css", "/*.png", "/*.ico", "/*.svg").permitAll()
+                                "/images/**", "/*.js", "/*.css", "/*.png", "/*.ico", "/*.svg").permitAll()
 
+                // Endpoints públicos
                 .requestMatchers("/api/registro/**").permitAll()
                 .requestMatchers("/api/login/**").permitAll()
-                .requestMatchers("/api/v1/webhooks/**").permitAll()
+                
+                // Webhooks de Stripe (cubre tanto /api/v1/webhooks/** como /api/webhooks/**)
+                .requestMatchers("/api/v1/webhooks/**", "/api/webhooks/**").permitAll()
                 .requestMatchers("/ping").permitAll()
 
-                // Endpoints publicos de solo lectura para viajes
+                // Endpoints públicos de solo lectura
                 .requestMatchers(HttpMethod.GET, "/api/viajes/publicos/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/personas/*/perfil-publico").permitAll()
 
+                // Endpoints protegidos
                 .requestMatchers("/api/logout").authenticated()
                 .requestMatchers("/api/personas/**").authenticated()
 
