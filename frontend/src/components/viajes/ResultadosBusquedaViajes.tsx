@@ -95,7 +95,7 @@ const ResultadosBusquedaViajes: React.FC = () => {
   return (
     <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
-        <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Resultados de busqueda</h1>
+        <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Resultados de búsqueda</h1>
 
         <div className="mt-4 rounded-2xl border border-slate-300 bg-white p-4">
           <form

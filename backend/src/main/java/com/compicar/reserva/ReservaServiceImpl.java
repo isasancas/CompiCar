@@ -384,6 +384,12 @@ public class ReservaServiceImpl implements ReservaService {
         }
 
         reserva.setEstado(EstadoReserva.CONFIRMADA);
+
+        notificacionRepository.save(new Notificacion(
+                "El conductor ha confirmado tu reserva en el viaje " + reserva.getViaje().getSlug() + ".",
+                reserva.getPersona(),
+                TipoNotificacion.RESERVA_ACEPTADA
+        ));
         return reservaRepository.save(reserva);
     }
 

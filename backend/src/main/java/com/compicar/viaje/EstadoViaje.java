@@ -2,6 +2,6 @@ package com.compicar.viaje;
 
 public enum EstadoViaje {
 
-    INICIADO, PENDIENTE, FINALIZADO, CANCELADO
+    INICIADO, PENDIENTE, EN_CURSO, FINALIZADO, CANCELADO
 
 }

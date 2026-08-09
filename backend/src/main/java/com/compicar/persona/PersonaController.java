@@ -1,5 +1,7 @@
 package com.compicar.persona;
 
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -69,6 +71,15 @@ public class PersonaController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         personaService.subirFoto(email, request.getFoto());
         return ResponseEntity.ok("{\"mensaje\": \"Foto actualizada correctamente\"}");
+    }
+
+    @PostMapping("/retirar-fondos")
+    public ResponseEntity<?> retirarFondos() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        
+        Map<String, Object> respuesta = personaService.retirarFondos(email);
+        
+        return ResponseEntity.ok(respuesta);
     }
     
 }

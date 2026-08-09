@@ -1,5 +1,6 @@
 package com.compicar.viaje;
 
+import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -131,6 +132,23 @@ public class ViajeController {
         ViajeDTO actualizado = viajeService.actualizarViaje(usuarioEmail, slug, viajeEditado);
         
         return ResponseEntity.ok(actualizado);
+    }
+
+    @PutMapping("/{slug}/finalizar")
+    public ViajeDTO finalizarViaje(@PathVariable String slug) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        String usuarioEmail = auth.getName();
+        return viajeService.finalizarViaje(usuarioEmail, slug);
+    }
+
+    @PutMapping("/{slug}/iniciar")
+    public ResponseEntity<ViajeDTO> iniciarViaje(Principal principal, @PathVariable String slug) {
+        ViajeDTO viaje = viajeService.iniciarViaje(principal.getName(), slug);
+        return ResponseEntity.ok(viaje);
     }
 
 }
