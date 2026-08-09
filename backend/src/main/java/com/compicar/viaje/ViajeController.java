@@ -151,4 +151,10 @@ public class ViajeController {
         return ResponseEntity.ok(viaje);
     }
 
+    @PutMapping("/{slug}/checkin")
+    public ResponseEntity<ViajeDTO> confirmarCheckin(Principal principal, @PathVariable String slug, @RequestParam("checkin") String checkin) {
+        ViajeDTO viaje = viajeService.confirmarCheckin(principal.getName(), slug, checkin);
+        return ResponseEntity.ok(viaje);
+    }
+
 }

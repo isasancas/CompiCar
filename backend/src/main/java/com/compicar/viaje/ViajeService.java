@@ -21,4 +21,5 @@ public interface ViajeService {
     ViajeDTO actualizarViaje(String usuarioEmail, String slug, Viaje viajeEditado);
     ViajeDTO finalizarViaje(String usuarioEmail, String slug);
     ViajeDTO iniciarViaje(String usuarioEmail, String slug);
+    ViajeDTO confirmarCheckin(String usuarioEmail, String slug, String checkin);
 }

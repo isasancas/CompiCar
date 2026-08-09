@@ -99,6 +99,9 @@ public class ViajeServiceImpl implements ViajeService {
         viaje.setPersona(conductor);
         viaje.setVehiculo(vehiculo);
 
+        // Generar checkin aleatorio de 6 caracteres alfanuméricos
+        viaje.setCheckin(generarCheckin());
+
         if (viaje.getParadas() != null) {
             for (int i = 0; i < viaje.getParadas().size(); i++) {
                 Parada parada = viaje.getParadas().get(i);
@@ -431,8 +434,8 @@ public class ViajeServiceImpl implements ViajeService {
 
     /**
      * INICIAR VIAJE:
-     * Verifica que sea el conductor, que el viaje esté publicado y que haya
-     * llegado la fecha/hora de salida programada para cambiar su estado a INICIADO.
+     * Verifica que sea el conductor y que haya llegado la fecha/hora de salida
+     * para cambiar su estado a INICIADO.
      */
     @Override
     public ViajeDTO iniciarViaje(String usuarioEmail, String slug) {
@@ -447,9 +450,13 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede iniciar este viaje");
         }
 
-        // 2. Validar estado actual del viaje
-        if (viaje.getEstado() == EstadoViaje.INICIADO || viaje.getEstado() == EstadoViaje.EN_CURSO) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya se encuentra iniciado");
+        // 2. Validar estado actual del viaje: no permitir si ya está iniciado,en curso, finalizado o cancelado
+        if (viaje.getEstado() == EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está iniciado");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.EN_CURSO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está en curso");
         }
 
         if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
@@ -464,11 +471,51 @@ public class ViajeServiceImpl implements ViajeService {
             );
         }
 
-        // 4. Cambiar estado a INICIADO (o EstadoViaje.EN_CURSO según la constante de tu Enum)
+        // 4. Cambiar estado a INICIADO. El check-in se valida en una segunda acción.
         viaje.setEstado(EstadoViaje.INICIADO);
         viajeRepository.save(viaje);
 
         return convertirADTO(viaje);
+    }
+
+    /**
+     * CONFIRMAR CHECK-IN:
+     * Solo permite pasar de INICIADO a EN_CURSO si el código es correcto.
+     */
+    @Override
+    public ViajeDTO confirmarCheckin(String usuarioEmail, String slug, String checkin) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede realizar el check-in de este viaje");
+        }
+
+        if (viaje.getEstado() != EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje debe estar iniciado para realizar el check-in");
+        }
+
+        if (viaje.getCheckin() == null || checkin == null || !viaje.getCheckin().equalsIgnoreCase(checkin.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin inválido");
+        }
+
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
+    private String generarCheckin() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder sb = new StringBuilder(6);
+        java.util.Random rnd = new java.util.Random();
+        for (int i = 0; i < 6; i++) {
+            sb.append(chars.charAt(rnd.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
     private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {
