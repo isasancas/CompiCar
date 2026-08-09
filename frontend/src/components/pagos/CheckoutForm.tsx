@@ -8,7 +8,7 @@ interface CheckoutFormProps {
   monto: number;
 }
 
-const CheckoutForm: React.FC<CheckoutFormProps> = ({ clientSecret, onSuccess, onError, monto }) => {
+const CheckoutForm: React.FC<CheckoutFormProps> = ({ onSuccess, onError, monto }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
