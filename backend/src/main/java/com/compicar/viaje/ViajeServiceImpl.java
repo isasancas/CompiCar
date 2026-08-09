@@ -25,11 +25,11 @@ import com.compicar.notificacion.TipoNotificacion;
 import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
+import com.compicar.pago.StripeService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
-import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
 import com.compicar.vehiculo.Vehiculo;
@@ -41,6 +41,7 @@ import com.compicar.viaje.dto.VehiculoDTO;
 import com.compicar.viaje.dto.ParadaDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stripe.exception.StripeException;
 
 @Service
 @Transactional
@@ -54,6 +55,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final ReservaRepository reservaRepository;
     private final PagoRepository pagoRepository;
     private final NotificacionRepository notificacionRepository;
+    private final StripeService stripeService;
 
     private static final long HORAS_LIMITE_CANCELACION = 12L;
 
@@ -62,7 +64,8 @@ public class ViajeServiceImpl implements ViajeService {
 
     public ViajeServiceImpl(ViajeRepository viajeRepository, PersonaRepository personaRepository,
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
-            ReservaRepository reservaRepository, PagoRepository pagoRepository, NotificacionRepository notificacionRepository) {
+            ReservaRepository reservaRepository, PagoRepository pagoRepository, 
+            NotificacionRepository notificacionRepository, StripeService stripeService) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -70,6 +73,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.reservaRepository = reservaRepository;
         this.pagoRepository = pagoRepository;
         this.notificacionRepository = notificacionRepository;
+        this.stripeService = stripeService;
     }
 
     @Override
@@ -94,6 +98,9 @@ public class ViajeServiceImpl implements ViajeService {
 
         viaje.setPersona(conductor);
         viaje.setVehiculo(vehiculo);
+
+        // Generar checkin aleatorio de 6 caracteres alfanuméricos
+        viaje.setCheckin(generarCheckin());
 
         if (viaje.getParadas() != null) {
             for (int i = 0; i < viaje.getParadas().size(); i++) {
@@ -145,26 +152,39 @@ public class ViajeServiceImpl implements ViajeService {
             detalle = "Gemini no disponible, se usa precio fallback";
         }
 
-        // Coste de combustible
-        BigDecimal costeCombustible = litrosEstimados.multiply(precioLitro).setScale(2, RoundingMode.HALF_UP);
+        // 1. Coste de combustible
+        BigDecimal costeCombustible = litrosEstimados.multiply(precioLitro).setScale(4, RoundingMode.HALF_UP);
 
-        // Coste de desgaste (Gemini estima coste por km)
+        // 2. Coste de desgaste
         BigDecimal costeDesgaste = obtenerCosteDesgasteConGemini(vehiculo, distanciaKm);
         
-        // Coste total: combustible + desgaste
-        BigDecimal costeTotal = costeCombustible.add(costeDesgaste).setScale(2, RoundingMode.HALF_UP);
+        // 3. Coste operativo base: combustible + desgaste
+        BigDecimal costeOperativoBase = costeCombustible.add(costeDesgaste);
         
-        BigDecimal precioMin = costeTotal.multiply(BigDecimal.valueOf(0.80)).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal precioMax = costeTotal.multiply(BigDecimal.valueOf(1.20)).setScale(2, RoundingMode.HALF_UP);
+        // 4. Aplicar nuestra comisión del 20%
+        BigDecimal comisionPlataforma = costeOperativoBase.multiply(BigDecimal.valueOf(0.20));
+        BigDecimal subtotalConComision = costeOperativoBase.add(comisionPlataforma);
+
+        // 5. Aplicar comisión de Stripe (Ejemplo: 1.5% + 0.25€)
+        // Formula inversa o directa aproximada para cubrir pasarela: (Subtotal + 0.25) / (1 - 0.015)
+        BigDecimal porcentajeStripe = BigDecimal.valueOf(0.015);
+        BigDecimal fijoStripe = BigDecimal.valueOf(0.25);
+        BigDecimal precioFinalConStripe = subtotalConComision.add(fijoStripe)
+            .divide(BigDecimal.ONE.subtract(porcentajeStripe), 2, RoundingMode.HALF_UP);
+
+        // Márgenes orientativos para el pasajero basados en el precio final calculado
+        BigDecimal precioMin = precioFinalConStripe.multiply(BigDecimal.valueOf(0.90)).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal precioMax = precioFinalConStripe.multiply(BigDecimal.valueOf(1.10)).setScale(2, RoundingMode.HALF_UP);
 
         PrecioTrayectoResponseDTO response = new PrecioTrayectoResponseDTO();
         response.setLitrosEstimados(litrosEstimados.setScale(2, RoundingMode.HALF_UP));
         response.setPrecioCombustibleLitro(precioLitro.setScale(3, RoundingMode.HALF_UP));
-        response.setCosteTotalCombustible(costeCombustible);
+        response.setCosteTotalCombustible(costeCombustible.setScale(2, RoundingMode.HALF_UP));
         response.setPrecioMinimoPasajero(precioMin);
         response.setPrecioMaximoPasajero(precioMax);
         response.setFuente(fuente);
         response.setDetalle(detalle);
+        
         return response;
     }
 
@@ -343,6 +363,159 @@ public class ViajeServiceImpl implements ViajeService {
         }
 
         return convertirADTO(guardado);
+    }
+
+    /**
+     * FINALIZAR VIAJE:
+     * Captura los pagos en Stripe de cada reserva activa, actualiza los estados
+     * e incrementa los fondos del conductor (fondosActuales y fondosTotales).
+     */
+    @Override
+    public ViajeDTO finalizarViaje(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede finalizar este viaje");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede finalizar un viaje en estado " + viaje.getEstado());
+        }
+
+        BigDecimal totalGanado = BigDecimal.ZERO;
+        List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
+
+        for (Reserva reserva : reservasActivas) {
+            Pago pago = reserva.getPago();
+
+            if (pago != null && pago.getStripePaymentIntentId() != null) {
+                try {
+                    // 1. Cobrar definitivamente en Stripe (descongelar)
+                    stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
+                    
+                    pago.setEstado(EstadoPago.CAPTURADO);
+                    pagoRepository.save(pago);
+
+                    if (pago.getImporteTotal() != null) {
+                        totalGanado = totalGanado.add(pago.getImporteTotal());
+                    }
+                } catch (StripeException e) {
+                    throw new ResponseStatusException(
+                        HttpStatus.PAYMENT_REQUIRED, 
+                        "Error al procesar la captura del pago en Stripe para la reserva #" + reserva.getId() + ": " + e.getMessage()
+                    );
+                }
+            }
+
+            // 2. Notificar al pasajero
+            String msj = "El viaje a " + viaje.getSlug() + " ha finalizado. ¡Gracias por viajar!";
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO); // Ajusta el TipoNotificacion si tienes uno específico
+            notificacionRepository.save(noti);
+        }
+
+        // 3. Cambiar estado del viaje
+        viaje.setEstado(EstadoViaje.FINALIZADO);
+        viajeRepository.save(viaje);
+
+        // 4. Sumar ganancias a las cuentas del conductor
+        BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
+        BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
+
+        conductor.setFondosActuales(actuales.add(totalGanado));
+        conductor.setFondosTotales(totales.add(totalGanado));
+        personaRepository.save(conductor);
+
+        return convertirADTO(viaje);
+    }
+
+    /**
+     * INICIAR VIAJE:
+     * Verifica que sea el conductor y que haya llegado la fecha/hora de salida
+     * para cambiar su estado a INICIADO.
+     */
+    @Override
+    public ViajeDTO iniciarViaje(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        // 1. Validar que la persona sea el conductor de este viaje
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede iniciar este viaje");
+        }
+
+        // 2. Validar estado actual del viaje: no permitir si ya está iniciado,en curso, finalizado o cancelado
+        if (viaje.getEstado() == EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está iniciado");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.EN_CURSO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está en curso");
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede iniciar un viaje en estado " + viaje.getEstado());
+        }
+
+        // 3. Validar que la fecha y hora de salida hayan llegado
+        if (LocalDateTime.now().isBefore(viaje.getFechaHoraSalida())) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, 
+                "Aún no ha llegado la fecha u hora de salida programada"
+            );
+        }
+
+        // 4. Cambiar estado a INICIADO. El check-in se valida en una segunda acción.
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
+    /**
+     * CONFIRMAR CHECK-IN:
+     * Solo permite pasar de INICIADO a EN_CURSO si el código es correcto.
+     */
+    @Override
+    public ViajeDTO confirmarCheckin(String usuarioEmail, String slug, String checkin) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede realizar el check-in de este viaje");
+        }
+
+        if (viaje.getEstado() != EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje debe estar iniciado para realizar el check-in");
+        }
+
+        if (viaje.getCheckin() == null || checkin == null || !viaje.getCheckin().equalsIgnoreCase(checkin.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin inválido");
+        }
+
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
+    private String generarCheckin() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder sb = new StringBuilder(6);
+        java.util.Random rnd = new java.util.Random();
+        for (int i = 0; i < 6; i++) {
+            sb.append(chars.charAt(rnd.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
     private void cancelarReservasYReembolsar(Viaje viaje, boolean reembolsar) {
@@ -546,6 +719,7 @@ public class ViajeServiceImpl implements ViajeService {
             vehiculoDTO,
             paradasDTO,
             viaje.getSlug(),
+            viaje.getPersona().getId(),
             viaje.getPersona().getNombre(),
             viaje.getPersona().getSlug(),
             reservasDTO

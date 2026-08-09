@@ -8,6 +8,9 @@ import {
   Tooltip
 } from 'react-leaflet';
 import { buildApiUrl } from '../../apiConfig';
+import { Elements } from '@stripe/react-stripe-js';
+import CheckoutForm from '../pagos/CheckoutForm';
+import { loadStripe } from '@stripe/stripe-js';
 
 interface Parada {
   id: number;
@@ -80,6 +83,20 @@ const DetalleViaje: React.FC = () => {
   const [nuevaFecha, setNuevaFecha] = useState<string>('');
   const [nuevasPlazas, setNuevasPlazas] = useState<number>(0);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const [mostrarStripe, setMostrarStripe] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [reservaEnProcesoId, setReservaEnProcesoId] = useState<number | null>(null);
+  const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
+  const [iniciando, setIniciando] = useState(false);
+  const [iniciarMsg, setIniciarMsg] = useState<string | null>(null);
+  const [modalCheckinAbierto, setModalCheckinAbierto] = useState(false);
+  const [codigoCheckin, setCodigoCheckin] = useState('');
+  const [verificandoCheckin, setVerificandoCheckin] = useState(false);
+  const [checkinMsg, setCheckinMsg] = useState<string | null>(null);
+  const [finalizando, setFinalizando] = useState(false);
+  const [finalizarMsg, setFinalizarMsg] = useState<string | null>(null);
+  const [modalCancelarReservaAbierto, setModalCancelarReservaAbierto] = useState(false);
+  const [modalCancelarViajeAbierto, setModalCancelarViajeAbierto] = useState(false);
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
@@ -170,7 +187,6 @@ const DetalleViaje: React.FC = () => {
         const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
         setMapCenter([centerLat, centerLng]);
 
-        // Calcular ruta real usando OpenRouteService
         calcularRutaReal(paradasConCoords);
       }
     };
@@ -178,80 +194,194 @@ const DetalleViaje: React.FC = () => {
     obtenerCoordenadas();
   }, [viaje]);
 
-  useEffect(() => {
   const fetchMiReserva = async () => {
     if (!viaje || !isLoggedIn) return;
 
     try {
       const response = await fetch(buildApiUrl('/api/reservas/mis-reservas'), {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       });
 
       if (!response.ok) return;
 
       const reservas = await response.json();
 
-      // 🔥 Buscar reserva de ESTE viaje
       const reservaEncontrada = reservas.find(
-      (r: Reserva) => r.viajeId === viaje.id && r.estado !== 'CANCELADA'
+        (r: Reserva) => r.viajeId === viaje.id && r.estado !== 'CANCELADA' && r.estado !== 'RECHAZADA'
       );
 
       setMiReserva(reservaEncontrada || null);
 
     } catch {
-      // silencio (no rompemos la UI)
+      // Silencio
     }
   };
-  fetchMiReserva();
-}, [viaje, isLoggedIn]);
 
-const cancelarReserva = async () => {
-  if (!miReserva) return;
+  useEffect(() => {
+    fetchMiReserva();
+  }, [viaje, isLoggedIn]);
 
-  const confirmacion = window.confirm('¿Cancelar tu reserva?');
-  if (!confirmacion) return;
+  const confirmarCancelarReserva = async () => {
+    if (!miReserva) return;
 
-  setCancelandoReserva(true);
-  setCancelReservaMsg(null);
+    setCancelandoReserva(true);
+    setCancelReservaMsg(null);
 
-  try {
-    const response = await fetch(
-      buildApiUrl(`/api/reservas/cancelar?reservaId=${miReserva.id}`),
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/reservas/cancelar?reservaId=${miReserva.id}`),
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
-      }
-    );
+      );
 
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      const msg = data?.message || 'Error al cancelar reserva';
-      throw new Error(msg);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'Error al cancelar reserva';
+        throw new Error(msg);
+      }
+
+      const reservaActualizada = await response.json();
+
+      setMiReserva(reservaActualizada);
+
+      setViaje((prev) =>
+        prev
+          ? { ...prev, plazasDisponibles: prev.plazasDisponibles + miReserva.cantidadPlazas }
+          : prev
+      );
+
+      setCancelReservaMsg('✅ Reserva cancelada correctamente');
+      setTimeout(() => {
+        setModalCancelarReservaAbierto(false);
+        setCancelReservaMsg(null);
+      }, 1500);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado';
+      setCancelReservaMsg(`❌ ${msg}`);
+    } finally {
+      setCancelandoReserva(false);
+    }
+  };
+
+  const iniciarViaje = async () => {
+    if (!viaje) return;
+
+    setIniciando(true);
+    setIniciarMsg(null);
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/iniciar`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'No se pudo iniciar el viaje';
+        throw new Error(msg);
+      }
+
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setIniciarMsg('✅ El viaje ha sido iniciado correctamente.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al iniciar el viaje';
+      setIniciarMsg(`❌ ${msg}`);
+    } finally {
+      setIniciando(false);
+    }
+  };
+
+  const confirmarCheckin = async () => {
+    if (!viaje) return;
+
+    const checkinNormalizado = codigoCheckin.trim();
+    if (!checkinNormalizado) {
+      setCheckinMsg('❌ Debes introducir el código de check-in');
+      return;
     }
 
-    const reservaActualizada = await response.json();
+    setVerificandoCheckin(true);
+    setCheckinMsg(null);
 
-    setMiReserva(reservaActualizada);
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/checkin?checkin=${encodeURIComponent(checkinNormalizado)}`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
 
-    setViaje((prev) =>
-      prev
-        ? { ...prev, plazasDisponibles: prev.plazasDisponibles + miReserva.cantidadPlazas }
-        : prev
-    );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'No se pudo validar el check-in';
+        throw new Error(msg);
+      }
 
-    setCancelReservaMsg('✅ Reserva cancelada correctamente');
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setCodigoCheckin('');
+      setModalCheckinAbierto(false);
+      setCheckinMsg(null);
+      setIniciarMsg('✅ Check-in validado correctamente. El viaje ha pasado a EN_CURSO.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al validar el check-in';
+      setCheckinMsg(`❌ ${msg}`);
+    } finally {
+      setVerificandoCheckin(false);
+    }
+  };
 
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error inesperado';
-    setCancelReservaMsg(`❌ ${msg}`);
-  } finally {
-    setCancelandoReserva(false);
-  }
-};
+  const finalizarViaje = async () => {
+    if (!viaje) return;
+
+    setFinalizando(true);
+    setFinalizarMsg(null);
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/finalizar`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'No se pudo finalizar el viaje';
+        throw new Error(msg);
+      }
+
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setFinalizarMsg('✅ El viaje ha sido finalizado correctamente.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al finalizar el viaje';
+      setFinalizarMsg(`❌ ${msg}`);
+    } finally {
+      setFinalizando(false);
+    }
+  };
 
   const calcularRutaReal = async (paradas: ParadaConCoordenadas[]) => {
     if (paradas.length < 2) return;
@@ -263,7 +393,6 @@ const cancelarReserva = async () => {
     try {
       const response = await fetch(url);
       if (!response.ok) {
-        // Fallback: línea recta si falla la API
         const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
         setRouteLine(ruta);
         return;
@@ -272,19 +401,16 @@ const cancelarReserva = async () => {
       const data = await response.json();
       const route = data?.routes?.[0];
       if (!route?.geometry?.coordinates) {
-        // Fallback: línea recta si no hay geometría
         const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
         setRouteLine(ruta);
         return;
       }
 
-      // Convertir coordenadas de [lng, lat] a [lat, lng] para Leaflet
       const routeCoords: Array<[number, number]> = route.geometry.coordinates.map(
         (pair: [number, number]) => [pair[1], pair[0]]
       );
       setRouteLine(routeCoords);
     } catch {
-      // Fallback: línea recta si hay error
       const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
       setRouteLine(ruta);
     }
@@ -309,7 +435,6 @@ const cancelarReserva = async () => {
     return { origen, destino, paradasIntermedias };
   };
 
-    // Silenciador de errores de TypeScript para variables que no queremos renderizar
   useEffect(() => {
     if (cancelReservaMsg || errorEdicion || cancelMsg) {
       console.debug('Logs de estado internos:', { 
@@ -345,57 +470,92 @@ const cancelarReserva = async () => {
     );
   }
 
-  const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
-
-  const reservarPlazas = async () => {
+  const iniciarProcesoPago = async () => {
     setReservaMsg(null);
-
-    if (!isLoggedIn) {
-      navigate('/inicio-sesion');
-      return;
-    }
-
-    if (!viaje) return;
 
     if (!aceptaBloqueoPago) {
       setReservaMsg('Debes aceptar el aviso de cobro antes de reservar.');
       return;
     }
 
+    if (!paradaSubidaId || !paradaBajadaId) {
+      setReservaMsg('Selecciona los puntos de subida y bajada.');
+      return;
+    }
+
     setReservando(true);
 
     try {
-      const response = await fetch(buildApiUrl('/api/reservas/crear'), {
+      const resReserva = await fetch(buildApiUrl('/api/reservas/crear'), {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
-          viajeId: viaje.id, 
+        body: JSON.stringify({
+          viajeId: viaje?.id,
           plazas: cantidadPlazas,
           paradaSubidaId: paradaSubidaId,
-          paradaBajadaId: paradaBajadaId
+          paradaBajadaId: paradaBajadaId,
         })
       });
 
-      if (response.ok) {
-        setReservaMsg(`Reserva completada con éxito por ${cantidadPlazas} plaza(s).`);
-        setViaje((prev) =>
-          prev
-            ? { ...prev, plazasDisponibles: prev.plazasDisponibles - cantidadPlazas }
-            : prev
-        );
-
-        setTimeout(() => setModalReservaAbierto(false), 2000);
-      } else {
-        const data = await response.json().catch(() => null);
-        setReservaMsg(`Error: ${data?.message || 'No se pudo realizar la reserva'}`);
+      if (!resReserva.ok) {
+        const data = await resReserva.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo crear la reserva');
       }
+
+      const data = await resReserva.json();
+      console.debug('Respuesta creación reserva:', data);
+      if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
+
+      setReservaEnProcesoId(data.reservaId);
+      setClientSecret(data.clientSecret);
+      setMostrarStripe(true);
+
     } catch (err) {
-      setReservaMsg('Error de conexión con el servidor.');
+      setReservaMsg(`❌ ${err instanceof Error ? err.message : 'Error inesperado'}`);
     } finally {
       setReservando(false);
+    }
+  };
+
+  const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
+
+  const reservarPlazas = async () => {
+    setReservaMsg('✅ Pago confirmado. ¡Tu plaza está reservada!');
+    setReservaEnProcesoId(null);
+
+    setTimeout(async () => {
+      await fetchViaje();
+      await fetchMiReserva();
+      setReservaMsg(null);
+      setModalReservaAbierto(false);
+    }, 1500);
+  };
+
+  const deshacerReservaPorFalloPago = async (motivo: string) => {
+    if (!reservaEnProcesoId) {
+      setReservaMsg(`❌ ${motivo}`);
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/reservas/anular-pago-fallido?reservaId=${reservaEnProcesoId}`), {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo revertir la reserva');
+      }
+
+      setReservaEnProcesoId(null);
+      setClientSecret(null);
+      setMostrarStripe(false);
+      setReservaMsg(`❌ ${motivo}`);
+    } catch {
+      setReservaMsg(`❌ ${motivo}`);
     }
   };
   
@@ -409,13 +569,6 @@ const cancelarReserva = async () => {
     setReservando(true);
 
     const reservaId = miReserva.id || (miReserva as any).reservaId;
-
-    console.log("Datos que saldrán hacia el Backend:", {
-      urlId: reservaId,
-      plazas: cantidadPlazas,
-      subida: paradaSubidaId,
-      bajada: paradaBajadaId
-    });
 
     if (!paradaSubidaId || !paradaBajadaId || !reservaId) {
       setReservaMsg("❌ Error: Faltan datos obligatorios (ID o Paradas)");
@@ -442,9 +595,10 @@ const cancelarReserva = async () => {
 
       if (response.ok) {
         setReservaMsg("✅ Reserva actualizada con éxito");
-        setTimeout(() => {
+        setTimeout(async () => {
           setReservaMsg(null);
-          fetchViaje(); 
+          await fetchViaje(); 
+          await fetchMiReserva();
           setModalReservaAbierto(false); 
         }, 1500);
       } else {
@@ -454,76 +608,70 @@ const cancelarReserva = async () => {
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorMessage;
-        } catch (e) {
+        } catch {
           errorMessage = errorText || errorMessage;
         }
 
-        console.error("Error del servidor (Status " + response.status + "):", errorMessage);
         setReservaMsg(`❌ Error: ${errorMessage}`);
       }
     } catch (error: any) {
-      console.error("DETALLE DEL FALLO DE RED:", error);
       setReservaMsg(`❌ Error de conexión: ${error.message || 'El servidor no responde'}`);
     } finally {
       setReservando(false);
     }
   };
 
-  const cancelarViaje = async () => {
-  if (!viaje) return;
+  const confirmarCancelarViaje = async () => {
+    if (!viaje) return;
 
-  const confirmacion = window.confirm('¿Estás seguro de que quieres cancelar este viaje?');
-  if (!confirmacion) return;
+    setCancelando(true);
+    setCancelMsg(null);
 
-  setCancelando(true);
-  setCancelMsg(null);
-
-  try {
-    const response = await fetch(
-      buildApiUrl(`/api/viajes/${viaje.slug}/cancelar`),
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/cancelar`),
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.error || data?.message || 'No se pudo cancelar el viaje';
+        throw new Error(msg);
       }
-    );
 
-    if (!response.ok) {
-      const data = await response.json().catch(() => null);
-      const msg = data?.error || data?.message || 'No se pudo cancelar el viaje';
-      throw new Error(msg);
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setCancelMsg('✅ Viaje cancelado correctamente.');
+      setTimeout(() => {
+        setModalCancelarViajeAbierto(false);
+        setCancelMsg(null);
+      }, 1500);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al cancelar viaje';
+      setCancelMsg(`❌ ${msg}`);
+    } finally {
+      setCancelando(false);
     }
+  };
 
-    const viajeActualizado = await response.json();
+  const esModificable = (fechaSalida: string) => {
+    const ahora = new Date();
+    const salida = new Date(fechaSalida);
+    const diferenciaMs = salida.getTime() - ahora.getTime();
+    const horasRestantes = diferenciaMs / (1000 * 60 * 60);
+    return horasRestantes > 12;
+  };
 
-    // 🔥 Actualiza estado sin recargar
-    setViaje(viajeActualizado);
-
-    setCancelMsg('✅ Viaje cancelado correctamente.');
-
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error al cancelar viaje';
-    setCancelMsg(`❌ ${msg}`);
-  } finally {
-    setCancelando(false);
-  }
-};
-
-const esModificable = (fechaSalida: string) => {
-  const ahora = new Date();
-  const salida = new Date(fechaSalida);
-  const diferenciaMs = salida.getTime() - ahora.getTime();
-  const horasRestantes = diferenciaMs / (1000 * 60 * 60);
-  return horasRestantes > 12;
-};
-
-const handleGuardarCambiosViaje = async () => {
-    console.log("Iniciando guardado...");
+  const handleGuardarCambiosViaje = async () => {
     setErrorEdicion(null);
 
-    // 1. Calculamos las plazas ocupadas para la validación de seguridad en el Front
     const plazasOcupadas = viaje?.reservas?.reduce((acc, r) => acc + r.cantidadPlazas, 0) || 0;
     
     if (Number(nuevasPlazas) < plazasOcupadas) {
@@ -536,15 +684,11 @@ const handleGuardarCambiosViaje = async () => {
     try {
         const url = buildApiUrl(`/api/viajes/${viaje?.slug}`);
         
-        // Preparamos el cuerpo del JSON para inspeccionarlo en consola
         const bodyEnvio = {
             fechaHoraSalida: nuevaFecha,
-            // Enviamos el número que el usuario puso en el input
             plazasDisponibles: Number(nuevasPlazas),
             precio: Number(viaje?.precio)
         };
-
-        console.log("📤 Enviando al Backend:", bodyEnvio);
 
         const response = await fetch(url, {
             method: 'PUT',
@@ -557,26 +701,28 @@ const handleGuardarCambiosViaje = async () => {
 
         if (response.ok) {
             const viajeActualizado = await response.json();
-            console.log("📥 Recibido del Servidor:", viajeActualizado);
+            setViaje(viajeActualizado);
+            setErrorEdicion("✅ Viaje actualizado con éxito");
 
-            setViaje(viajeActualizado); 
-            setModalEditarViajeAbierto(false);
-
-            alert(`✅ ¡Actualizado! Plazas resultantes: ${viajeActualizado.plazasDisponibles}`);
-            fetchViaje();
+            setTimeout(() => {
+                setErrorEdicion(null);
+                fetchViaje();
+                setModalEditarViajeAbierto(false);
+            }, 1500);
 
         } else {
             const errorData = await response.json().catch(() => null);
             const mensajeError = errorData?.message || errorData?.error || 'Error desconocido';
             setErrorEdicion(`❌ Error ${response.status}: ${mensajeError}`);
         }
-    } catch (err) {
-        console.error("Fallo crítico en la petición:", err);
+    } catch {
         setErrorEdicion("❌ Error de conexión. Revisa si el servidor Java está corriendo.");
     } finally {
         setEditando(false);
     }
-};
+  };
+
+  const yaEsHoraDeSalida = viaje ? new Date() >= new Date(viaje.fechaHoraSalida) : false;
 
   return (
     <div className="min-h-screen bg-gray-100 pb-10 pt-6">
@@ -599,11 +745,13 @@ const handleGuardarCambiosViaje = async () => {
             </div>
             <span
               className={`px-3 py-2 rounded-full text-sm font-medium ${
-                viaje.estado === 'ACTIVO'
-                  ? 'bg-green-100 text-green-800'
-                  : viaje.estado === 'COMPLETADO'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-800'
+                viaje.estado === 'INICIADO' || viaje.estado === 'EN_CURSO'
+                  ? 'bg-blue-100 text-blue-800'
+                  : viaje.estado === 'PENDIENTE' || viaje.estado === 'PUBLICADO'
+                    ? 'bg-green-100 text-green-800'
+                    : viaje.estado === 'FINALIZADO'
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'bg-red-100 text-red-800'
               }`}
             >
               {viaje.estado}
@@ -632,6 +780,7 @@ const handleGuardarCambiosViaje = async () => {
               )}
             </div>
           </div>
+
           {/* Lista de Pasajeros (Solo visible para el conductor) */}
           {navState.rol === 'conductor' && viaje.reservas && viaje.reservas.length > 0 && (
             <div className="mb-6 border-t border-slate-100 pt-6">
@@ -651,10 +800,10 @@ const handleGuardarCambiosViaje = async () => {
                         <p className="text-xs text-slate-500">{res.cantidadPlazas} plaza(s) • {res.estado}</p>
                       </div>
                     </div>
-                    {res.pasajeroSlug && ( // <-- Condición para mostrar el botón solo si hay slug
+                    {res.pasajeroSlug && (
                       <button
                         type="button"
-                        onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)} // <-- Usamos el slug
+                        onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)}
                         className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
                       >
                         Ver perfil público
@@ -719,7 +868,7 @@ const handleGuardarCambiosViaje = async () => {
             </div>
           </div>
 
-        {/* SECCIÓN DE BOTONES DINÁMICOS */}
+          {/* SECCIÓN DE BOTONES DINÁMICOS */}
           <div className="space-y-3">
             
             {/* CASO: USUARIO ES EL PASAJERO */}
@@ -730,18 +879,13 @@ const handleGuardarCambiosViaje = async () => {
                   <button
                     type="button"
                     className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
-                    disabled={viaje.plazasDisponibles <= 0}
+                    disabled={viaje.plazasDisponibles <= 0 || viaje.estado === 'CANCELADO' || viaje.estado === 'FINALIZADO'}
                     onClick={() => {
                       setReservaMsg(null);
                       setAceptaBloqueoPago(false);
-                      
-                      // Si miReserva existe (el usuario ya tiene una reserva previa que quiere sobreescribir o retomar)
                       setCantidadPlazas(miReserva?.cantidadPlazas || 1);
-                      
-                      // Cargamos paradas: de la reserva existente o las de por defecto del viaje
                       setParadaSubidaId(miReserva?.paradaSubidaId || viaje.paradas.find(p => p.tipo === 'ORIGEN')?.id || null);
                       setParadaBajadaId(miReserva?.paradaBajadaId || viaje.paradas.find(p => p.tipo === 'DESTINO')?.id || null);
-                      
                       setModalReservaAbierto(true);
                     }}
                   >
@@ -781,12 +925,16 @@ const handleGuardarCambiosViaje = async () => {
 
                     <button
                       type="button"
-                      onClick={cancelarReserva}
+                      onClick={() => {
+                        setCancelReservaMsg(null);
+                        setModalCancelarReservaAbierto(true);
+                      }}
                       disabled={cancelandoReserva}
                       className="w-full rounded-lg bg-yellow-500 px-6 py-3 text-base font-bold text-white hover:bg-yellow-600 disabled:opacity-60 transition-all shadow-sm"
                     >
                       {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
                     </button>
+                    
                   </div>
                 )}
               </>
@@ -795,6 +943,72 @@ const handleGuardarCambiosViaje = async () => {
             {/* CASO: USUARIO ES EL CONDUCTOR */}
             {navState.rol === 'conductor' && (
               <div className="space-y-3">
+
+                {/* BOTÓN INICIAR VIAJE */}
+                {viaje.estado !== 'CANCELADO' && viaje.estado !== 'FINALIZADO' && viaje.estado !== 'INICIADO' && viaje.estado !== 'EN_CURSO' && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={iniciarViaje}
+                      disabled={iniciando || !yaEsHoraDeSalida}
+                      className="w-full rounded-lg bg-emerald-600 px-6 py-3 text-base font-bold text-white hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      {iniciando ? 'Iniciando viaje...' : '🚀 Iniciar viaje'}
+                    </button>
+
+                    {!yaEsHoraDeSalida && (
+                      <p className="mt-2 text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-center font-medium">
+                        ⏳ El botón se activará cuando llegue la hora de salida ({formatFecha(viaje.fechaHoraSalida)}).
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {iniciarMsg && (
+                  <div className={`p-3 rounded-xl text-xs font-bold border ${iniciarMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                    {iniciarMsg}
+                  </div>
+                )}
+
+                {viaje.estado === 'INICIADO' && (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCheckinMsg(null);
+                        setCodigoCheckin('');
+                        setModalCheckinAbierto(true);
+                      }}
+                      className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      📲 Realizar check-in
+                    </button>
+                    <p className="text-xs text-slate-500 text-center">
+                      El viaje ya está iniciado. Ahora puedes validar el código para pasar a EN_CURSO.
+                    </p>
+                  </div>
+                )}
+
+                {/* BOTÓN FINALIZAR VIAJE (UNA VEZ EN CURSO) */}
+                {viaje.estado === 'EN_CURSO' && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={finalizarViaje}
+                      disabled={finalizando}
+                      className="w-full rounded-lg bg-slate-800 px-6 py-3 text-base font-bold text-white hover:bg-slate-900 disabled:opacity-60 transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      {finalizando ? 'Finalizando viaje...' : '🏁 Marcar viaje como finalizado'}
+                    </button>
+
+                    {finalizarMsg && (
+                      <div className={`mt-2 p-3 rounded-xl text-xs font-bold border ${finalizarMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                        {finalizarMsg}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {esModificable(viaje.fechaHoraSalida) ? (
                   <button
                     type="button"
@@ -814,10 +1028,13 @@ const handleGuardarCambiosViaje = async () => {
                   </div>
                 )}
 
-                {viaje.estado === 'PENDIENTE' && (
+                {(viaje.estado === 'PENDIENTE' || viaje.estado === 'PUBLICADO') && (
                   <button
                     type="button"
-                    onClick={() => { cancelarViaje(); }}
+                    onClick={() => {
+                      setCancelMsg(null);
+                      setModalCancelarViajeAbierto(true);
+                    }}
                     disabled={cancelando}
                     className="w-full rounded-lg bg-red-600 px-6 py-3 text-base font-bold text-white hover:bg-red-700 disabled:opacity-60 transition-all shadow-sm"
                   >
@@ -937,7 +1154,24 @@ const handleGuardarCambiosViaje = async () => {
                       Registrarse
                     </button>
                   </div>
-                ) : (
+                ) : mostrarStripe && clientSecret ? (
+                    <div className="py-4 animate-in fade-in">
+                      <Elements stripe={stripePromise} options={{ clientSecret }}>
+                          <CheckoutForm 
+                            clientSecret={clientSecret} 
+                            monto={cantidadPlazas * (viaje?.precio || 0)}
+                            onSuccess={(id) => { 
+                                console.log("Pago autorizado con ID:", id);
+                                setMostrarStripe(false);
+                                reservarPlazas(); 
+                            }}
+                            onError={(message) => {
+                              void deshacerReservaPorFalloPago(message || 'El pago no pudo completarse');
+                            }}
+                          />
+                      </Elements>
+                    </div>
+                  ) : (
                   <div className="space-y-6">
                     
                     {/* Resumen de ruta visual */}
@@ -1122,7 +1356,6 @@ const handleGuardarCambiosViaje = async () => {
                     const precioUnitario = Number(viaje?.precio || 0);
                     const diferencia = (cantidadPlazas - (miReserva?.cantidadPlazas || 0)) * precioUnitario;
                     
-                    // 1. Detectar si hay algún cambio real (Plazas O Paradas)
                     const haCambiadoPlazas = miReserva && cantidadPlazas !== miReserva.cantidadPlazas;
                     const haCambiadoParadas = miReserva && (
                       Number(paradaSubidaId) !== Number(miReserva.paradaSubidaId) || 
@@ -1131,11 +1364,6 @@ const handleGuardarCambiosViaje = async () => {
 
                     const hayCambios = haCambiadoPlazas || haCambiadoParadas;
 
-                    // 2. Lógica del Botón:
-                    // Si es edición (miReserva existe), se bloquea si:
-                    // - No hay ningún cambio (hayCambios es false)
-                    // - O si hay cambio de precio (diferencia !== 0) y no ha marcado el check
-                    // Si es reserva nueva, se bloquea si no ha marcado el check.
                     const botonBloqueado = 
                       reservando || 
                       (miReserva 
@@ -1146,45 +1374,37 @@ const handleGuardarCambiosViaje = async () => {
                     return (
                       <button
                         type="button"
-                        onClick={miReserva ? actualizarReserva : reservarPlazas}
-                        disabled={botonBloqueado}
+                        onClick={miReserva ? actualizarReserva : (mostrarStripe ? undefined : iniciarProcesoPago)}
+                        disabled={botonBloqueado || (mostrarStripe)}
                         className={`w-full py-3.5 rounded-xl font-bold text-white shadow-lg transition-all active:scale-[0.98] ${
                           botonBloqueado 
                             ? 'bg-slate-300 cursor-not-allowed shadow-none' 
                             : 'bg-gradient-compi hover:opacity-95 shadow-indigo-200'
                         }`}
                       >
-                        {reservando ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            Procesando...
-                          </span>
-                        ) : reservaMsg?.includes('✅') ? (
-                          "✨ ¡Todo listo!"
-                        ) : miReserva ? (
-                          "Confirmar y Guardar Cambios"
-                        ) : (
-                          `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`
-                        )}
+                        {mostrarStripe ? "Esperando pago..." 
+                        : (miReserva ? "Guardar Cambios" 
+                        : `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`)
+                      }
                       </button>
                     );
                   })()
                 )}
-                <button
-                  type="button"
-                  onClick={() => setModalReservaAbierto(false)}
-                  className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  Cancelar y volver
-                </button>
+                {mostrarStripe && (
+                  <button 
+                    onClick={() => setMostrarStripe(false)}
+                    className="text-xs text-indigo-600 mt-2"
+                  >
+                    « Volver a editar reserva
+                  </button>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Modal Editar Viaje */}
       {modalEditarViajeAbierto && viaje && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200">
@@ -1200,7 +1420,6 @@ const handleGuardarCambiosViaje = async () => {
               </p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* CAMPO FECHA/HORA */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Nueva Fecha y Hora</label>
                   <input 
@@ -1208,12 +1427,10 @@ const handleGuardarCambiosViaje = async () => {
                     className="w-full rounded-lg border border-slate-300 p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none"
                     defaultValue={viaje.fechaHoraSalida.substring(0, 16)} 
                     onChange={(e) => setNuevaFecha(e.target.value)}
-                    /* Ponemos un mínimo de hoy + 12 horas para guiar al usuario */
                     min={new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString().substring(0, 16)}
                   />
                 </div>
 
-                {/* CAMPO PLAZAS (SOLO AUMENTAR) */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Plazas totales disponibles
@@ -1231,7 +1448,6 @@ const handleGuardarCambiosViaje = async () => {
                 </div>
               </div>
 
-              {/* ALERTA DE INFORMACIÓN */}
               <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3">
                 <span className="text-amber-600 font-bold">⚠️</span>
                 <p className="text-xs text-amber-700 leading-relaxed">
@@ -1240,6 +1456,18 @@ const handleGuardarCambiosViaje = async () => {
                 </p>
               </div>
 
+              {errorEdicion && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold border animate-in fade-in slide-in-from-top-2 ${
+                    errorEdicion.includes('✅')
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
+                  {errorEdicion}
+                </div>
+              )}
+
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button 
                   onClick={() => setModalEditarViajeAbierto(false)}
@@ -1247,12 +1475,199 @@ const handleGuardarCambiosViaje = async () => {
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   className="rounded-lg bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-all disabled:bg-slate-300"
                   disabled={editando}
                   onClick={handleGuardarCambiosViaje}
                 >
-                  {editando ? 'Guardando...' : 'Confirmar cambios'}
+                  {editando ? 'Guardando...' : errorEdicion?.includes('✅') ? '✨ ¡Todo listo!' : 'Confirmar cambios'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Checkin */}
+      {modalCheckinAbierto && viaje && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Realizar check-in</h3>
+                <p className="text-xs text-slate-500">Introduce el código para pasar el viaje a EN_CURSO.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setModalCheckinAbierto(false);
+                  setCheckinMsg(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Código de check-in
+                </label>
+                <input
+                  type="text"
+                  value={codigoCheckin}
+                  onChange={(e) => setCodigoCheckin(e.target.value)}
+                  placeholder="Introduce el código"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 uppercase tracking-[0.2em]"
+                  autoComplete="off"
+                />
+              </div>
+
+              {checkinMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${checkinMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {checkinMsg}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => {
+                    setModalCheckinAbierto(false);
+                    setCheckinMsg(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarCheckin}
+                  disabled={verificandoCheckin}
+                  className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-all disabled:bg-slate-300"
+                >
+                  {verificandoCheckin ? 'Verificando...' : 'Confirmar check-in'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN: CANCELAR RESERVA */}
+      {modalCancelarReservaAbierto && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cancelar reserva</h3>
+                <p className="text-xs text-slate-500">Confirma la cancelación de tus plazas</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalCancelarReservaAbierto(false);
+                  setCancelReservaMsg(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-700">
+                ¿Estás seguro de que deseas cancelar tu reserva para este viaje? Liberarás tus plazas asignadas.
+              </p>
+
+              {cancelReservaMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${
+                  cancelReservaMsg.includes('✅') 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {cancelReservaMsg}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalCancelarReservaAbierto(false);
+                    setCancelReservaMsg(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarCancelarReserva}
+                  disabled={cancelandoReserva}
+                  className="rounded-lg bg-yellow-500 px-6 py-2 text-sm font-bold text-white hover:bg-yellow-600 transition-all disabled:bg-slate-300"
+                >
+                  {cancelandoReserva ? 'Procesando...' : 'Confirmar cancelación'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN: CANCELAR VIAJE */}
+      {modalCancelarViajeAbierto && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cancelar viaje</h3>
+                <p className="text-xs text-slate-500">Confirma la cancelación total del trayecto</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalCancelarViajeAbierto(false);
+                  setCancelMsg(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-700">
+                ¿Estás seguro de que quieres cancelar este viaje? Esta acción no se puede deshacer y notificará a todos los pasajeros con reservas asociadas.
+              </p>
+
+              {cancelMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${
+                  cancelMsg.includes('✅') 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {cancelMsg}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalCancelarViajeAbierto(false);
+                    setCancelMsg(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarCancelarViaje}
+                  disabled={cancelando}
+                  className="rounded-lg bg-red-600 px-6 py-2 text-sm font-bold text-white hover:bg-red-700 transition-all disabled:bg-slate-300"
+                >
+                  {cancelando ? 'Procesando...' : 'Sí, cancelar viaje'}
                 </button>
               </div>
             </div>

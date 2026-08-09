@@ -3,6 +3,8 @@ package com.compicar.valoracion;
 import java.time.LocalDateTime;
 
 import com.compicar.persona.Persona;
+import com.compicar.viaje.Viaje; // <-- IMPORTANTE: Importar la entidad Viaje
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -17,7 +19,7 @@ import jakarta.validation.constraints.Min;
 
 @Entity
 @Table(name = "valoracion")
-public abstract class Valoracion {
+public class Valoracion {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,26 +37,33 @@ public abstract class Valoracion {
 
     @ManyToOne
     @JoinColumn(name = "autor_id", nullable = false)
+    @JsonIgnore
     private Persona autor;
 
     @ManyToOne
     @JoinColumn(name = "valorado_id", nullable = false)
+    @JsonIgnore
     private Persona valorado;
+
+    @ManyToOne
+    @JoinColumn(name = "viaje_id", nullable = false)
+    @JsonIgnore
+    private Viaje viaje;
 
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
-
 
     // Constructores
     public Valoracion() {
         this.fecha = LocalDateTime.now();
     }
 
-    public Valoracion(Integer puntuacion, String comentario, Persona autor, Persona valorado) {
+    public Valoracion(Integer puntuacion, String comentario, Persona autor, Persona valorado, Viaje viaje) {
         this.puntuacion = puntuacion;
         this.comentario = comentario;
         this.autor = autor;
         this.valorado = valorado;
+        this.viaje = viaje; 
         this.fecha = LocalDateTime.now();
         this.slug = "valoracion-" + id;
     }
@@ -84,6 +93,10 @@ public abstract class Valoracion {
         return valorado;
     }
 
+    public Viaje getViaje() {
+        return viaje;
+    }
+
     public String getSlug() {
         return slug;
     }
@@ -105,6 +118,14 @@ public abstract class Valoracion {
         this.valorado = valorado;
     }
 
+    public void setFecha(LocalDateTime fecha) {
+        this.fecha = fecha;
+    }
+
+    public void setViaje(Viaje viaje) { 
+        this.viaje = viaje;
+    }
+
     public void setSlug(String slug) {
         this.slug = slug;
     }
@@ -112,7 +133,7 @@ public abstract class Valoracion {
     @Override
     public String toString() {
         return "Valoracion{id=" + id + ", puntuacion=" + puntuacion + ", comentario='" + comentario + "', fecha=" + fecha
-                + ", autor=" + autor.getId() + ", valorado=" + valorado.getId() + ", slug=" + slug + "}";
+                + ", autor=" + autor.getId() + ", valorado=" + valorado.getId() 
+                + ", viaje=" + (viaje != null ? viaje.getId() : null) + ", slug=" + slug + "}";
     }
-    
 }

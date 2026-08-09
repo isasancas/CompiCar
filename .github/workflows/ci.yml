@@ -20,3 +20,6 @@ jobs:
     - name: Run backend tests
       run: mvn test
       working-directory: backend
+      env:
+        STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

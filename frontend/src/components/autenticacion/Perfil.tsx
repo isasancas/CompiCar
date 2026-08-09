@@ -11,6 +11,8 @@ interface PerfilData {
   telefono: string;
   reputacion?: number;
   preferenciasViaje?: string[];
+  fondosActuales?: number | string;
+  fondosTotales?: number | string;
 }
 
 interface VehiculoData {
@@ -37,14 +39,32 @@ type ResumenActividad = {
   tendenciaPct: number;
 };
 
+// Convierte a número seguro cualquier valor (number, string "16", "16.00", "16,00", null, etc.)
+const parseMonto = (val: unknown): number => {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (typeof val === 'string') {
+    const parsed = parseFloat(val.replace(',', '.'));
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
+
 const Perfil: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilData | null>(null);
+  const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
   const [vehiculos, setVehiculos] = useState<VehiculoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [vehiculosError, setVehiculosError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Estados para retirada de fondos
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [withdrawSuccess, setWithdrawSuccess] = useState<string | null>(null);
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editError, setEditError] = useState('');
@@ -79,6 +99,7 @@ const Perfil: React.FC = () => {
 
   const misDatosRef = useRef<HTMLDivElement | null>(null);
   const [misDatosHeight, setMisDatosHeight] = useState<number | null>(null);
+
   useLayoutEffect(() => {
     const updateHeight = () => {
       if (misDatosRef.current) {
@@ -93,6 +114,7 @@ const Perfil: React.FC = () => {
       window.removeEventListener('resize', updateHeight);
     };
   }, [perfil, resumenActividad]);
+
   const navigate = useNavigate();
 
   const getValidToken = () => {
@@ -241,13 +263,115 @@ const Perfil: React.FC = () => {
     }
   }, [clearLocalSession]);
 
+  const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/valoraciones/valorado/${personaId}`), {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (!response.ok) {
+        return;
+      }
+
+      const valoraciones = await response.json();
+      setTotalValoracionesRecibidas(Array.isArray(valoraciones) ? valoraciones.length : 0);
+    } catch {
+      // Mantenemos valor actual si hay error
+    }
+  }, [clearLocalSession]);
+
+  const handleRetirarFondos = async () => {
+    setIsWithdrawing(true);
+    setWithdrawError(null);
+    setWithdrawSuccess(null);
+
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/personas/retirar-fondos'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      console.log("Respuesta del servidor:", data);
+
+      if (!response.ok) {
+        setWithdrawError(data.message || data.error || 'Error al solicitar la retirada');
+        return;
+      }
+
+      // SI REQUIERE ONBOARDING EN STRIPE:
+      if (data.status === 'REQUIRES_ONBOARDING' && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      // SI LA RETIRADA FUE EXITOSA:
+      if (data.status === 'SUCCESS') {
+        // Actualizamos los fondos disponibles en el estado local del perfil a 0
+        setPerfil((prevPerfil) => 
+          prevPerfil ? { ...prevPerfil, fondosActuales: 0 } : null
+        );
+        setWithdrawSuccess('¡Retiro completado con éxito!');
+        setTimeout(() => {
+          setWithdrawSuccess(null);
+        }, 4000);
+      }
+    } catch (err) {
+      console.error("Error en la petición:", err);
+      setWithdrawError('Error de conexión con el servidor');
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
   useEffect(() => {
     Promise.all([fetchPerfil(), fetchVehiculos(), fetchResumenActividad()])
-      .catch(() => {
-        // Errores individuales ya se manejan en cada función.
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [fetchPerfil, fetchVehiculos, fetchResumenActividad]);
+
+  useEffect(() => {
+    if (!perfil?.id) {
+      setTotalValoracionesRecibidas(0);
+      return;
+    }
+
+    const personaId = perfil.id;
+    fetchTotalValoracionesRecibidas(personaId);
+
+    const refreshOnFocus = () => {
+      fetchTotalValoracionesRecibidas(personaId);
+    };
+
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [perfil?.id, fetchTotalValoracionesRecibidas]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -267,7 +391,7 @@ const Perfil: React.FC = () => {
         }
       });
     } catch {
-      // Si el backend falla, cerramos sesión local igualmente para no bloquear al usuario.
+      // Ignorar fallo remoto en logout
     } finally {
       setIsLoggingOut(false);
       setShowLogoutConfirm(false);
@@ -276,9 +400,7 @@ const Perfil: React.FC = () => {
   };
 
   const openEditModal = () => {
-    if (!perfil) {
-      return;
-    }
+    if (!perfil) return;
 
     setEditError('');
     setEditForm({
@@ -375,9 +497,7 @@ const Perfil: React.FC = () => {
       return;
     }
 
-    if (!validateVehiculoForm()) {
-      return;
-    }
+    if (!validateVehiculoForm()) return;
 
     const token = getValidToken();
     if (!token) {
@@ -423,9 +543,7 @@ const Perfil: React.FC = () => {
   };
 
   const handleDeleteVehiculo = async (vehiculoId: number) => {
-    if (!window.confirm('¿Seguro que quieres borrar este vehículo?')) {
-      return;
-    }
+    if (!window.confirm('¿Seguro que quieres borrar este vehículo?')) return;
 
     const token = getValidToken();
     if (!token) {
@@ -505,9 +623,7 @@ const Perfil: React.FC = () => {
       return;
     }
 
-    if (!validateEditForm()) {
-      return;
-    }
+    if (!validateEditForm()) return;
 
     const token = getValidToken();
     if (!token) {
@@ -547,6 +663,8 @@ const Perfil: React.FC = () => {
           telefono: updated.telefono,
           preferenciasViaje: updated.preferenciasViaje,
           reputacion: prev?.reputacion,
+          fondosActuales: updated.fondosActuales ?? prev?.fondosActuales,
+          fondosTotales: updated.fondosTotales ?? prev?.fondosTotales
         } as PerfilData));
         setShowEditModal(false);
         setEditError('');
@@ -558,7 +676,7 @@ const Perfil: React.FC = () => {
           const body = await response.json();
           backendError = typeof body?.error === 'string' ? body.error : backendError;
         } catch {
-          // Si falla parseo JSON, mantenemos el mensaje por defecto.
+          // Ignorar fallo de parseo
         }
         setEditError(backendError);
       }
@@ -581,7 +699,6 @@ const Perfil: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validar tamaño (máx 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('La foto debe ser menor a 5MB');
       return;
@@ -614,7 +731,7 @@ const Perfil: React.FC = () => {
         } else {
           alert('Error al subir la foto');
         }
-      } catch (error) {
+      } catch {
         alert('Error de conexión al subir la foto');
       } finally {
         setUploading(false);
@@ -622,8 +739,10 @@ const Perfil: React.FC = () => {
     };
     reader.readAsDataURL(file);
   };
+
   const [preferencias, setPreferencias] = useState<string[]>([]);
-  const [nuevaPreferencia, setNuevaPreferencia] = useState("");
+  const [nuevaPreferencia, setNuevaPreferencia] = useState('');
+
   useEffect(() => {
     if (perfil?.preferenciasViaje) {
       setPreferencias(perfil.preferenciasViaje);
@@ -643,16 +762,15 @@ const Perfil: React.FC = () => {
         },
         body: JSON.stringify({
           ...perfil,
-          preferenciasViaje: nuevaLista // Usamos la lista que entra por parámetro
+          preferenciasViaje: nuevaLista
         })
       });
 
       if (!response.ok) {
         throw new Error('Error al guardar');
       }
-      
-      // Opcional: una notificación silenciosa o simplemente refrescar
-      fetchPerfil(); 
+
+      fetchPerfil();
     } catch (error) {
       alert('No se pudieron sincronizar las preferencias.');
       console.error(error);
@@ -679,6 +797,16 @@ const Perfil: React.FC = () => {
       </div>
     );
   }
+
+  // Búsqueda flexible por si la API lo llama 'fondosActuales', 'fondos_actuales' o 'saldo'
+  const rawFondos = perfil?.fondosActuales ?? (perfil as Record<string, unknown> | null)?.fondos_actuales ?? (perfil as Record<string, unknown> | null)?.saldo;
+  const fondosActuales = parseMonto(rawFondos);
+
+  const rawFondosTotales = perfil?.fondosTotales ?? (perfil as Record<string, unknown> | null)?.fondos_totales;
+  const fondosTotales = parseMonto(rawFondosTotales);
+
+  const puedeRetirar = fondosActuales >= 10;
+
   return (
     <div data-testid="perfil-page" className="min-h-screen bg-gray-200 pb-10 pt-4">
       <div className="mx-auto max-w-6xl px-4">
@@ -690,37 +818,104 @@ const Perfil: React.FC = () => {
           Volver
         </button>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
-          <aside className="rounded-xl bg-transparent p-2">
-            <h2 className="text-4xl font-bold leading-none text-slate-800">Mi perfil</h2>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[240px_1fr]">
+          {/* BARRA LATERAL CON FOTO Y FONDOS */}
+          <aside className="rounded-xl bg-transparent p-2 space-y-4">
+            <div>
+              <h2 className="text-4xl font-bold leading-none text-slate-800">Mi perfil</h2>
 
-            <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
-              {fotoPerfil ? (
-                <img src={fotoPerfil} alt="Foto perfil" className="h-full w-full object-cover" />
-              ) : (
-                <span>{perfil?.nombre?.charAt(0).toUpperCase()}</span>
-              )}
+              {/* BLOQUE CENTRADO PARA FOTO Y BOTÓN */}
+              <div className="mt-4 flex flex-col items-center">
+                <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
+                  {fotoPerfil ? (
+                    <img src={fotoPerfil} alt="Foto perfil" className="h-full w-full object-cover" />
+                  ) : (
+                    <span>{perfil?.nombre?.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  hidden
+                  accept="image/*"
+                  onChange={handleFotoChange}
+                />
+
+                <button
+                  type="button"
+                  onClick={handleEditarFoto}
+                  disabled={uploading}
+                  className="mt-3 rounded-full bg-gradient-compi px-4 py-1.5 text-xs font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {uploading ? 'Subiendo...' : 'Editar foto'}
+                </button>
+              </div>
             </div>
 
-            <input
-              type="file"
-              ref={fileInputRef}
-              hidden
-              accept="image/*"
-              onChange={handleFotoChange}
-            />
+            {/* SECCIÓN MONEDERO / RETIRADA DE FONDOS EN EL LATERAL */}
+            <div className="rounded-xl border border-slate-300 bg-gray-100 p-4 shadow-sm space-y-3">
+              <h3 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-2">
+                Mis fondos
+              </h3>
 
-            <button
-              type="button"
-              onClick={handleEditarFoto}
-              disabled={uploading}
-              className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow disabled:opacity-60"
-            >
-              {uploading ? 'Subiendo...' : 'Editar foto'}
-            </button>
+              <div className="space-y-2">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Saldo disponible
+                  </span>
+                  <p className="text-2xl font-extrabold text-slate-900">
+                    {fondosActuales.toFixed(2)} €
+                  </p>
+                </div>
+
+                {rawFondosTotales !== undefined && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <span className="text-xs font-medium text-slate-500">
+                      Total acumulado
+                    </span>
+                    <p className="text-base font-semibold text-slate-700">
+                      {fondosTotales.toFixed(2)} €
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {withdrawError && (
+                <p className="text-xs text-red-600 font-medium">{withdrawError}</p>
+              )}
+
+              {withdrawSuccess && (
+                <div className="rounded-lg bg-green-100 border border-green-300 p-2 text-center text-xs font-semibold text-green-800 transition-all">
+                  {withdrawSuccess}
+                </div>
+              )}
+
+              <div className="pt-1 flex flex-col items-stretch gap-1">
+                <button
+                  type="button"
+                  disabled={!puedeRetirar || isWithdrawing}
+                  onClick={handleRetirarFondos}
+                  className={`w-full rounded-full px-4 py-2 text-xs font-semibold shadow transition ${
+                    puedeRetirar
+                      ? 'bg-gradient-compi text-white hover:opacity-90 cursor-pointer'
+                      : 'bg-slate-700 text-slate-400 cursor-not-allowed opacity-80'
+                  }`}
+                >
+                  {isWithdrawing ? 'Procesando...' : 'Retirar fondos'}
+                </button>
+                {!puedeRetirar && (
+                  <span className="text-[10px] text-slate-500 italic text-center mt-1">
+                    * Mínimo 10,00 € para retirar
+                  </span>
+                )}
+              </div>
+            </div>
           </aside>
 
+          {/* GRID PRINCIPAL 2x2 */}
           <section className="grid gap-4 md:grid-cols-2 items-start">
+            {/* BLOQUE 1: MIS DATOS Y ACTIVIDAD */}
             <div ref={misDatosRef} className="self-start rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold text-slate-800">Mis datos y actividad</h3>
 
@@ -772,10 +967,11 @@ const Perfil: React.FC = () => {
               </div>
             </div>
 
+            {/* BLOQUE 2: MIS VEHÍCULOS */}
             <div
-                className="rounded-xl border border-slate-500 bg-gray-100 p-5 flex flex-col"
-                style={misDatosHeight ? { height: `${misDatosHeight}px` } : undefined}
-              >
+              className="rounded-xl border border-slate-500 bg-gray-100 p-5 flex flex-col"
+              style={misDatosHeight ? { height: `${misDatosHeight}px` } : undefined}
+            >
               <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
 
               <div className="mt-3 flex-1 min-h-0 text-slate-700">
@@ -830,6 +1026,7 @@ const Perfil: React.FC = () => {
               </button>
             </div>
 
+            {/* BLOQUE 3: PREFERENCIAS DE VIAJE */}
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold mb-2 text-slate-800">Preferencias de viaje</h3>
               <div className="flex flex-wrap gap-2 my-3">
@@ -866,7 +1063,7 @@ const Perfil: React.FC = () => {
                       const listaActualizada = [...preferencias, nuevaPreferencia.trim()];
                       setPreferencias(listaActualizada);
                       setNuevaPreferencia("");
-                      persistirPreferencias(listaActualizada); // Guardado automático al pulsar Enter
+                      persistirPreferencias(listaActualizada);
                     }
                   }}
                 />
@@ -878,7 +1075,7 @@ const Perfil: React.FC = () => {
                       const listaActualizada = [...preferencias, nuevaPreferencia.trim()];
                       setPreferencias(listaActualizada);
                       setNuevaPreferencia("");
-                      persistirPreferencias(listaActualizada); // Guardado automático al hacer clic
+                      persistirPreferencias(listaActualizada);
                     }
                   }}
                 >
@@ -887,11 +1084,20 @@ const Perfil: React.FC = () => {
               </div>
             </div>
 
+            {/* BLOQUE 4: VALORACIONES */}
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
               <p className="mt-6 text-xl text-slate-700">
-                Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
+                Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp;
+                ({totalValoracionesRecibidas} {totalValoracionesRecibidas === 1 ? 'reseña' : 'reseñas'})
               </p>
+              <button
+                type="button"
+                className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow hover:opacity-90"
+                onClick={() => navigate('/valoraciones')}
+              >
+                Ver mis valoraciones
+              </button>
             </div>
           </section>
         </div>
@@ -1138,7 +1344,7 @@ const Perfil: React.FC = () => {
           </div>
         </div>
       )}
-      </div>
+    </div>
   );
 };
 

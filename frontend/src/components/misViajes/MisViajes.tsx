@@ -6,7 +6,7 @@ interface Viaje {
   id: number;
   slug: string;
   fechaHoraSalida: string;
-  estado: string;
+  estado: 'INICIADO' | 'PENDIENTE' | 'EN_CURSO' | 'FINALIZADO' | 'CANCELADO' | string;
   plazasDisponibles: number;
   precio: number;
   vehiculo: {
@@ -56,12 +56,10 @@ const MisViajes: React.FC = () => {
     }
 
     try {
-      // Obtener viajes como conductor
       const resConductor = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
 
-      // Obtener viajes como pasajero
       const resPasajero = await fetch(buildApiUrl('/api/viajes/participados'), {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
       });
@@ -78,13 +76,11 @@ const MisViajes: React.FC = () => {
       const viajesConductor: Viaje[] = await resConductor.json();
       const viajesPasajero: Viaje[] = await resPasajero.json();
 
-      // Combinar y añadir rol
       const combinados: ViajeConRol[] = [
         ...viajesConductor.map(v => ({ ...v, rol: 'conductor' as const })),
         ...viajesPasajero.map(v => ({ ...v, rol: 'pasajero' as const }))
       ];
 
-      // Ordenar por fecha descendente
       combinados.sort((a, b) => 
         new Date(b.fechaHoraSalida).getTime() - new Date(a.fechaHoraSalida).getTime()
       );
@@ -118,12 +114,31 @@ const MisViajes: React.FC = () => {
     return { origen, destino, paradasIntermedias };
   };
 
-  const viajesFiltrados = todosLosViajes.filter(v => {
-    if (filtroEstado === 'PENDIENTE') {
-      return v.estado === 'PENDIENTE' || v.estado === 'ACTIVO';
-    } else {
-      return v.estado === 'FINALIZADO' || v.estado === 'COMPLETADO';
+  const getEstadoBadgeStyle = (estado: string) => {
+    switch (estado?.toUpperCase()) {
+      case 'PENDIENTE':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'INICIADO':
+      case 'EN_CURSO':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'FINALIZADO':
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'CANCELADO':
+        return 'bg-red-100 text-red-800 border-red-200';
+      default:
+        return 'bg-slate-100 text-slate-800 border-slate-200';
     }
+  };
+
+  const viajesFiltrados = todosLosViajes.filter(v => {
+    const estado = v.estado?.toUpperCase();
+    const esFinalizadoOCancelado = estado === 'FINALIZADO' || estado === 'CANCELADO';
+
+    if (filtroEstado === 'FINALIZADO') {
+      return esFinalizadoOCancelado;
+    }
+    // Para 'PENDIENTE' incluye PENDIENTE, INICIADO, EN_CURSO
+    return !esFinalizadoOCancelado;
   });
 
   if (loading) {
@@ -165,83 +180,83 @@ const MisViajes: React.FC = () => {
             {/* Tabs de filtro */}
             <div className="flex gap-6 mb-6 border-b border-slate-200 pb-2">
               <button
+                type="button"
                 onClick={() => setFiltroEstado('PENDIENTE')}
                 className={`font-medium text-sm transition ${
                   filtroEstado === 'PENDIENTE'
-                    ? 'text-green-600'
+                    ? 'text-green-600 font-bold border-b-2 border-green-600 pb-2 -mb-[9px]'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Pendientes
+                Pendientes (Activos)
               </button>
               <button
+                type="button"
                 onClick={() => setFiltroEstado('FINALIZADO')}
                 className={`font-medium text-sm transition ${
                   filtroEstado === 'FINALIZADO'
-                    ? 'text-green-600'
+                    ? 'text-green-600 font-bold border-b-2 border-green-600 pb-2 -mb-[9px]'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Finalizados
+                Finalizados y Cancelados
               </button>
             </div>
 
             {viajesFiltrados.length === 0 ? (
-              <p className="text-slate-600">No hay viajes.</p>
+              <p className="text-slate-600">No hay viajes en esta sección.</p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {viajesFiltrados.map((viaje) => {
                   const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
                   return (
-                    <div key={`${viaje.id}-${viaje.rol}`} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold text-slate-900">
-                          {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
-                        </h3>
-                        <div className="flex flex-col items-end space-y-1">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            viaje.estado === 'ACTIVO' ? 'bg-green-100 text-green-800' :
-                            viaje.estado === 'COMPLETADO' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {viaje.estado}
-                          </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            viaje.rol === 'conductor'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-purple-100 text-purple-800'
-                          }`}>
-                            {viaje.rol === 'conductor' ? 'Conductor' : 'Pasajero'}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-1">
-                        <span className="font-medium text-green-700">Origen:</span> {origen}
-                      </p>
-                      <p className="text-sm text-slate-600 mb-1">
-                        <span className="font-medium text-red-700">Destino:</span> {destino}
-                      </p>
-                      {paradasIntermedias.length > 0 && (
-                        <div className="text-sm text-slate-600 mb-1">
-                          <span className="font-medium text-orange-600">Paradas:</span>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            {paradasIntermedias.map((p, i) => (
-                              <span key={i} className="inline-block bg-orange-50 px-2 py-1 rounded text-xs border border-orange-200">
-                                {i + 1}. {p}
-                              </span>
-                            ))}
+                    <div key={`${viaje.id}-${viaje.rol}`} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-semibold text-slate-900">
+                            {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
+                          </h3>
+                          <div className="flex flex-col items-end space-y-1">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getEstadoBadgeStyle(viaje.estado)}`}>
+                              {viaje.estado}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              viaje.rol === 'conductor'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-purple-100 text-purple-800'
+                            }`}>
+                              {viaje.rol === 'conductor' ? 'Conductor' : 'Pasajero'}
+                            </span>
                           </div>
                         </div>
-                      )}
-                      <p className="text-sm text-slate-600 mb-1">
-                        {formatFecha(viaje.fechaHoraSalida)}
-                      </p>
-                      <p className="text-sm text-slate-600 mb-1">
-                        Plazas disponibles: {viaje.plazasDisponibles}
-                      </p>
-                      <p className="text-sm font-medium text-slate-900">
-                        {viaje.precio}€
-                      </p>
+                        <p className="text-sm text-slate-600 mb-1">
+                          <span className="font-medium text-green-700">Origen:</span> {origen}
+                        </p>
+                        <p className="text-sm text-slate-600 mb-1">
+                          <span className="font-medium text-red-700">Destino:</span> {destino}
+                        </p>
+                        {paradasIntermedias.length > 0 && (
+                          <div className="text-sm text-slate-600 mb-1">
+                            <span className="font-medium text-orange-600">Paradas:</span>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {paradasIntermedias.map((p, i) => (
+                                <span key={i} className="inline-block bg-orange-50 px-2 py-1 rounded text-xs border border-orange-200">
+                                  {i + 1}. {p}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-sm text-slate-600 mb-1">
+                          {formatFecha(viaje.fechaHoraSalida)}
+                        </p>
+                        <p className="text-sm text-slate-600 mb-1">
+                          Plazas disponibles: {viaje.plazasDisponibles}
+                        </p>
+                        <p className="text-sm font-medium text-slate-900">
+                          {viaje.precio}€
+                        </p>
+                      </div>
                       <button
                         type="button"
                         onClick={() =>
@@ -253,7 +268,7 @@ const MisViajes: React.FC = () => {
                             }
                           })
                         }
-                        className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"
+                        className="mt-3 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700 transition-colors"
                       >
                         Ver detalle
                       </button>

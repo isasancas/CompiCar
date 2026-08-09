@@ -1,5 +1,6 @@
 package com.compicar.persona;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,6 +8,7 @@ import com.compicar.reserva.Reserva;
 import com.compicar.valoracion.Valoracion;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.viaje.Viaje;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -45,18 +47,23 @@ public class Persona {
     private String telefono;
 
     @OneToMany(mappedBy = "persona")
+    @JsonIgnore
     private List<Vehiculo> vehiculos;
 
     @OneToMany(mappedBy = "persona")
+    @JsonIgnore
     private List<Reserva> reservas;
 
     @OneToMany(mappedBy = "persona")
+    @JsonIgnore
     private List<Viaje> viajes;
 
     @OneToMany(mappedBy = "autor")
+    @JsonIgnore
     private List<Valoracion> valoracionesEmitidas;
 
     @OneToMany(mappedBy = "valorado")
+    @JsonIgnore
     private List<Valoracion> valoracionesRecibidas;
 
     @Column(nullable = false, unique = true, length = 180)
@@ -76,6 +83,18 @@ public class Persona {
     @Column(name = "preferencia")
     private List<String> preferenciasViaje = new ArrayList<>();
 
+    @Column(name = "stripe_pasajero_id", unique = true)
+    private String stripePasajeroId;
+
+    @Column(name = "stripe_conductor_id", unique = true)
+    private String stripeConductorId;
+
+    @Column(name = "fondos_totales", nullable = false)
+    private BigDecimal fondosTotales = BigDecimal.ZERO;
+
+    @Column(name = "fondos_actuales", nullable = false)
+    private BigDecimal fondosActuales = BigDecimal.ZERO;
+
     public Double getReputacion() {
         if (valoracionesRecibidas == null || valoracionesRecibidas.isEmpty()) {
             return 0.0;
@@ -88,7 +107,7 @@ public class Persona {
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
-            String telefono) {
+            String telefono, String stripePasajeroId, String stripeConductorId) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
         this.segundoApellido = segundoApellido;
@@ -97,11 +116,13 @@ public class Persona {
         this.telefono = telefono;
         this.slug = "persona-" + id;
         this.numeroCancelaciones = 0;
+        this.stripePasajeroId = stripePasajeroId;
+        this.stripeConductorId = stripeConductorId;
     }
 
     public Persona(String nombre, String primerApellido, String segundoApellido, String contrasena, String email,
             String telefono, List<Vehiculo> vehiculos, List<Reserva> reservas, List<Viaje> viajes,
-            List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas) {
+            List<Valoracion> valoracionesEmitidas, List<Valoracion> valoracionesRecibidas, String stripePasajeroId, String stripeConductorId) {
         this.nombre = nombre;
         this.primerApellido = primerApellido;
         this.segundoApellido = segundoApellido;
@@ -115,6 +136,8 @@ public class Persona {
         this.valoracionesEmitidas = valoracionesEmitidas;
         this.valoracionesRecibidas = valoracionesRecibidas;
         this.numeroCancelaciones = 0;
+        this.stripePasajeroId = stripePasajeroId;
+        this.stripeConductorId = stripeConductorId;
     }
 
     public Long getId() {
@@ -179,6 +202,22 @@ public class Persona {
 
     public Integer getNumeroCancelaciones() {
         return numeroCancelaciones;
+    }
+
+    public String getStripePasajeroId() {
+        return stripePasajeroId;
+    }
+
+    public String getStripeConductorId() {
+        return stripeConductorId;
+    }
+
+    public BigDecimal getFondosTotales() {
+        return fondosTotales;
+    }
+
+    public BigDecimal getFondosActuales() {
+        return fondosActuales;
     }
 
     public void incrementarCancelaciones() {
@@ -255,10 +294,28 @@ public class Persona {
         this.numeroCancelaciones = numeroCancelaciones;
     }
 
+    public void setStripePasajeroId(String stripePasajeroId) {
+        this.stripePasajeroId = stripePasajeroId;
+    }
+
+    public void setStripeConductorId(String stripeConductorId) {
+        this.stripeConductorId = stripeConductorId;
+    }
+
+    public void setFondosTotales(BigDecimal fondosTotales) {
+        this.fondosTotales = fondosTotales;
+    }
+
+    public void setFondosActuales(BigDecimal fondosActuales) {
+        this.fondosActuales = fondosActuales;
+    }
+
     @Override
     public String toString() {
         return "Persona{id=" + id + ", nombre='" + nombre + "', primerApellido='" + primerApellido
                 + "', segundoApellido='" + segundoApellido + "', email='" + email + "', telefono='" + telefono
-                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + slug + "}";
+                + "', reputacion=" + getReputacion() + ", numeroCancelaciones=" + numeroCancelaciones + ", slug=" + 
+                slug +  ", stripePasajeroId=" + stripePasajeroId + ", stripeConductorId=" + stripeConductorId + 
+                ", fondosTotales=" + fondosTotales + ", fondosActuales=" + fondosActuales + "}";
     }
 }

@@ -5,7 +5,7 @@ import { buildApiUrl } from '../../apiConfig';
 const Notificaciones: React.FC = () => {
   const navigate = useNavigate();
   const [reservas, setReservas] = useState<any[]>([]);
-  const [avisos, setAvisos] = useState<any[]>([]); // <-- Nuevo estado para cancelaciones
+  const [avisos, setAvisos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem('token');
 
@@ -38,7 +38,7 @@ const Notificaciones: React.FC = () => {
     try {
       const endpoint = accion === 'confirmar' 
         ? `/api/reservas/confirmar?reservaId=${id}` 
-        : `/api/reservas/cancelar?reservaId=${id}`;
+        : `/api/reservas/rechazar?reservaId=${id}`;
 
       const response = await fetch(buildApiUrl(endpoint), {
         method: 'PUT',
@@ -53,6 +53,15 @@ const Notificaciones: React.FC = () => {
       alert("Error de conexión");
     }
   };
+
+  // Filtrar notificaciones con menos de 7 días de antigüedad
+  const UNA_SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
+  const limiteUnaSemana = new Date(Date.now() - UNA_SEMANA_MS);
+
+  const avisosRecientes = avisos.filter((aviso) => {
+    if (!aviso.fechaCreacion) return true;
+    return new Date(aviso.fechaCreacion) >= limiteUnaSemana;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -107,11 +116,11 @@ const Notificaciones: React.FC = () => {
             {/* SECCIÓN 2: AVISOS (CANCELACIONES Y OTROS) */}
             <section>
               <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Avisos y actividad</h2>
-              {avisos.length === 0 ? (
+              {avisosRecientes.length === 0 ? (
                 <p className="text-sm text-slate-400 italic">No hay actividad reciente.</p>
               ) : (
                 <div className="space-y-3">
-                  {avisos.map((aviso) => (
+                  {avisosRecientes.map((aviso) => (
                     <div 
                       key={aviso.id} 
                       className={`p-4 rounded-2xl border flex items-center gap-4 ${
@@ -122,7 +131,7 @@ const Notificaciones: React.FC = () => {
                     >
                       <div className={`w-2 h-2 rounded-full ${aviso.leida ? 'bg-transparent' : 'bg-blue-500'}`} />
                       <div className="flex-1">
-                        <p className={`text-sm ${aviso.tipo.includes('CANCELADA') ? 'text-red-900' : 'text-slate-700'}`}>
+                        <p className={`text-sm ${aviso.tipo?.includes('CANCELADA') ? 'text-red-900' : 'text-slate-700'}`}>
                           <span className="font-bold">
                             {aviso.tipo === 'VIAJE_CANCELADO' ? '⚠️ Viaje cancelado: ' : 'ℹ️ '}
                           </span>

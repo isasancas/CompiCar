@@ -3,13 +3,16 @@ package com.compicar.reserva;
 import java.util.List;
 
 import com.compicar.persona.Persona;
+import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 
 public interface ReservaService {
     
-    Reserva crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId);
+    ReservaCreadaResponse crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId);
     Reserva cancelarReserva(String usuarioEmail, Long reservaId);
+    Reserva rechazarReservaComoConductor(String usuarioEmail, Long reservaId);
+    Reserva anularReservaPorFalloPago(String usuarioEmail, Long reservaId);
     List<ReservaDTO> obtenerReservasPorPersona(Persona persona);
     List<Reserva> obtenerReservasPorViaje(Long viajeId);
     Reserva actualizarReserva(String usuarioEmail, Long reservaId, ReservaRequest reserva);
@@ -18,5 +21,5 @@ public interface ReservaService {
     Reserva reservaNoPresentado(Long reservaId);
     Reserva marcarNoPresentadoPorConductor(String usuarioEmail, Long reservaId);
     List<Reserva> obtenerReservasComoConductor(String conductorEmail);
-    Reserva rechazarReserva(String conductorEmail, Long reservaId);
+
 }

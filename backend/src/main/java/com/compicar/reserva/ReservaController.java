@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 
@@ -37,7 +38,7 @@ public class ReservaController {
     }
 
     @PostMapping("/crear")
-    public Reserva crearReserva(@RequestBody ReservaRequest request) {
+    public ReservaCreadaResponse crearReserva(@RequestBody ReservaRequest request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
             throw new ResponseStatusException(
@@ -56,6 +57,16 @@ public class ReservaController {
         );
     }
 
+    @PutMapping("/anular-pago-fallido")
+    public Reserva anularPagoFallido(@RequestParam Long reservaId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        return reservaService.anularReservaPorFalloPago(auth.getName(), reservaId);
+    }
+
     @PutMapping("/cancelar")
     public Reserva cancelarReserva(@RequestParam Long reservaId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -66,6 +77,17 @@ public class ReservaController {
         }
         String usuarioEmailAuth = auth.getName();
         return reservaService.cancelarReserva(usuarioEmailAuth, reservaId);
+    }
+
+    @PutMapping("/rechazar")
+    public Reserva rechazarReservaComoConductor(@RequestParam Long reservaId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "No autenticado"
+            );
+        }
+        return reservaService.rechazarReservaComoConductor(auth.getName(), reservaId);
     }
 
     @GetMapping("/mis-reservas")
@@ -126,6 +148,9 @@ public class ReservaController {
 
     @RequestMapping("/confirmar")
     public ResponseEntity<Reserva> reservaConfirmada(@RequestParam("reservaId") Long reservaId, Principal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
         Reserva confirmada = reservaService.reservaConfirmada(principal.getName(), reservaId);
         return ResponseEntity.ok(confirmada);
     }
@@ -141,12 +166,6 @@ public class ReservaController {
         if (principal == null) return ResponseEntity.status(401).build();
         List<Reserva> pendientes = reservaService.obtenerReservasComoConductor(principal.getName());
         return ResponseEntity.ok(pendientes);
-    }
-
-    @PutMapping("/rechazar")
-    public ResponseEntity<Reserva> rechazarReserva(@RequestParam Long reservaId, Principal principal) {
-        Reserva rechazada = reservaService.rechazarReserva(principal.getName(), reservaId);
-        return ResponseEntity.ok(rechazada);
     }
     
 }
