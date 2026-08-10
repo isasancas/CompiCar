@@ -25,6 +25,7 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
+import com.compicar.scheduler.ProgramadorCancelacionViajes;
 import com.compicar.vehiculo.TipoVehiculo;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
