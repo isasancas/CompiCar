@@ -37,5 +37,8 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     // 5. Método para el Cron Job (Limpieza de reservas fantasma caducadas)
     List<Reserva> findByEstadoAndFechaHoraReservaBefore(EstadoReserva estado, LocalDateTime fechaLimite);
 
+    // 6. Comprueba si existe una reserva activa (no cancelada) de un pasajero en un viaje
+    boolean existsByPersonaIdAndViajeIdAndEstadoNot(Long personaId, Long viajeId, EstadoReserva estado);
+
 }
 

@@ -246,6 +246,7 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
+    @Transactional
     public ViajeDTO cancelarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
