@@ -8,6 +8,8 @@ import com.compicar.pago.Pago;
 import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.viaje.Viaje;
+import com.compicar.viaje.ViajeBase;
+import com.compicar.viaje.ViajeRecurrente;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -61,9 +63,14 @@ public class Reserva {
     private Pago pago;
 
     @ManyToOne
-    @JoinColumn(name = "viaje_id", nullable = false)
+    @JoinColumn(name = "viaje_id", nullable = true)
     @JsonIgnoreProperties({"reservas", "persona"})
     private Viaje viaje;
+
+    @ManyToOne
+    @JoinColumn(name = "viaje_recurrente_id", nullable = true)
+    @JsonIgnoreProperties({"reservas", "persona"})
+    private ViajeRecurrente viajeRecurrente;
 
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
@@ -83,6 +90,18 @@ public class Reserva {
         this.paradaSubida = paradaSubida;
         this.paradaBajada = paradaBajada;
         this.viaje = viaje;
+        this.cantidadPlazas = cantidadPlazas;
+        this.slug = "reserva-" + id;
+    }
+
+    public Reserva(EstadoReserva estado, LocalDateTime fechaHoraReserva, Persona persona, Parada paradaSubida,
+            Parada paradaBajada, ViajeRecurrente viajeRecurrente, Integer cantidadPlazas) {
+        this.estado = estado;
+        this.fechaHoraReserva = fechaHoraReserva;
+        this.persona = persona;
+        this.paradaSubida = paradaSubida;
+        this.paradaBajada = paradaBajada;
+        this.viajeRecurrente = viajeRecurrente;
         this.cantidadPlazas = cantidadPlazas;
         this.slug = "reserva-" + id;
     }
@@ -122,6 +141,15 @@ public class Reserva {
 
     public Viaje getViaje() {
         return viaje;
+    }
+
+    public ViajeRecurrente getViajeRecurrente() {
+        return viajeRecurrente;
+    }
+
+    @JsonIgnore
+    public ViajeBase getViajeBase() {
+        return viaje != null ? viaje : viajeRecurrente;
     }
 
     public String getSlug() {
@@ -165,6 +193,10 @@ public class Reserva {
         this.viaje = viaje;
     }
 
+    public void setViajeRecurrente(ViajeRecurrente viajeRecurrente) {
+        this.viajeRecurrente = viajeRecurrente;
+    }
+
     public void setSlug(String slug) {
         this.slug = slug;
     }
@@ -175,9 +207,15 @@ public class Reserva {
 
     @Override
     public String toString() {
-        return "Reserva{id=" + id + ", estado=" + estado + ", fechaHoraReserva=" + fechaHoraReserva
-                + ", persona=" + persona.getId() + ", paradaSubida=" + paradaSubida.getId() + ", paradaBajada="
-                + paradaBajada.getId() + ", viaje=" + viaje.getId() + ", slug=" + slug + ", cantidadPlazas=" + cantidadPlazas + "}";
-    }
+        Long personaId = persona != null ? persona.getId() : null;
+        Long subidaId = paradaSubida != null ? paradaSubida.getId() : null;
+        Long bajadaId = paradaBajada != null ? paradaBajada.getId() : null;
+        Long viajeId = viaje != null ? viaje.getId() : null;
+        Long viajeRecurrenteId = viajeRecurrente != null ? viajeRecurrente.getId() : null;
 
+        return "Reserva{id=" + id + ", estado=" + estado + ", fechaHoraReserva=" + fechaHoraReserva
+                + ", persona=" + personaId + ", paradaSubida=" + subidaId + ", paradaBajada="
+                + bajadaId + ", viaje=" + viajeId + ", viajeRecurrente=" + viajeRecurrenteId 
+                + ", slug=" + slug + ", cantidadPlazas=" + cantidadPlazas + "}";
+    }
 }
