@@ -3,6 +3,7 @@ package com.compicar.reserva;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -116,13 +117,26 @@ class ReservaServiceTest {
     void crearReserva_ok() throws Exception {
         Long origenId = 101L;
         Long destinoId = 102L;
+
+        // Configurar paradas asociadas al viaje y con orden correcto
         Parada pOrigen = new Parada();
+        pOrigen.setViaje(viaje);
+        pOrigen.setOrden(1);
+
         Parada pDestino = new Parada();
-        
+        pDestino.setViaje(viaje);
+        pDestino.setOrden(2);
+
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
         when(paradaRepository.findById(origenId)).thenReturn(Optional.of(pOrigen));
         when(paradaRepository.findById(destinoId)).thenReturn(Optional.of(pDestino));
+        
+        // Mock para la validación de reserva duplicada
+        when(reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(
+                anyLong(), anyLong(), any(EstadoReserva.class)
+        )).thenReturn(false);
+
         when(reservaRepository.saveAndFlush(any(Reserva.class))).thenAnswer(inv -> {
             Reserva r = inv.getArgument(0);
             setId(r, 1L);
@@ -551,7 +565,7 @@ class ReservaServiceTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
 
-        assertEquals("No puedes reservar tu propio viaje", ex.getMessage());
+        assertEquals("No puedes reservar tu propio viaje.", ex.getMessage());
     }
 
     @Test
