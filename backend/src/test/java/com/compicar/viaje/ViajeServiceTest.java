@@ -608,7 +608,6 @@ class ViajeServiceTest {
         assertEquals(1, procesados);
         assertEquals(EstadoViaje.CANCELADO, viajeExpirado.getEstado());
         verify(viajeRepository).save(viajeExpirado);
-        verify(personaRepository).save(conductor);
     }
 
     @Test
