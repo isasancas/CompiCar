@@ -190,6 +190,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -226,6 +229,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -253,6 +259,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -287,6 +296,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -321,7 +333,10 @@ class ViajeControllerTest {
             1L,
             "Nombre Conductor", 
             "slug-conductor",
-            List.of()  
+            List.of(),
+            null,
+                List.of(),
+                List.of()
         );
 
         when(viajeService.buscarViajesPublicos("Madrid", "Barcelona", java.time.LocalDate.of(2026, 5, 15)))
@@ -350,6 +365,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -390,6 +408,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -423,6 +444,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -449,6 +473,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
@@ -508,6 +535,9 @@ class ViajeControllerTest {
                 1L,
                 "",
                 "",
+                List.of(),
+                null,
+                List.of(),
                 List.of()
         );
 
