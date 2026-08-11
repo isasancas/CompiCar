@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.compicar.viaje.Viaje;
-import com.compicar.viaje.ViajeBase;
-import com.compicar.viaje.ViajeRecurrente;
+import com.compicar.viajeBase.ViajeBase;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;

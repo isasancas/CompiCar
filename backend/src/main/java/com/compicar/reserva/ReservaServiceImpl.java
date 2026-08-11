@@ -3,6 +3,8 @@ package com.compicar.reserva;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +30,10 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.stripe.exception.StripeException;
 
 @Service
@@ -43,6 +49,8 @@ public class ReservaServiceImpl implements ReservaService {
     private final NotificacionRepository notificacionRepository;
     private final ParadaRepository paradaRepository;
     private final PagoService pagoService;
+    private final ViajeRecurrenteRepository viajeRecurrenteRepository;
+    private final ViajeRecurrenteService viajeRecurrenteService;
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
@@ -51,7 +59,9 @@ public class ReservaServiceImpl implements ReservaService {
                               PagoRepository pagoRepository,
                               NotificacionRepository notificacionRepository,
                               ParadaRepository paradaRepository,
-                              PagoService pagoService) {
+                              PagoService pagoService,
+                              ViajeRecurrenteRepository viajeRecurrenteRepository,
+                              ViajeRecurrenteService viajeRecurrenteService) {
         this.reservaRepository = reservaRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
@@ -59,6 +69,8 @@ public class ReservaServiceImpl implements ReservaService {
         this.notificacionRepository = notificacionRepository;
         this.paradaRepository = paradaRepository;
         this.pagoService = pagoService;
+        this.viajeRecurrenteRepository = viajeRecurrenteRepository;
+        this.viajeRecurrenteService = viajeRecurrenteService;
     }
 
     public ReservaDTO toDTO(Reserva r) {
@@ -432,8 +444,6 @@ public class ReservaServiceImpl implements ReservaService {
         return reservaRepository.save(reserva);
     }
 
-    
-
     @Override
     public Reserva reservaNoPresentado(Long reservaId) {
         Reserva reserva = reservaRepository.findById(reservaId)
@@ -485,6 +495,139 @@ public class ReservaServiceImpl implements ReservaService {
         List<Reserva> lista = reservaRepository.findPendientesParaConductor(conductorEmail);
         System.out.println("Reservas encontradas: " + lista.size());
         return lista;
+    }
+
+    @Override
+    @Transactional
+    public ReservaCreadaResponse crearReservasRecurrentes(String usuarioEmail, 
+                                                        List<Long> viajeRecurrenteIds, 
+                                                        Integer plazasSolicitadas, 
+                                                        Long paradaSubidaId, 
+                                                        Long paradaBajadaId) {
+
+        if (viajeRecurrenteIds == null || viajeRecurrenteIds.isEmpty()) {
+            throw new IllegalArgumentException("Debes seleccionar al menos un viaje recurrente.");
+        }
+
+        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+            throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
+        }
+
+        Persona pasajero = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesRecurrentes = viajeRecurrenteRepository.findAllById(viajeRecurrenteIds);
+
+        if (viajesRecurrentes.size() != viajeRecurrenteIds.size()) {
+            throw new IllegalArgumentException("Alguno de los viajes recurrentes seleccionados no existe.");
+        }
+
+        BigDecimal totalAcumulado = BigDecimal.ZERO;
+        List<Reserva> reservasCreadas = new ArrayList<>();
+        Persona conductor = viajesRecurrentes.get(0).getPersona();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        StringBuilder detalleFechas = new StringBuilder();
+
+        for (ViajeRecurrente vr : viajesRecurrentes) {
+            // Validaciones por cada fecha seleccionada
+            if (vr.getEstado() != EstadoViaje.PENDIENTE) {
+                throw new IllegalArgumentException("El viaje del " + vr.getFechaHoraSalida().format(formatter) + " no está disponible.");
+            }
+
+            if (vr.getFechaHoraSalida() != null && vr.getFechaHoraSalida().isBefore(LocalDateTime.now())) {
+                throw new IllegalArgumentException("El viaje del " + vr.getFechaHoraSalida().format(formatter) + " ya ha transcurrido.");
+            }
+
+            if (vr.getPlazasDisponibles() < plazasSolicitadas) {
+                throw new IllegalArgumentException("No hay suficiente sitio para la fecha " + vr.getFechaHoraSalida().format(formatter));
+            }
+
+            if (vr.getPersona().getId().equals(pasajero.getId())) {
+                throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
+            }
+
+            boolean yaTieneReserva = reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(
+                    pasajero.getId(), vr.getId(), EstadoReserva.CANCELADA
+            );
+            if (yaTieneReserva) {
+                throw new IllegalArgumentException("Ya tienes una reserva activa en la fecha " + vr.getFechaHoraSalida().format(formatter));
+            }
+
+            Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
+                    .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
+            Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
+                    .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
+
+            // Crear la reserva para esta fecha concreta
+            Reserva reserva = new Reserva(
+                    EstadoReserva.PENDIENTE,
+                    LocalDateTime.now(),
+                    pasajero,
+                    paradaSubida,
+                    paradaBajada,
+                    vr, // Si ViajeRecurrente hereda de Viaje, si no usar vr.getViajePadre() o setViajeRecurrente
+                    plazasSolicitadas
+            );
+            reserva.setSlug("reserva-rec-tmp-" + System.currentTimeMillis() + "-" + vr.getId());
+            reserva = reservaRepository.saveAndFlush(reserva);
+            reserva.setSlug("reserva-" + reserva.getId());
+            reserva = reservaRepository.saveAndFlush(reserva);
+
+            reservasCreadas.add(reserva);
+
+            // Sumar importe: precio de la instancia * plazas
+            BigDecimal subtotal = vr.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
+            totalAcumulado = totalAcumulado.add(subtotal);
+
+            // Formatear texto para la notificación agrupada
+            detalleFechas.append("\n• ").append(vr.getFechaHoraSalida().format(formatter));
+        }
+
+        // Usar la primera reserva como principal para la pasarela Stripe
+        Reserva reservaPrincipal = reservasCreadas.get(0);
+
+        // Crear 1 único pago acumulado para Stripe
+        Pago pago = new Pago();
+        pago.setImporteTotal(totalAcumulado);
+        BigDecimal comision = totalAcumulado.multiply(new BigDecimal("0.10"));
+        pago.setComision(comision);
+        pago.setImporteConductor(totalAcumulado.subtract(comision));
+        pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setFechaCreacion(LocalDateTime.now());
+        pago.setReserva(reservaPrincipal);
+
+        pago = pagoRepository.saveAndFlush(pago);
+        reservaPrincipal.setPago(pago);
+
+        // GUARDAR 1 SOLA NOTIFICACIÓN AGRUPADA PARA EL CONDUCTOR
+        String msjNotificación = String.format(
+            "El usuario %s ha solicitado reservar %d fechas para tu viaje recurrente:%s\nImporte total: %.2f €",
+            pasajero.getNombre(),
+            viajesRecurrentes.size(),
+            detalleFechas.toString(),
+            totalAcumulado
+        );
+
+        notificacionRepository.save(new Notificacion(
+            msjNotificación,
+            conductor,
+            TipoNotificacion.NUEVA_RESERVA
+        ));
+
+        try {
+            String clientSecret = pagoService.crearIntentoDePago(reservaPrincipal);
+            return new ReservaCreadaResponse(reservaPrincipal.getId(), reservaPrincipal.getSlug(), clientSecret);
+        } catch (StripeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<ViajeRecurrenteDTO> obtenerRecurrentesPorViajePadre(Long viajePadreId) {
+        List<ViajeRecurrente> recurrentes = viajeRecurrenteRepository.findByViajePadreId(viajePadreId);
+        return recurrentes.stream()
+                .map(viajeRecurrenteService::mapearADTO)
+                .toList();
     }
 
 }

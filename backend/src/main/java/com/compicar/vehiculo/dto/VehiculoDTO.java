@@ -1,4 +1,4 @@
-package com.compicar.viaje.dto;
+package com.compicar.vehiculo.dto;
 
 public class VehiculoDTO {
     private Long id;

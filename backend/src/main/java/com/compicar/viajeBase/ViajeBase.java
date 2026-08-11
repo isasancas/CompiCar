@@ -1,10 +1,11 @@
-package com.compicar.viaje;
+package com.compicar.viajeBase;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.compicar.persona.Persona;
 import com.compicar.vehiculo.Vehiculo;
+import com.compicar.viaje.EstadoViaje;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.Column;
@@ -40,6 +41,9 @@ public abstract class ViajeBase {
     @Column(nullable = false, unique = true, length = 180)
     private String slug;
 
+    @Column(nullable = false, length = 6)
+    private String checkin;
+
     @ManyToOne
     @JoinColumn(name = "persona_id", nullable = false)
     @JsonIgnoreProperties({"viajes", "reservas", "vehiculos"})
@@ -53,13 +57,13 @@ public abstract class ViajeBase {
     }
 
     public ViajeBase(LocalDateTime fechaHoraSalida, EstadoViaje estado, Integer plazasDisponibles, BigDecimal precio, Persona persona, Vehiculo vehiculo,
-        String slug
-    ) {
+        String slug, String checkin) {
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
         this.plazasDisponibles = plazasDisponibles;
         this.precio = precio;
         this.persona = persona;
+        this.checkin = checkin;
         this.vehiculo = vehiculo;
         this.slug = slug;
     }
@@ -89,6 +93,10 @@ public abstract class ViajeBase {
         return slug;
     }
 
+    public String getCheckin() {
+        return checkin;
+    }
+
     public Persona getPersona() {
         return persona;
     }
@@ -116,6 +124,10 @@ public abstract class ViajeBase {
 
     public void setSlug(String slug) {
         this.slug = slug;
+    }
+
+    public void setCheckin(String checkin) {
+        this.checkin = checkin;
     }
 
     public void setPersona(Persona persona) {

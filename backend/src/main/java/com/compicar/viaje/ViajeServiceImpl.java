@@ -2,7 +2,6 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -17,8 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.compicar.reserva.EstadoReserva;
-import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.config.SlugUtils;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
@@ -29,17 +26,21 @@ import com.compicar.pago.PagoRepository;
 import com.compicar.pago.StripeService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
+import com.compicar.parada.dto.ParadaDTO;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
+import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
-import com.compicar.viaje.dto.VehiculoDTO;
-import com.compicar.viaje.dto.ParadaDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.StripeException;
@@ -57,8 +58,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final PagoRepository pagoRepository;
     private final NotificacionRepository notificacionRepository;
     private final StripeService stripeService;
-
-    private static final long HORAS_LIMITE_CANCELACION = 12L;
+    private final ViajeRecurrenteService viajeRecurrenteService;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
@@ -66,7 +66,8 @@ public class ViajeServiceImpl implements ViajeService {
     public ViajeServiceImpl(ViajeRepository viajeRepository, PersonaRepository personaRepository,
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
             ReservaRepository reservaRepository, PagoRepository pagoRepository, 
-            NotificacionRepository notificacionRepository, StripeService stripeService) {
+            NotificacionRepository notificacionRepository, StripeService stripeService,
+            ViajeRecurrenteService viajeRecurrenteService) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -75,6 +76,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.pagoRepository = pagoRepository;
         this.notificacionRepository = notificacionRepository;
         this.stripeService = stripeService;
+        this.viajeRecurrenteService = viajeRecurrenteService;
     }
 
     public boolean tieneReservasActivas(Viaje viaje) {
@@ -126,7 +128,15 @@ public class ViajeServiceImpl implements ViajeService {
         validarParadas(viaje);
         String baseSlug = construirBaseSlug(viaje);
         viaje.setSlug(generarSlugUnico(baseSlug));
-        return viajeRepository.save(viaje);
+        Viaje viajeGuardado = viajeRepository.save(viaje);
+
+        // Disparo de la generación de ocurrencias recurrentes
+        if (viajeGuardado.getDiasSemana() != null && !viajeGuardado.getDiasSemana().isEmpty() 
+                && viajeGuardado.getFechaFinRecurrencia() != null) {
+            viajeRecurrenteService.generarOcurrencias(viajeGuardado);
+        }
+
+        return viajeGuardado;
     }
 
     @Override
@@ -726,7 +736,7 @@ public class ViajeServiceImpl implements ViajeService {
                     r.getId(),
                     r.getEstado().toString(),
                     r.getFechaHoraReserva(),
-                    r.getViaje().getId(),
+                    r.getViaje() != null ? r.getViaje().getId() : null,
                     r.getPersona().getId(),
                     r.getPersona().getNombre(),
                     r.getPersona().getSlug(),
@@ -734,6 +744,12 @@ public class ViajeServiceImpl implements ViajeService {
                     r.getParadaBajada().getId(),
                     r.getCantidadPlazas()
                 )).toList()
+            : List.of();
+
+        List<ViajeRecurrenteDTO> viajesRecurrentesDTO = viaje.getViajesRecurrentes() != null
+            ? viaje.getViajesRecurrentes().stream()
+                .map(viajeRecurrenteService::mapearADTO) // Invocación delegada
+                .toList()
             : List.of();
 
         return new ViajeDTO(
@@ -748,7 +764,10 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPersona().getId(),
             viaje.getPersona().getNombre(),
             viaje.getPersona().getSlug(),
-            reservasDTO
+            reservasDTO,
+            viaje.getFechaFinRecurrencia(),
+            viaje.getDiasSemana(),
+            viajesRecurrentesDTO
         );
     }
 

@@ -1,4 +1,4 @@
-package com.compicar.viaje;
+package com.compicar.viajeRecurrente;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -9,6 +9,9 @@ import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.reserva.Reserva;
 import com.compicar.vehiculo.Vehiculo;
+import com.compicar.viaje.EstadoViaje;
+import com.compicar.viaje.Viaje;
+import com.compicar.viajeBase.ViajeBase;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -45,9 +48,20 @@ public class ViajeRecurrente extends ViajeBase {
     }
 
     public ViajeRecurrente(LocalDateTime fechaHoraSalida, EstadoViaje estado, Integer plazasDisponibles, BigDecimal precio, 
-        Persona persona, Vehiculo vehiculo, Viaje viajePadre, String slug) {
-        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug);
+                           Persona persona, Vehiculo vehiculo, Viaje viajePadre, String slug, String checkin) {
+        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug, checkin);
         this.viajePadre = viajePadre;
+    }
+
+    // Métodos helper para sincronizar la relación bidireccional
+    public void addParada(Parada parada) {
+        paradas.add(parada);
+        parada.setViajeRecurrente(this);
+    }
+
+    public void removeParada(Parada parada) {
+        paradas.remove(parada);
+        parada.setViajeRecurrente(null);
     }
 
     // Getters
@@ -83,5 +97,4 @@ public class ViajeRecurrente extends ViajeBase {
     public void setReservas(List<Reserva> reservas) {
         this.reservas = reservas;
     }
-    
 }

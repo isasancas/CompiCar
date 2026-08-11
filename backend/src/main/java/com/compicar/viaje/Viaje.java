@@ -9,6 +9,8 @@ import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.reserva.Reserva;
 import com.compicar.vehiculo.Vehiculo;
+import com.compicar.viajeBase.ViajeBase;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -26,9 +28,6 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "viaje")
 public class Viaje extends ViajeBase {
-
-    @Column(nullable = false, length = 6)
-    private String checkin;
 
     private LocalDateTime fechaFinRecurrencia;
 
@@ -55,15 +54,11 @@ public class Viaje extends ViajeBase {
     }
 
     public Viaje(LocalDateTime fechaHoraSalida, EstadoViaje estado, Integer plazasDisponibles, BigDecimal precio,
-            Persona persona, Vehiculo vehiculo, String slug) {
-        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug);
+            Persona persona, Vehiculo vehiculo, String slug, String checkin) {
+        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug, checkin);
     }
 
     // Getters
-    public String getCheckin() {
-        return checkin;
-    }
-
     public LocalDateTime getFechaFinRecurrencia() {
         return fechaFinRecurrencia;
     }
@@ -85,10 +80,6 @@ public class Viaje extends ViajeBase {
     }
     
     // Setters
-    public void setCheckin(String checkin) {
-        this.checkin = checkin;
-    }
-
     public void setFechaFinRecurrencia(LocalDateTime fechaFinRecurrencia) {
         this.fechaFinRecurrencia = fechaFinRecurrencia;
     }
@@ -113,7 +104,7 @@ public class Viaje extends ViajeBase {
     public String toString() {
         return "Viaje{id=" + getId() + ", fechaHoraSalida=" + getFechaHoraSalida() + ", estado=" + getEstado()
                 + ", plazasDisponibles=" + getPlazasDisponibles() + ", precio=" + getPrecio() 
-                + ", checkin=" + checkin + ", diasSemana=" + diasSemana + "}";
+                + ", diasSemana=" + diasSemana + "}";
     }
 
 }

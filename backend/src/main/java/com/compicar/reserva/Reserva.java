@@ -7,8 +7,8 @@ import com.compicar.pago.Pago;
 import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.viaje.Viaje;
-import com.compicar.viaje.ViajeBase;
-import com.compicar.viaje.ViajeRecurrente;
+import com.compicar.viajeBase.ViajeBase;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

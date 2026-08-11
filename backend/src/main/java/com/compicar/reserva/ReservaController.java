@@ -22,7 +22,9 @@ import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
+import com.compicar.reserva.dto.ReservaRecurrenteRequest;
 import com.compicar.reserva.dto.ReservaRequest;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 
 @RestController
 @RequestMapping("/api/reservas")
@@ -166,6 +168,29 @@ public class ReservaController {
         if (principal == null) return ResponseEntity.status(401).build();
         List<Reserva> pendientes = reservaService.obtenerReservasComoConductor(principal.getName());
         return ResponseEntity.ok(pendientes);
+    }
+
+    @GetMapping("/padre/{viajePadreId}/recurrentes")
+    public ResponseEntity<List<ViajeRecurrenteDTO>> obtenerRecurrentesPorViajePadre(@PathVariable Long viajePadreId) {
+        List<ViajeRecurrenteDTO> lista = reservaService.obtenerRecurrentesPorViajePadre(viajePadreId);
+        return ResponseEntity.ok(lista);
+    }
+
+    @PostMapping("/crear-recurrentes")
+    public ReservaCreadaResponse crearReservasRecurrentes(@RequestBody ReservaRecurrenteRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        String usuarioEmail = auth.getName();
+
+        return reservaService.crearReservasRecurrentes(
+            usuarioEmail,
+            request.viajeRecurrenteIds(),
+            request.plazas(),
+            request.paradaSubidaId(),
+            request.paradaBajadaId()
+        );
     }
     
 }
