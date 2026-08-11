@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import com.compicar.reserva.Reserva;
 import com.stripe.Stripe;
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Refund;
@@ -67,16 +68,27 @@ public class StripeService {
      */
     public EstadoPago liberarFondos(String stripePaymentIntentId) throws StripeException {
         PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
-        
-        if ("succeeded".equals(intent.getStatus())) {
+        String status = intent.getStatus();
+
+        // 1. Si ya se cobró, se realiza un REEMBOLSO
+        if ("succeeded".equals(status)) {
             RefundCreateParams params = RefundCreateParams.builder()
                     .setPaymentIntent(stripePaymentIntentId)
                     .build();
             Refund.create(params);
-        }
-
-        if (!"canceled".equals(intent.getStatus())) {
-            intent.cancel();
+        } 
+        // 2. Si solo está reservado/autorizado (requiere captura o método de pago), se CANCELA la retención
+        else if (!"canceled".equals(status)) {
+            try {
+                intent.cancel();
+            } catch (InvalidRequestException e) {
+                // Si Stripe devuelve que ya estaba cancelado, lo ignoramos para no bloquear la BD
+                if (e.getMessage() != null && e.getMessage().contains("status of canceled")) {
+                    System.out.println("[STRIPE] El PaymentIntent " + stripePaymentIntentId + " ya figuraba como cancelado.");
+                } else {
+                    throw e;
+                }
+            }
         }
 
         return EstadoPago.REEMBOLSADO;
