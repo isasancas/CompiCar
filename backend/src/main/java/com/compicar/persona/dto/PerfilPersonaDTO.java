@@ -18,6 +18,7 @@ public class PerfilPersonaDTO {
     private List<String> preferenciasViaje;
     private BigDecimal fondosTotales;
     private BigDecimal fondosActuales;
+    private int numeroCancelaciones;
 
     public PerfilPersonaDTO() {
     }
@@ -34,10 +35,11 @@ public class PerfilPersonaDTO {
         this.preferenciasViaje = persona.getPreferenciasViaje();
         this.fondosTotales = persona.getFondosTotales();
         this.fondosActuales = persona.getFondosActuales();
+        this.numeroCancelaciones = persona.getNumeroCancelaciones();
     }
 
     public PerfilPersonaDTO(Long id, String nombre, String primerApellido, String segundoApellido, String email,
-            String telefono, Double reputacion, String slug, List<String> preferenciasViaje, BigDecimal fondosTotales, BigDecimal fondosActuales) {
+            String telefono, Double reputacion, String slug, List<String> preferenciasViaje, BigDecimal fondosTotales, BigDecimal fondosActuales, int numeroCancelaciones) {
         this.id = id;
         this.nombre = nombre;
         this.primerApellido = primerApellido;
@@ -49,6 +51,7 @@ public class PerfilPersonaDTO {
         this.preferenciasViaje = preferenciasViaje;
         this.fondosTotales = fondosTotales;
         this.fondosActuales = fondosActuales;
+        this.numeroCancelaciones = numeroCancelaciones;
     }
 
     public Long getId() {
@@ -95,6 +98,10 @@ public class PerfilPersonaDTO {
         return fondosActuales;
     }
 
+    public int getNumeroCancelaciones() {
+        return numeroCancelaciones;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -139,6 +146,10 @@ public class PerfilPersonaDTO {
         this.fondosActuales = fondosActuales;
     }
 
+    public void setNumeroCancelaciones(int numeroCancelaciones) {
+        this.numeroCancelaciones = numeroCancelaciones;
+    }
+
     @Override
     public String toString() {
         return "PerfilPersonaDTO{" +
@@ -153,6 +164,7 @@ public class PerfilPersonaDTO {
                 ", preferenciasViaje=" + preferenciasViaje +
                 ", fondosTotales=" + fondosTotales +
                 ", fondosActuales=" + fondosActuales +
+                ", numeroCancelaciones=" + numeroCancelaciones +
                 '}';
     }
 

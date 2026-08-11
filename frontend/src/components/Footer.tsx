@@ -50,7 +50,7 @@ const Footer: React.FC = () => {
         {/* Columna 4: Contacto */}
         <div>
           <h4 className="font-bold mb-6 text-base text-white">Contacto</h4>
-          <p className="text-slate-400 text-sm">📧 contacto@proyectotfg.example.com</p>
+          <p className="text-slate-400 text-sm">📧 compicarsa@gmail.com</p>
         </div>
       </div>
 
