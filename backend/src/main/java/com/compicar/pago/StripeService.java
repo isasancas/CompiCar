@@ -93,4 +93,30 @@ public class StripeService {
 
         return EstadoPago.REEMBOLSADO;
     }
+
+    /**
+     * Reembolsa solo la parte correspondiente a un viaje cancelado (si el dinero ya se capturó).
+     */
+    public void reembolsarParcial(String stripePaymentIntentId, BigDecimal montoAReembolsar) throws StripeException {
+        long montoCentavos = montoAReembolsar.multiply(new BigDecimal(100)).longValue();
+        RefundCreateParams params = RefundCreateParams.builder()
+                .setPaymentIntent(stripePaymentIntentId)
+                .setAmount(montoCentavos)
+                .build();
+        Refund.create(params);
+    }
+
+    /**
+     * Captura un importe inferior al autorizado (si se canceló algún viaje antes de la captura final).
+     */
+    public void confirmarCapturaParcial(String stripePaymentIntentId, BigDecimal montoACapturar) throws StripeException {
+        PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
+        if ("requires_capture".equals(intent.getStatus())) {
+            long montoCentavos = montoACapturar.multiply(new BigDecimal(100)).longValue();
+            com.stripe.param.PaymentIntentCaptureParams params = com.stripe.param.PaymentIntentCaptureParams.builder()
+                    .setAmountToCapture(montoCentavos)
+                    .build();
+            intent.capture(params);
+        }
+    }
 }

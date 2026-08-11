@@ -7,6 +7,7 @@ import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
+import com.stripe.exception.StripeException;
 
 public interface ReservaService {
     
@@ -31,5 +32,6 @@ public interface ReservaService {
     );
 
     List<ViajeRecurrenteDTO> obtenerRecurrentesPorViajePadre(Long viajePadreId);
+    void cancelarOcurrenciaPorConductor(Long viajeRecurrenteId, String conductorEmail) throws StripeException;
 
 }

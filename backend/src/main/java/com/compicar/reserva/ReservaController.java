@@ -25,6 +25,7 @@ import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRecurrenteRequest;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
+import com.stripe.exception.StripeException;
 
 @RestController
 @RequestMapping("/api/reservas")
@@ -158,7 +159,7 @@ public class ReservaController {
     }
 
     @RequestMapping("/noPresentado")
-    public ResponseEntity<Reserva> reservaNoPresentado(Long reservaId) {
+    public ResponseEntity<Reserva> reservaNoPresentado(@RequestParam Long reservaId) {
         Reserva noPresentado = reservaService.reservaNoPresentado(reservaId);
         return ResponseEntity.ok(noPresentado);
     }
@@ -191,6 +192,19 @@ public class ReservaController {
             request.paradaSubidaId(),
             request.paradaBajadaId()
         );
+    }
+
+    @PutMapping("/viaje-recurrente/{viajeRecurrenteId}/cancelar-por-conductor")
+    public ResponseEntity<Void> cancelarViajeRecurrentePorConductor(
+            @PathVariable Long viajeRecurrenteId,
+            Principal principal) throws StripeException {
+
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+
+        reservaService.cancelarOcurrenciaPorConductor(viajeRecurrenteId, principal.getName());
+        return ResponseEntity.ok().build();
     }
     
 }

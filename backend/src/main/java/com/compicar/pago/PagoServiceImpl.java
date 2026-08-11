@@ -236,49 +236,47 @@ public class PagoServiceImpl implements PagoService {
                 actualizarEstadoPago(intent.getId(), EstadoPago.AUTORIZADO);
                 
                 pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
-                    Reserva reserva = pago.getReserva();
-                    
-                    if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
-                        System.out.println("⚠️ La reserva no está PENDIENTE. Estado actual: " + reserva.getEstado());
-                        return; 
-                    }
+                    // FIX: Buscar TODAS las reservas asociadas a este pago (1 o varias)
+                    List<Reserva> reservasDelPago = reservaRepository.findByPagoId(pago.getId());
 
-                    Viaje viaje = reserva.getViaje();
-
-                    if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
-                        reserva.setEstado(EstadoReserva.CANCELADA); 
-                        reservaRepository.save(reserva);
-                        System.out.println("❌ Sobreaforo detectado. Reserva cancelada.");
-                        
-                        try {
-                            actualizarEstadoPago(intent.getId(), EstadoPago.REEMBOLSADO);
-                        } catch (Exception e) {
-                            System.out.println("Error cancelando retención por sobreaforo");
+                    for (Reserva reserva : reservasDelPago) {
+                        if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
+                            continue; 
                         }
-                        return; 
+
+                        Viaje viaje = reserva.getViaje();
+
+                        if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
+                            reserva.setEstado(EstadoReserva.CANCELADA); 
+                            reservaRepository.save(reserva);
+                            System.out.println("❌ Sobreaforo detectado en reserva " + reserva.getId() + ". Cancelada.");
+                            continue;
+                        }
+
+                        // Restamos plazas y pasamos a PAGADA cada fecha del paquete
+                        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
+                        viajeRepository.save(viaje);
+
+                        reserva.setEstado(EstadoReserva.PAGADA);
+                        reservaRepository.save(reserva);
                     }
 
-                    // Todo OK: Restamos plazas y pasamos a PAGADA
-                    viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
-                    viajeRepository.save(viaje);
+                    // Notificación única al conductor
+                    if (!reservasDelPago.isEmpty()) {
+                        Reserva principal = reservasDelPago.get(0);
+                        Persona conductor = principal.getViaje().getPersona();
+                        Persona pasajero = principal.getPersona();
 
-                    reserva.setEstado(EstadoReserva.PAGADA);
-                    reservaRepository.save(reserva);
+                        String mensaje = pasajero.getNombre() + " ha pagado " + reservasDelPago.size() + " fecha(s) solicitada(s).";
 
-                    Persona conductor = viaje.getPersona();
-                    Persona pasajero = reserva.getPersona();
+                        notificacionRepository.save(new Notificacion(
+                            mensaje,
+                            conductor,
+                            TipoNotificacion.NUEVA_RESERVA
+                        ));
+                    }
 
-                    String mensaje = pasajero.getNombre() + " ha pagado y reservado " + reserva.getCantidadPlazas() + " plaza(s).";
-
-                    Notificacion notificacion = new Notificacion(
-                        mensaje,
-                        conductor,
-                        TipoNotificacion.NUEVA_RESERVA
-                    );
-
-                    notificacionRepository.save(notificacion);
-
-                    System.out.println("ÉXITO: Reserva PAGADA, plazas restadas y notificación enviada al conductor.");
+                    System.out.println("ÉXITO: Todas las reservas del paquete han sido procesadas a PAGADA.");
                 });
                 break;
                 
