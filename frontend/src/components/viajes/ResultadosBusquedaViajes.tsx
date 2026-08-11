@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { buildApiUrl } from '../../apiConfig';
 
@@ -51,50 +51,68 @@ const ResultadosBusquedaViajes: React.FC = () => {
   const [error, setError] = useState('');
   const [viajes, setViajes] = useState<ViajeDTO[]>([]);
 
-  const queryKey = useMemo(
-    () => `${searchParams.get('origen') || ''}|${searchParams.get('destino') || ''}|${searchParams.get('fecha') || ''}`,
-    [searchParams]
-  );
+  // Sincronizar los inputs con la URL si cambia externamente (ej. botón de volver del navegador)
+  useEffect(() => {
+    setOrigen(searchParams.get('origen') || '');
+    setDestino(searchParams.get('destino') || '');
+    setFecha(searchParams.get('fecha') || '');
+  }, [searchParams]);
 
+  // Función encargada de pedir los datos al servidor
+  const fetchResultados = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const url = buildApiUrl('/api/viajes/publicos?' + searchParams.toString());
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error('No se pudieron cargar los viajes');
+      }
+
+      const data = await response.json();
+      const lista = Array.isArray(data) ? data : [];
+      setViajes(lista);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error de red';
+      setError(msg);
+      setViajes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchParams]);
+
+  // Ejecutar la petición al cargar o cuando cambien los parámetros de la URL
+  useEffect(() => {
+    fetchResultados();
+  }, [fetchResultados]);
+
+  // Manejar el submit del formulario
   const lanzarBusqueda = () => {
     const params = new URLSearchParams();
     if (origen.trim()) params.set('origen', origen.trim());
     if (destino.trim()) params.set('destino', destino.trim());
     if (fecha) params.set('fecha', fecha);
-    setSearchParams(params);
+
+    // Si los parámetros no cambian, forzar la búsqueda manualmente
+    if (params.toString() === searchParams.toString()) {
+      fetchResultados();
+    } else {
+      setSearchParams(params);
+    }
   };
-
-  useEffect(() => {
-    const fetchResultados = async () => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const url = buildApiUrl('/api/viajes/publicos?' + searchParams.toString());
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error('No se pudieron cargar los viajes');
-        }
-
-        const data = await response.json();
-        const lista = Array.isArray(data) ? data : [];
-        setViajes(lista);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Error de red';
-        setError(msg);
-        setViajes([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResultados();
-  }, [queryKey, searchParams]);
 
   return (
     <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="rounded-full border border-green-600 px-4 py-1 text-sm text-green-700 transition hover:bg-green-50"
+        >
+          Volver
+        </button>
         <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Resultados de búsqueda</h1>
 
         <div className="mt-4 rounded-2xl border border-slate-300 bg-white p-4">
@@ -106,24 +124,29 @@ const ResultadosBusquedaViajes: React.FC = () => {
             className="grid gap-3 md:grid-cols-4"
           >
             <input
-              className="rounded-xl border border-slate-300 px-4 py-2"
+              type="text"
+              className="rounded-xl border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
               placeholder="Origen"
               value={origen}
               onChange={(e) => setOrigen(e.target.value)}
             />
             <input
-              className="rounded-xl border border-slate-300 px-4 py-2"
+              type="text"
+              className="rounded-xl border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
               placeholder="Destino"
               value={destino}
               onChange={(e) => setDestino(e.target.value)}
             />
             <input
               type="date"
-              className="rounded-xl border border-slate-300 px-4 py-2"
+              className="rounded-xl border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
             />
-            <button className="rounded-full bg-gradient-compi px-6 py-2 font-bold text-white">
+            <button
+              type="submit"
+              className="rounded-full bg-gradient-compi px-6 py-2 font-bold text-white transition-opacity hover:opacity-90 active:scale-95"
+            >
               Buscar
             </button>
           </form>
@@ -147,13 +170,13 @@ const ResultadosBusquedaViajes: React.FC = () => {
               const intermedias = paradasOrdenadas.filter((p) => p.tipo === 'INTERMEDIA');
 
               return (
-                <article key={viaje.id} className="rounded-2xl border border-slate-300 bg-white p-5">
+                <article key={viaje.id} className="rounded-2xl border border-slate-300 bg-white p-5 shadow-sm">
                   <h3 className="text-lg font-bold text-slate-900">{origenViaje} → {destinoViaje}</h3>
 
                   <p className="mt-2 text-sm text-slate-700">Fecha: {formatFecha(viaje.fechaHoraSalida)}</p>
                   <p className="text-sm text-slate-700">Plazas: {viaje.plazasDisponibles}</p>
                   <p className="text-sm text-slate-700">Precio: {Number(viaje.precio || 0).toFixed(2)} €</p>
-                  <p className="text-sm text-slate-700">Vehiculo: {viaje.vehiculo?.marca} {viaje.vehiculo?.modelo}</p>
+                  <p className="text-sm text-slate-700">Vehículo: {viaje.vehiculo?.marca} {viaje.vehiculo?.modelo}</p>
 
                   {intermedias.length > 0 && (
                     <p className="mt-2 text-sm text-slate-700">
@@ -164,15 +187,15 @@ const ResultadosBusquedaViajes: React.FC = () => {
                   <button
                     type="button"
                     onClick={() =>
-                        navigate('/viajes/' + viaje.slug, {
+                      navigate('/viajes/' + viaje.slug, {
                         state: {
-                            backTo: '/buscar?' + searchParams.toString(),
-                            backLabel: 'Volver a resultados'
+                          backTo: '/buscar?' + searchParams.toString(),
+                          backLabel: 'Volver a resultados'
                         }
-                        })
+                      })
                     }
-                    className="mt-4 rounded-full border border-slate-400 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
+                    className="mt-4 rounded-full border border-slate-400 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
                     Ver detalle
                   </button>
                 </article>

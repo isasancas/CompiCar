@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -245,6 +246,7 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
+    @Transactional
     public ViajeDTO cancelarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
@@ -277,19 +279,27 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
+    @Transactional
     public int cancelarViajesPendientesExpirados() {
-        LocalDateTime limite = LocalDateTime.now().minusHours(HORAS_LIMITE_CANCELACION);
+        LocalDateTime limite = LocalDateTime.now(ZoneId.of("Europe/Madrid")).minusHours(1);
 
         List<Viaje> viajesExpirados = viajeRepository.findByEstadoAndFechaHoraSalidaBefore(EstadoViaje.PENDIENTE, limite);
 
         for (Viaje viaje : viajesExpirados) {
+
+            boolean teniaReservasActivas = viaje.getReservas() != null && viaje.getReservas().stream()
+                .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.CONFIRMADA || reserva.getEstado() == EstadoReserva.PAGADA);
+
             cancelarReservasYReembolsar(viaje, true);
+
             viaje.setEstado(EstadoViaje.CANCELADO);
             viajeRepository.save(viaje);
 
-            Persona conductor = viaje.getPersona();
-            conductor.incrementarCancelaciones();
-            personaRepository.save(conductor);
+            if (teniaReservasActivas) {
+                Persona conductor = viaje.getPersona();
+                conductor.incrementarCancelaciones();
+                personaRepository.save(conductor);
+            }
         }
 
         return viajesExpirados.size();

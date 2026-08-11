@@ -879,7 +879,14 @@ const DetalleViaje: React.FC = () => {
                   <button
                     type="button"
                     className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
-                    disabled={viaje.plazasDisponibles <= 0 || viaje.estado === 'CANCELADO' || viaje.estado === 'FINALIZADO'}
+                    disabled={
+                      viaje.plazasDisponibles <= 0 ||
+                      viaje.estado === 'CANCELADO' ||
+                      viaje.estado === 'FINALIZADO' ||
+                      viaje.estado === 'INICIADO' ||
+                      viaje.estado === 'EN_CURSO' ||
+                      yaEsHoraDeSalida
+                    }
                     onClick={() => {
                       setReservaMsg(null);
                       setAceptaBloqueoPago(false);
@@ -889,12 +896,16 @@ const DetalleViaje: React.FC = () => {
                       setModalReservaAbierto(true);
                     }}
                   >
-                    {viaje.plazasDisponibles > 0 ? (
+                    {viaje.plazasDisponibles <= 0 ? (
+                      '🚫 Sin plazas disponibles'
+                    ) : viaje.estado === 'INICIADO' || viaje.estado === 'EN_CURSO' ? (
+                      '🚫 Viaje iniciado'
+                    ) : yaEsHoraDeSalida ? (
+                      '🚫 La hora de salida ya ha pasado'
+                    ) : (
                       <span className="flex items-center justify-center gap-2">
                         ✨ Reservar ahora
                       </span>
-                    ) : (
-                      '🚫 Sin plazas disponibles'
                     )}
                   </button>
                 ) : (

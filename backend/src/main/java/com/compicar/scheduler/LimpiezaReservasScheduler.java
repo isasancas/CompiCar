@@ -27,7 +27,7 @@ public class LimpiezaReservasScheduler {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void limpiarAlDespertar() {
-        System.out.println("🚀 [KOYEB] Servidor despierto/iniciado. Ejecutando limpieza inicial de reservas fantasma...");
+        System.out.println("[KOYEB] Servidor despierto/iniciado. Ejecutando limpieza inicial de reservas fantasma...");
         cancelarReservasFantasma();
     }
 
@@ -43,14 +43,14 @@ public class LimpiezaReservasScheduler {
                 .findByEstadoAndFechaHoraReservaBefore(EstadoReserva.PENDIENTE, limite);
 
         if (!caducadas.isEmpty()) {
-            System.out.println("🧹 [CRON] Encontradas " + caducadas.size() + " reservas fantasma caducadas.");
+            System.out.println("[CRON] Encontradas " + caducadas.size() + " reservas fantasma caducadas.");
 
             for (Reserva reserva : caducadas) {
                 reserva.setEstado(EstadoReserva.CANCELADA);
             }
 
             reservaRepository.saveAll(caducadas);
-            System.out.println("✅ [CRON] Reservas fantasma canceladas correctamente.");
+            System.out.println("[CRON] Reservas fantasma canceladas correctamente.");
         }
     }
 }

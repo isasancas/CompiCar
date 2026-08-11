@@ -87,29 +87,64 @@ public class ReservaServiceImpl implements ReservaService {
                 .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado"));
 
         // 2. Validaciones de negocio
-        if (plazasSolicitadas == null || plazasSolicitadas < 1)
+        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
             throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
-        if (viaje.getEstado() != EstadoViaje.PENDIENTE)
+        }
+
+        if (viaje.getEstado() != EstadoViaje.PENDIENTE) {
             throw new IllegalArgumentException("El viaje no está disponible (estado: " + viaje.getEstado() + ")");
-        if (viaje.getPlazasDisponibles() < plazasSolicitadas)
+        }
+
+        // Novedad: Validar que la fecha/hora de salida no haya transcurrido
+        if (viaje.getFechaHoraSalida() != null && viaje.getFechaHoraSalida().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("La hora prevista de salida del viaje ya ha pasado.");
+        }
+
+        if (viaje.getPlazasDisponibles() < plazasSolicitadas) {
             throw new IllegalArgumentException("Solo quedan " + viaje.getPlazasDisponibles() + " plazas disponibles.");
-        if (viaje.getPersona().getId().equals(persona.getId()))
-            throw new IllegalArgumentException("No puedes reservar tu propio viaje");
+        }
+
+        if (viaje.getPersona().getId().equals(persona.getId())) {
+            throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
+        }
+
+        // Novedad: Validar paradas nulas
+        if (paradaSubidaId == null || paradaBajadaId == null) {
+            throw new IllegalArgumentException("Debes indicar una parada de subida y de bajada válidas.");
+        }
 
         Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
                 .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
         Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
                 .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
 
+        // Novedad: Validar que las paradas pertenezcan a este viaje
+        if (!paradaSubida.getViaje().getId().equals(viaje.getId()) || !paradaBajada.getViaje().getId().equals(viaje.getId())) {
+            throw new IllegalArgumentException("Las paradas seleccionadas no pertenecen a este viaje.");
+        }
+
+        // Novedad: Validar orden de recorrido de las paradas
+        if (paradaSubida.getOrden() >= paradaBajada.getOrden()) {
+            throw new IllegalArgumentException("La parada de subida debe ser anterior a la parada de bajada.");
+        }
+
+        // Novedad: Evitar reservas duplicadas activas del mismo usuario en este viaje
+        boolean yaTieneReserva = reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(
+                persona.getId(), viaje.getId(), EstadoReserva.CANCELADA
+        );
+        if (yaTieneReserva) {
+            throw new IllegalArgumentException("Ya tienes una reserva activa en este viaje.");
+        }
+
         // 3. Crear y guardar la Reserva PRIMERO (sin Pago) para obtener su ID
         Reserva reserva = new Reserva(
-            EstadoReserva.PENDIENTE,
-            LocalDateTime.now(),
-            persona,
-            paradaSubida,
-            paradaBajada,
-            viaje,
-            plazasSolicitadas
+                EstadoReserva.PENDIENTE,
+                LocalDateTime.now(),
+                persona,
+                paradaSubida,
+                paradaBajada,
+                viaje,
+                plazasSolicitadas
         );
         reserva.setSlug("reserva-tmp-" + System.currentTimeMillis()); // evita constraint unique
         reserva = reservaRepository.saveAndFlush(reserva);
