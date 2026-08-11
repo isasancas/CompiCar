@@ -13,6 +13,7 @@ interface PerfilData {
   preferenciasViaje?: string[];
   fondosActuales?: number | string;
   fondosTotales?: number | string;
+  numeroCancelaciones?: number;
 }
 
 interface VehiculoData {
@@ -241,10 +242,6 @@ const Perfil: React.FC = () => {
         ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
       ).length;
 
-      const cancelados = viajes.filter((v) =>
-        ['CANCELADO', 'CANCELADA'].includes((v.estado || '').toUpperCase())
-      ).length;
-
       const tendenciaPct =
         offeredPrev === 0
           ? offeredCurrent > 0
@@ -255,13 +252,13 @@ const Perfil: React.FC = () => {
       setResumenActividad({
         ofrecidosMes: offeredCurrent,
         completados,
-        cancelados,
+        cancelados: perfil?.numeroCancelaciones ?? 0,
         tendenciaPct
       });
     } catch {
       // Si falla, dejamos valores por defecto.
     }
-  }, [clearLocalSession]);
+  }, [clearLocalSession, perfil?.numeroCancelaciones]);
 
   const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
     const token = getValidToken();
@@ -664,7 +661,8 @@ const Perfil: React.FC = () => {
           preferenciasViaje: updated.preferenciasViaje,
           reputacion: prev?.reputacion,
           fondosActuales: updated.fondosActuales ?? prev?.fondosActuales,
-          fondosTotales: updated.fondosTotales ?? prev?.fondosTotales
+          fondosTotales: updated.fondosTotales ?? prev?.fondosTotales,
+          numeroCancelaciones: updated.numeroCancelaciones ?? prev?.numeroCancelaciones
         } as PerfilData));
         setShowEditModal(false);
         setEditError('');

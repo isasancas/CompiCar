@@ -62,7 +62,8 @@ public class StripeService {
 
     /**
      * PASO 3: Cancelar y liberar fondos
-     * Se llama si el viaje se cancela. El dinero vuelve al pasajero sin comisiones.
+     * Se llama si el viaje o la reserva se cancelan. Si el pago ya se capturó, se reembolsa;
+     * si solo estaba autorizado, se cancela la autorización y se libera la retención.
      */
     public EstadoPago liberarFondos(String stripePaymentIntentId) throws StripeException {
         PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
@@ -72,13 +73,12 @@ public class StripeService {
                     .setPaymentIntent(stripePaymentIntentId)
                     .build();
             Refund.create(params);
-            return EstadoPago.REEMBOLSADO;
         }
 
         if (!"canceled".equals(intent.getStatus())) {
             intent.cancel();
         }
 
-        return EstadoPago.FALLIDO;
+        return EstadoPago.REEMBOLSADO;
     }
 }
