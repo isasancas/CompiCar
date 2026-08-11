@@ -43,7 +43,7 @@ class PersonaControllerTest {
         
         mockMvc = MockMvcBuilders.standaloneSetup(personaController).build();
 
-        perfilDTO = new PerfilPersonaDTO(1L, "Juan", "Perez", "Garcia", "juan@example.com", "123456789", 4.8, "juan-perez-garcia", List.of(), null, null);
+        perfilDTO = new PerfilPersonaDTO(1L, "Juan", "Perez", "Garcia", "juan@example.com", "123456789", 4.8, "juan-perez-garcia", List.of(), null, null, 0);
         actualizarDTO = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "juan@example.com", "123456789", "password123");
         
         personaEntidad = new Persona();

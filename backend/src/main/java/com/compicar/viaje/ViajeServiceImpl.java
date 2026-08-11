@@ -77,6 +77,11 @@ public class ViajeServiceImpl implements ViajeService {
         this.stripeService = stripeService;
     }
 
+    public boolean tieneReservasActivas(Viaje viaje) {
+        return viaje.getReservas() != null && viaje.getReservas().stream()
+            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.CONFIRMADA || reserva.getEstado() == EstadoReserva.PAGADA);
+    }
+
     @Override
     public Viaje crearViaje(String usuarioEmail, Viaje viaje) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
@@ -262,8 +267,10 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viaje.getEstado());
         }
 
-        long horasHastaSalida = Duration.between(LocalDateTime.now(), viaje.getFechaHoraSalida()).toHours();
-        boolean penalizaConductor = horasHastaSalida < HORAS_LIMITE_CANCELACION;
+        boolean tieneReservasActivas = viaje.getReservas() != null && viaje.getReservas().stream()
+            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.CONFIRMADA || reserva.getEstado() == EstadoReserva.PAGADA);
+
+        boolean penalizaConductor = tieneReservasActivas;
 
         cancelarReservasYReembolsar(viaje, true);
 
@@ -539,7 +546,16 @@ public class ViajeServiceImpl implements ViajeService {
 
             Pago pago = reserva.getPago();
             if (pago != null && reembolsar) {
-                pago.setEstado(EstadoPago.REEMBOLSADO);
+                if (pago.getStripePaymentIntentId() != null) {
+                    try {
+                        pago.setEstado(stripeService.liberarFondos(pago.getStripePaymentIntentId()));
+                    } catch (StripeException e) {
+                        throw new RuntimeException("Error al reembolsar el pago en Stripe", e);
+                    }
+                } else {
+                    pago.setEstado(EstadoPago.REEMBOLSADO);
+                }
+
                 pagoRepository.save(pago);
             }
             String msj = "El viaje de " + viaje.getSlug() + " ha sido cancelado por el conductor.";

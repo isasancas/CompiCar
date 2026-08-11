@@ -786,7 +786,7 @@ const DetalleViaje: React.FC = () => {
             <div className="mb-6 border-t border-slate-100 pt-6">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <span className="bg-blue-100 text-blue-600 p-1 rounded-md">👤</span>
-                Pasajeros confirmados
+                Pasajeros
               </h3>
               <div className="space-y-3">
                 {viaje.reservas.map((res) => (

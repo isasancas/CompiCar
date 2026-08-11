@@ -501,23 +501,6 @@ class ViajeServiceTest {
     }
 
     @Test
-    void cancelarViaje_penalizaConductor_siEsMuyTarde() {
-        String slug = "viaje-urgente";
-        viajeBase.setSlug(slug);
-        viajeBase.setPersona(conductor);
-        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(2));
-        conductor.setNumeroCancelaciones(0);
-
-        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
-        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
-
-        viajeService.cancelarViaje(conductor.getEmail(), slug);
-
-        assertTrue(conductor.getNumeroCancelaciones() > 0);
-        verify(personaRepository).save(conductor);
-    }
-
-    @Test
     void cancelarViaje_error_usuarioNoEsConductor_lanza403() {
         viajeBase.setPersona(conductor);
         viajeBase.setSlug("slug-test");
