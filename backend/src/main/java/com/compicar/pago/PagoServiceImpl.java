@@ -295,6 +295,54 @@ public class PagoServiceImpl implements PagoService {
         }
     }
 
+    @Override
+    @Transactional
+    public void liberarPagoProgresivoPorViaje(Long viajeId) throws StripeException {
+        // 1. Obtener todas las reservas pagadas/confirmadas para este viaje específico
+        List<Reserva> reservasDelViaje = reservaRepository.findByViajeId(viajeId);
+
+        for (Reserva reserva : reservasDelViaje) {
+            if (reserva.getEstado() != EstadoReserva.PAGADA && reserva.getEstado() != EstadoReserva.CONFIRMADA) {
+                continue;
+            }
+
+            Pago pago = reserva.getPago();
+            if (pago == null || pago.getStripePaymentIntentId() == null) {
+                continue;
+            }
+
+            // 2. Si el dinero aún estaba congelado en Stripe, lo capturamos definitivamente
+            PaymentIntent intent = PaymentIntent.retrieve(pago.getStripePaymentIntentId());
+            if ("requires_capture".equals(intent.getStatus())) {
+                stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
+                pago.setEstado(EstadoPago.CAPTURADO);
+            }
+
+            // 3. Calcular la parte proporcional correspondiente a ESTE viaje específico
+            // Ejemplo: Subtotal de la reserva minus 10% de comisión
+            BigDecimal precioPorPlaza = reserva.getViaje().getPrecio();
+            BigDecimal subtotal = precioPorPlaza.multiply(new BigDecimal(reserva.getCantidadPlazas()));
+            BigDecimal comisionReserva = subtotal.multiply(new BigDecimal("0.10"));
+            BigDecimal parteConductorEstaReserva = subtotal.subtract(comisionReserva);
+
+            // 4. Actualizar el importe liberado acumulado en el Pago
+            BigDecimal nuevoSaldoLiberado = pago.getImporteLiberadoConductor().add(parteConductorEstaReserva);
+            pago.setImporteLiberadoConductor(nuevoSaldoLiberado);
+
+            // 5. Transferir dinero al conductor (si tiene Stripe Connect configurado)
+            Persona conductor = reserva.getViaje().getPersona();
+            if (conductor.getStripeConductorId() != null) {
+                stripeService.transferirAConductor(conductor.getStripeConductorId(), parteConductorEstaReserva);
+            }
+
+            pagoRepository.save(pago);
+
+            // 6. Notificar al conductor
+            String msj = String.format("Se te han liberado %.2f € por la finalización del viaje.", parteConductorEstaReserva);
+            notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.NUEVA_RESERVA));
+        }
+    }
+
     private void actualizarEstadoPago(String stripeId, EstadoPago nuevoEstado) {
         pagoRepository.findByStripePaymentIntentId(stripeId).ifPresent(pago -> {
             pago.setEstado(nuevoEstado);

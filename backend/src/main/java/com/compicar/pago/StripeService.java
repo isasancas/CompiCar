@@ -119,4 +119,19 @@ public class StripeService {
             intent.capture(params);
         }
     }
+
+    /**
+     * Transfiere los fondos de la plataforma a la cuenta conectada del conductor (Stripe Connect)
+     */
+    public void transferirAConductor(String stripeAccountId, BigDecimal monto) throws StripeException {
+        long montoCentavos = monto.multiply(new BigDecimal(100)).longValue();
+
+        com.stripe.param.TransferCreateParams params = com.stripe.param.TransferCreateParams.builder()
+                .setAmount(montoCentavos)
+                .setCurrency("eur")
+                .setDestination(stripeAccountId)
+                .build();
+
+        com.stripe.model.Transfer.create(params);
+    }
 }

@@ -398,6 +398,7 @@ public class ViajeServiceImpl implements ViajeService {
      * e incrementa los fondos del conductor (fondosActuales y fondosTotales).
      */
     @Override
+    @Transactional
     public ViajeDTO finalizarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
@@ -413,47 +414,58 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede finalizar un viaje en estado " + viaje.getEstado());
         }
 
-        BigDecimal totalGanado = BigDecimal.ZERO;
+        BigDecimal totalGanadoEnEsteViaje = BigDecimal.ZERO;
         List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
 
         for (Reserva reserva : reservasActivas) {
             Pago pago = reserva.getPago();
 
             if (pago != null && pago.getStripePaymentIntentId() != null) {
-                try {
-                    // 1. Cobrar definitivamente en Stripe (descongelar)
-                    stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
-                    
-                    pago.setEstado(EstadoPago.CAPTURADO);
-                    pagoRepository.save(pago);
-
-                    if (pago.getImporteTotal() != null) {
-                        totalGanado = totalGanado.add(pago.getImporteTotal());
+                
+                // 1. Capturar dinero congelado en Stripe SOLO si aún no ha sido capturado
+                if (pago.getEstado() != EstadoPago.CAPTURADO) {
+                    try {
+                        stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
+                        pago.setEstado(EstadoPago.CAPTURADO);
+                    } catch (StripeException e) {
+                        throw new ResponseStatusException(
+                            HttpStatus.PAYMENT_REQUIRED, 
+                            "Error al procesar la captura del pago en Stripe para la reserva #" + reserva.getId() + ": " + e.getMessage()
+                        );
                     }
-                } catch (StripeException e) {
-                    throw new ResponseStatusException(
-                        HttpStatus.PAYMENT_REQUIRED, 
-                        "Error al procesar la captura del pago en Stripe para la reserva #" + reserva.getId() + ": " + e.getMessage()
-                    );
                 }
+
+                // 2. Calcular la ganancia correspondiente EXCLUSIVAMENTE a este viaje/fecha
+                BigDecimal gananciaEstaReserva = viaje.getPrecio().multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                // 3. Actualizar el acumulado liberado en la entidad Pago
+                BigDecimal liberadoPrevio = pago.getImporteLiberadoConductor() != null 
+                        ? pago.getImporteLiberadoConductor() 
+                        : BigDecimal.ZERO;
+                        
+                pago.setImporteLiberadoConductor(liberadoPrevio.add(gananciaEstaReserva));
+                pagoRepository.save(pago);
+
+                // 4. Sumar al total que se le abonará al conductor en esta ejecución
+                totalGanadoEnEsteViaje = totalGanadoEnEsteViaje.add(gananciaEstaReserva);
             }
 
-            // 2. Notificar al pasajero
+            // 5. Notificar al pasajero
             String msj = "El viaje a " + viaje.getSlug() + " ha finalizado. ¡Gracias por viajar!";
-            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO); // Ajusta el TipoNotificacion si tienes uno específico
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO);
             notificacionRepository.save(noti);
         }
 
-        // 3. Cambiar estado del viaje
+        // 6. Cambiar estado del viaje
         viaje.setEstado(EstadoViaje.FINALIZADO);
         viajeRepository.save(viaje);
 
-        // 4. Sumar ganancias a las cuentas del conductor
+        // 7. Liberar saldo al conductor progresivamente
         BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
         BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
 
-        conductor.setFondosActuales(actuales.add(totalGanado));
-        conductor.setFondosTotales(totales.add(totalGanado));
+        conductor.setFondosActuales(actuales.add(totalGanadoEnEsteViaje));
+        conductor.setFondosTotales(totales.add(totalGanadoEnEsteViaje));
         personaRepository.save(conductor);
 
         return convertirADTO(viaje);

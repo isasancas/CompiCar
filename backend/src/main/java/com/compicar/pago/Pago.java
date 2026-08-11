@@ -51,6 +51,9 @@ public class Pago {
     @Column(name = "stripe_payment_intent_id", unique = true)
     private String stripePaymentIntentId;
 
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal importeLiberadoConductor = BigDecimal.ZERO;
+
     // Constructores
     public Pago() {
     }
@@ -104,6 +107,10 @@ public class Pago {
         return stripePaymentIntentId;
     }
 
+    public BigDecimal getImporteLiberadoConductor() {
+        return importeLiberadoConductor;
+    }
+
     // Setters
     public void setImporteTotal(BigDecimal importeTotal) {
         this.importeTotal = importeTotal;
@@ -137,11 +144,16 @@ public class Pago {
         this.stripePaymentIntentId = stripePaymentIntentId;
     }
 
+    public void setImporteLiberadoConductor(BigDecimal importeLiberadoConductor) {
+        this.importeLiberadoConductor = importeLiberadoConductor;
+    }
+
     @Override
     public String toString() {
         return "Pago{id=" + id + ", importeTotal=" + importeTotal + ", importeConductor=" + importeConductor
                 + ", comision=" + comision + ", fechaCreacion=" + fechaCreacion + ", fechaPago=" + fechaPago
-                + ", estado=" + estado + ", reservaId=" + (reserva != null ? reserva.getId() : null) + ", stripePaymentIntentId=" + stripePaymentIntentId + "}";
+                + ", estado=" + estado + ", reservaId=" + (reserva != null ? reserva.getId() : null) + 
+                ", stripePaymentIntentId=" + stripePaymentIntentId + ", importeLiberadoConductor=" + importeLiberadoConductor + "}";
     }
     
 }
