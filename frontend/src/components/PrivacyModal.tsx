@@ -32,7 +32,7 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
             
             <section>
               <h3 className="font-bold text-slate-900 text-base mb-2">1. Responsable del tratamiento</h3>
-              <p>El responsable del tratamiento de los datos personales es el equipo desarrollador del proyecto <strong>TFG de Ingeniería del Software</strong>.</p>
+              <p>El responsable del tratamiento de los datos personales es el equipo desarrollador del proyecto <strong>TFG de Ingeniería del Software (CompiCar)</strong>.</p>
             </section>
 
             <section>
@@ -40,7 +40,7 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
               <ul className="list-disc pl-5 space-y-2">
                 <li><strong>Obligatorios para registro:</strong> nombre, correo electrónico, contraseña.</li>
                 <li><strong>Opcionales para el servicio:</strong> número de teléfono, foto de perfil, información del vehículo (modelo, matrícula, color).</li>
-                <li><strong>Datos de pago:</strong> número de tarjeta bancaria, gestionado mediante <strong>Braintree con tokenización</strong>, evitando almacenamiento directo en la plataforma.</li>
+                <li><strong>Datos de pago:</strong> número de tarjeta bancaria, gestionado mediante <strong>Stripe con tokenización</strong>, evitando almacenamiento directo en la plataforma.</li>
                 <li><strong>Prevención:</strong> en caso de expulsión, se almacenará de forma segura y hashada el correo y la matrícula.</li>
               </ul>
             </section>
@@ -67,27 +67,27 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
 
             <section>
               <h3 className="font-bold text-slate-900 text-base mb-2">6. Derechos del usuario</h3>
-              <p>El usuario puede acceder, rectificar, solicitar la supresión ("derecho al olvido"), limitar u oponerse al tratamiento enviando una solicitud a <strong>contacto@proyectotfg.example.com</strong>.</p>
+              <p>El usuario puede acceder, rectificar, solicitar la supresión ("derecho al olvido"), limitar u oponerse al tratamiento enviando una solicitud a <strong>compicarsa@gmail.com</strong>.</p>
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">9. Protección de datos de pago</h3>
-              <p>Todos los pagos se gestionan mediante <strong>Braintree</strong>, cumpliendo <strong>PCI DSS Nivel 1</strong>. Los datos de tarjeta nunca se almacenan en nuestros servidores.</p>
+              <h3 className="font-bold text-slate-900 text-base mb-2">7. Protección de datos de pago</h3>
+              <p>Todos los pagos se gestionan mediante <strong>Stripe</strong>, cumpliendo con los estándares de seguridad <strong>PCI DSS Nivel 1</strong>. Los datos de tarjeta nunca se almacenan en nuestros servidores.</p>
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">10. Conservación y eliminación</h3>
+              <h3 className="font-bold text-slate-900 text-base mb-2">8. Conservación y eliminación</h3>
               <p>Los datos se borran al eliminar la cuenta, salvo los hashes necesarios para prevención de reincidencias durante un máximo de <strong>3 años</strong>.</p>
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">11. Consentimiento y aceptación</h3>
+              <h3 className="font-bold text-slate-900 text-base mb-2">9. Consentimiento y aceptación</h3>
               <p>Al registrarse, el usuario acepta explícitamente esta política de privacidad. Última actualización: Marzo 2026.</p>
             </section>
 
             <section>
-              <h3 className="font-bold text-slate-900 text-base mb-2">12. Contacto</h3>
-              <p>Para dudas sobre privacidad y protección de datos: <strong>contacto@proyectotfg.example.com</strong></p>
+              <h3 className="font-bold text-slate-900 text-base mb-2">10. Contacto</h3>
+              <p>Para dudas sobre privacidad y protección de datos: <strong>compicarsa@gmail.com</strong></p>
             </section>
 
           </div>

@@ -3,7 +3,6 @@ package com.compicar.reserva;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import com.compicar.checkin.Checkin;
 import com.compicar.pago.Pago;
 import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
@@ -52,9 +51,6 @@ public class Reserva {
     @JoinColumn(name = "parada_bajada_id", nullable = false)
     private Parada paradaBajada;
 
-    @OneToMany(mappedBy = "reserva")
-    @JsonIgnore
-    private List<Checkin> checkins;
 
     @OneToOne(mappedBy = "reserva")
     @JsonIgnore
@@ -112,10 +108,6 @@ public class Reserva {
         return paradaBajada;
     }
 
-    public List<Checkin> getCheckins() {
-        return checkins;
-    }
-
     public Pago getPago() {
         return pago;
     }
@@ -151,10 +143,6 @@ public class Reserva {
 
     public void setParadaBajada(Parada paradaBajada) {
         this.paradaBajada = paradaBajada;
-    }
-
-    public void setCheckins(List<Checkin> checkins) {
-        this.checkins = checkins;
     }
 
     public void setPago(Pago pago) {
