@@ -11,7 +11,7 @@ CREATE TABLE viaje_dias_semana (
 
 -- 3. Crear tabla para las ocurrencias recurrentes (incluye slug y checkin heredados de ViajeBase)
 CREATE TABLE viaje_recurrente (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     slug VARCHAR(180) NOT NULL UNIQUE,
     checkin VARCHAR(6) NOT NULL,
     fecha_hora_salida TIMESTAMP NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE viaje_recurrente (
 
 -- 4. Modificar tabla PARADA para permitir paradas de viajes recurrentes
 ALTER TABLE parada 
-MODIFY COLUMN viaje_id BIGINT NULL;
+ALTER COLUMN viaje_id DROP NOT NULL;
 
 ALTER TABLE parada 
 ADD COLUMN viaje_recurrente_id BIGINT NULL;
@@ -46,7 +46,7 @@ CHECK (
 
 -- 5. Modificar tabla RESERVA para permitir reservas en viajes recurrentes
 ALTER TABLE reserva 
-MODIFY COLUMN viaje_id BIGINT NULL;
+ALTER COLUMN viaje_id DROP NOT NULL;
 
 ALTER TABLE reserva 
 ADD COLUMN viaje_recurrente_id BIGINT NULL;

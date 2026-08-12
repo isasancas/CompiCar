@@ -33,7 +33,7 @@ public class Viaje extends ViajeBase {
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "viaje_dias_semana", joinColumns = @JoinColumn(name = "viaje_id"))
-    @Column(name = "dia_semana")
+    @Column(name = "dia_semana", nullable = false)
     private List<String> diasSemana = new ArrayList<>();
 
     @OneToMany(mappedBy = "viajePadre", cascade = CascadeType.ALL, orphanRemoval = true)
