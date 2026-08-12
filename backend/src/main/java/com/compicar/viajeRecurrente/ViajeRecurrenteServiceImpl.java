@@ -352,6 +352,165 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         return mapearADTO(viajeRecurrente);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ViajeRecurrenteDTO obtenerViajeRecurrentePorSlug(String slug) {
+        ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+        return mapearADTO(viajeRecurrente);
+    }
+
+    @Override
+    public ViajeRecurrenteDTO iniciarViajeRecurrente(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+
+        if (!viajeRecurrente.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede iniciar este viaje");
+        }
+
+        if (viajeRecurrente.getEstado() == EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje recurrente ya está iniciado");
+        }
+
+        if (viajeRecurrente.getEstado() == EstadoViaje.EN_CURSO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje recurrente ya está en curso");
+        }
+
+        if (viajeRecurrente.getEstado() == EstadoViaje.CANCELADO || viajeRecurrente.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede iniciar un viaje en estado " + viajeRecurrente.getEstado());
+        }
+
+        if (LocalDateTime.now().isBefore(viajeRecurrente.getFechaHoraSalida())) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, 
+                "Aún no ha llegado la fecha u hora de salida programada"
+            );
+        }
+
+        viajeRecurrente.setEstado(EstadoViaje.INICIADO);
+        viajeRecurrenteRepository.save(viajeRecurrente);
+
+        return mapearADTO(viajeRecurrente);
+    }
+
+    @Override
+    public ViajeRecurrenteDTO confirmarCheckinRecurrente(String usuarioEmail, String slug, String checkin) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+
+        if (!viajeRecurrente.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede realizar el check-in de este viaje");
+        }
+
+        if (viajeRecurrente.getEstado() != EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje recurrente debe estar iniciado para realizar el check-in");
+        }
+
+        if (viajeRecurrente.getCheckin() == null || checkin == null || !viajeRecurrente.getCheckin().equalsIgnoreCase(checkin.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkin inválido");
+        }
+
+        viajeRecurrente.setEstado(EstadoViaje.EN_CURSO);
+        viajeRecurrenteRepository.save(viajeRecurrente);
+
+        return mapearADTO(viajeRecurrente);
+    }
+
+    @Override
+    @Transactional
+    public void cancelarViajesRecurrentesPendientesExpirados() {
+        LocalDateTime ahora = LocalDateTime.now();
+        
+        List<ViajeRecurrente> viajesExpirados = viajeRecurrenteRepository
+                .findByEstadoAndFechaHoraSalidaBefore(EstadoViaje.PENDIENTE, ahora);
+
+        if (viajesExpirados.isEmpty()) {
+            return;
+        }
+
+        for (ViajeRecurrente viaje : viajesExpirados) {
+            viaje.setEstado(EstadoViaje.CANCELADO);
+        }
+
+        viajeRecurrenteRepository.saveAll(viajesExpirados);
+    }
+
+    @Override
+    @Transactional
+    public ViajeRecurrenteDTO actualizarViajeRecurrente(String usuarioEmail, String slug, Viaje viajeEditado) {
+        // 1. Validaciones de Identidad
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        ViajeRecurrente viajeExistente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+
+        if (!viajeExistente.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede editar el viaje");
+        }
+
+        // 2. Validación de margen de tiempo (12 horas)
+        if (LocalDateTime.now().isAfter(viajeExistente.getFechaHoraSalida().minusHours(12))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                "No se puede editar el viaje a falta de menos de 12 horas para la salida");
+        }
+
+        // 3. Actualización de Fecha (Solo si viene en el body)
+        if (viajeEditado.getFechaHoraSalida() != null) {
+            viajeExistente.setFechaHoraSalida(viajeEditado.getFechaHoraSalida());
+        }
+
+        // 4. Actualización de Precio (Protección contra NULL)
+        if (viajeEditado.getPrecio() != null && viajeEditado.getPrecio().compareTo(BigDecimal.ZERO) > 0) {
+            viajeExistente.setPrecio(viajeEditado.getPrecio());
+        }
+
+        // 5. Lógica de Plazas Disponibles
+        if (viajeEditado.getPlazasDisponibles() != null) {
+            // Contamos plazas ocupadas actualmente en este viaje recurrente
+            int plazasOcupadas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeExistente.getId(), EstadoReserva.CANCELADA)
+                    .stream()
+                    .mapToInt(Reserva::getCantidadPlazas)
+                    .sum();
+
+            // Interpretamos el valor del Front como "Capacidad Total"
+            int nuevoTotal = viajeEditado.getPlazasDisponibles();
+
+            if (nuevoTotal < plazasOcupadas) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                    "El total de plazas no puede ser inferior a las plazas ya reservadas: " + plazasOcupadas);
+            }
+
+            // Seteamos la disponibilidad real (Total - Ocupadas)
+            viajeExistente.setPlazasDisponibles(nuevoTotal - plazasOcupadas);
+        }
+
+        // 6. Guardado y Notificaciones
+        ViajeRecurrente guardado = viajeRecurrenteRepository.save(viajeExistente);
+        
+        List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(guardado.getId(), EstadoReserva.CANCELADA);
+
+        for (Reserva r : reservasActivas) {
+            String msj = "Se han modificado los detalles del viaje " + guardado.getSlug() + ". Revisa el nuevo horario o número de plazas disponibles.";
+            
+            Notificacion noti = new Notificacion(
+                msj, 
+                r.getPersona(), 
+                TipoNotificacion.VIAJE_MODIFICADO
+            );
+            notificacionRepository.save(noti);
+        }
+
+        return mapearADTO(guardado);
+    }
+
     private DayOfWeek mapearDiaSemana(String dia) {
         if (dia == null) return null;
         

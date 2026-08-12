@@ -32,6 +32,8 @@ import com.compicar.vehiculo.VehiculoRepository;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -955,7 +957,8 @@ class ViajeServiceTest {
     @Test
     void cancelarViajesExpirados_delegaEnServicio() {
         ViajeService viajeServiceMock = mock(ViajeService.class);
-        ProgramadorCancelacionViajes programador = new ProgramadorCancelacionViajes(viajeServiceMock);
+        ViajeRecurrenteService viajeRecurrenteServiceMock = mock(ViajeRecurrenteService.class);
+        ProgramadorCancelacionViajes programador = new ProgramadorCancelacionViajes(viajeServiceMock, viajeRecurrenteServiceMock);
 
         programador.cancelarViajesExpirados();
 
