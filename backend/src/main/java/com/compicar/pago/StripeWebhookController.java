@@ -31,6 +31,7 @@ public class StripeWebhookController {
             pagoService.procesarEventoWebhook(payload, sigHeader);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error en el Webhook");
         }
     }

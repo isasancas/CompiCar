@@ -2,9 +2,13 @@ package com.compicar.pago;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.compicar.reserva.Reserva;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,6 +17,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 
@@ -43,9 +48,9 @@ public class Pago {
     @Enumerated(EnumType.STRING)
     private EstadoPago estado;
 
-    @OneToOne
-    @JoinColumn(name = "reserva_id", nullable = false, unique = true)
-    private Reserva reserva;
+    @OneToMany(mappedBy = "pago", cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<Reserva> reservas = new ArrayList<>();
 
     // Identificador de la transacción en Stripe para poder "congelar/capturar"
     @Column(name = "stripe_payment_intent_id", unique = true)
@@ -59,14 +64,14 @@ public class Pago {
     }
 
     public Pago(BigDecimal importeTotal, BigDecimal importeConductor, BigDecimal comision, LocalDateTime fechaCreacion,
-            LocalDateTime fechaPago, EstadoPago estado, Reserva reserva, String stripePaymentIntentId) {
+            LocalDateTime fechaPago, EstadoPago estado, List<Reserva> reservas, String stripePaymentIntentId) {
         this.importeTotal = importeTotal;
         this.importeConductor = importeConductor;
         this.comision = comision;
         this.fechaCreacion = fechaCreacion;
         this.fechaPago = fechaPago;
         this.estado = estado;
-        this.reserva = reserva;
+        this.reservas = reservas;
         this.stripePaymentIntentId = stripePaymentIntentId;
     }
 
@@ -99,8 +104,8 @@ public class Pago {
         return estado;
     }
 
-    public Reserva getReserva() {
-        return reserva;
+    public List<Reserva> getReservas() {
+        return reservas;
     }
 
     public String getStripePaymentIntentId() {
@@ -136,8 +141,8 @@ public class Pago {
         this.estado = estado;
     }
 
-    public void setReserva(Reserva reserva) {
-        this.reserva = reserva;
+    public void setReservas(List<Reserva> reservas) {
+        this.reservas = reservas;
     }
 
     public void setStripePaymentIntentId(String stripePaymentIntentId) {
@@ -148,11 +153,35 @@ public class Pago {
         this.importeLiberadoConductor = importeLiberadoConductor;
     }
 
+    // 1. Método helper para mantener compatibilidad con pago.getReserva(...)
+    public Reserva getReserva() {
+        return (reservas != null && !reservas.isEmpty()) ? reservas.get(0) : null;
+    }
+
+    // 2. Método helper para mantener compatibilidad con pago.setReserva(...)
+    public void setReserva(Reserva reserva) {
+        if (this.reservas == null) {
+            this.reservas = new ArrayList<>();
+        }
+        if (reserva != null) {
+            if (!this.reservas.contains(reserva)) {
+                this.reservas.add(reserva);
+            }
+            reserva.setPago(this); // Vincula ambos lados de la relación
+        }
+    }
+
+    // 3. Helper para añadir varias reservas
+    public void addReserva(Reserva reserva) {
+        this.reservas.add(reserva);
+        reserva.setPago(this);
+    }
+
     @Override
     public String toString() {
         return "Pago{id=" + id + ", importeTotal=" + importeTotal + ", importeConductor=" + importeConductor
                 + ", comision=" + comision + ", fechaCreacion=" + fechaCreacion + ", fechaPago=" + fechaPago
-                + ", estado=" + estado + ", reservaId=" + (reserva != null ? reserva.getId() : null) + 
+                + ", estado=" + estado + ", reservaIds=" + (reservas != null ? reservas.stream().map(Reserva::getId).toList() : null) + 
                 ", stripePaymentIntentId=" + stripePaymentIntentId + ", importeLiberadoConductor=" + importeLiberadoConductor + "}";
     }
     

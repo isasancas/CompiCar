@@ -107,6 +107,10 @@ public class ViajeServiceImpl implements ViajeService {
         viaje.setPersona(conductor);
         viaje.setVehiculo(vehiculo);
 
+        if (viaje.getEstado() == null) {
+            viaje.setEstado(EstadoViaje.PENDIENTE);
+        }
+
         // Generar checkin aleatorio de 6 caracteres alfanuméricos
         viaje.setCheckin(generarCheckin());
 

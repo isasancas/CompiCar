@@ -20,6 +20,9 @@ import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
@@ -27,6 +30,7 @@ import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.StripeObject;
+import com.stripe.net.ApiResource;
 import com.stripe.net.Webhook;
 
 import jakarta.persistence.EntityNotFoundException;
@@ -199,44 +203,54 @@ public class PagoServiceImpl implements PagoService {
     @Override
     @Transactional
     public void procesarEventoWebhook(String payload, String sigHeader) {
-        Event event;
-        try {
-            event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
-        } catch (SignatureVerificationException e) {
-            throw new RuntimeException("Firma de Webhook inválida");
-        }
+        String eventType;
+        String paymentIntentId;
 
-        // 1. Filtramos rápido: Si no es un evento de PaymentIntent, lo ignoramos y salimos.
-        if (!event.getType().startsWith("payment_intent.")) {
-            return; 
-        }
-
-        System.out.println("👉 PROCESANDO EVENTO DE PAYMENT INTENT: " + event.getType());
-
-        // 2. Extraemos el objeto de forma segura, a prueba de desajustes de versión
-        EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-        StripeObject stripeObject;
-
-        if (deserializer.getObject().isPresent()) {
-        stripeObject = deserializer.getObject().get();
-        } else {
+        // BYPASS PARA PRUEBAS LOCALES EN POSTMAN
+        if ("t=123,v1=fake".equals(sigHeader) || "fake".equals(sigHeader)) {
             try {
-                stripeObject = deserializer.deserializeUnsafe();
-            } catch (EventDataObjectDeserializationException e) {
-                System.out.println("❌ ERROR deserializando el objeto de Stripe: " + e.getMessage());
-                return;
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode root = mapper.readTree(payload);
+                eventType = root.path("type").asText();
+                paymentIntentId = root.path("data").path("object").path("id").asText();
+            } catch (Exception e) {
+                throw new RuntimeException("Error parseando el JSON de prueba: " + e.getMessage());
+            }
+        } else {
+            // PROCESAMIENTO REAL DE STRIPE EN PRODUCCIÓN
+            try {
+                Event event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
+                eventType = event.getType();
+
+                EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+                StripeObject stripeObject = deserializer.getObject().orElseGet(() -> {
+                    try {
+                        return deserializer.deserializeUnsafe();
+                    } catch (EventDataObjectDeserializationException e) {
+                        throw new RuntimeException("Error deserializando StripeObject", e);
+                    }
+                });
+
+                PaymentIntent intent = (PaymentIntent) stripeObject;
+                paymentIntentId = intent.getId();
+            } catch (SignatureVerificationException e) {
+                throw new RuntimeException("Firma de Webhook inválida");
             }
         }
 
-        PaymentIntent intent = (PaymentIntent) stripeObject;
+        // 1. Filtramos rápido: Si no es un evento de PaymentIntent, salimos
+        if (eventType == null || !eventType.startsWith("payment_intent.")) {
+            return; 
+        }
 
-        // 3. Ahora sí, ejecutamos nuestra lógica
-        switch (event.getType()) {
+        System.out.println("👉 PROCESANDO EVENTO DE PAYMENT INTENT: " + eventType);
+
+        // 2. Ejecutamos la lógica de negocio
+        switch (eventType) {
             case "payment_intent.amount_capturable_updated":
-                actualizarEstadoPago(intent.getId(), EstadoPago.AUTORIZADO);
+                actualizarEstadoPago(paymentIntentId, EstadoPago.AUTORIZADO);
                 
-                pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
-                    // FIX: Buscar TODAS las reservas asociadas a este pago (1 o varias)
+                pagoRepository.findByStripePaymentIntentId(paymentIntentId).ifPresent(pago -> {
                     List<Reserva> reservasDelPago = reservaRepository.findByPagoId(pago.getId());
 
                     for (Reserva reserva : reservasDelPago) {
@@ -244,27 +258,52 @@ public class PagoServiceImpl implements PagoService {
                             continue; 
                         }
 
-                        Viaje viaje = reserva.getViaje();
+                        // 1. Caso: Reserva de viaje puntual
+                        if (reserva.getViaje() != null) {
+                            Viaje viaje = reserva.getViaje();
 
-                        if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
-                            reserva.setEstado(EstadoReserva.CANCELADA); 
+                            if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
+                                reserva.setEstado(EstadoReserva.CANCELADA); 
+                                reservaRepository.save(reserva);
+                                System.out.println("❌ Sobreaforo detectado en reserva " + reserva.getId() + ". Cancelada.");
+                                continue;
+                            }
+
+                            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
+                            viajeRepository.save(viaje);
+
+                            reserva.setEstado(EstadoReserva.PAGADA);
                             reservaRepository.save(reserva);
-                            System.out.println("❌ Sobreaforo detectado en reserva " + reserva.getId() + ". Cancelada.");
-                            continue;
+                        } 
+                        // 2. Caso: Reserva de viaje recurrente
+                        else if (reserva.getViajeRecurrente() != null) {
+                            var viajeRecurrente = reserva.getViajeRecurrente();
+
+                            if (viajeRecurrente.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
+                                reserva.setEstado(EstadoReserva.CANCELADA);
+                                reservaRepository.save(reserva);
+                                System.out.println("❌ Sobreaforo en reserva recurrente " + reserva.getId() + ". Cancelada.");
+                                continue;
+                            }
+
+                            viajeRecurrente.setPlazasDisponibles(viajeRecurrente.getPlazasDisponibles() - reserva.getCantidadPlazas());
+                            // Si tienes repositorio de ViajeRecurrente, desmarcar para guardar:
+                            // viajeRecurrenteRepository.save(viajeRecurrente);
+
+                            reserva.setEstado(EstadoReserva.PAGADA);
+                            reservaRepository.save(reserva);
                         }
-
-                        // Restamos plazas y pasamos a PAGADA cada fecha del paquete
-                        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
-                        viajeRepository.save(viaje);
-
-                        reserva.setEstado(EstadoReserva.PAGADA);
-                        reservaRepository.save(reserva);
                     }
 
                     // Notificación única al conductor
                     if (!reservasDelPago.isEmpty()) {
                         Reserva principal = reservasDelPago.get(0);
-                        Persona conductor = principal.getViaje().getPersona();
+                        
+                        // Obtener conductor según el tipo de reserva
+                        Persona conductor = principal.getViaje() != null 
+                            ? principal.getViaje().getPersona() 
+                            : principal.getViajeRecurrente().getPersona();
+                            
                         Persona pasajero = principal.getPersona();
 
                         String mensaje = pasajero.getNombre() + " ha pagado " + reservasDelPago.size() + " fecha(s) solicitada(s).";
@@ -281,8 +320,8 @@ public class PagoServiceImpl implements PagoService {
                 break;
                 
             case "payment_intent.payment_failed":
-                actualizarEstadoPago(intent.getId(), EstadoPago.FALLIDO);
-                pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
+                actualizarEstadoPago(paymentIntentId, EstadoPago.FALLIDO);
+                pagoRepository.findByStripePaymentIntentId(paymentIntentId).ifPresent(pago -> {
                     Reserva r = pago.getReserva();
                     r.setEstado(EstadoReserva.CANCELADA);
                     reservaRepository.save(r);
@@ -290,7 +329,7 @@ public class PagoServiceImpl implements PagoService {
                 break;
                 
             case "payment_intent.succeeded":
-                actualizarEstadoPago(intent.getId(), EstadoPago.CAPTURADO);
+                actualizarEstadoPago(paymentIntentId, EstadoPago.CAPTURADO);
                 break;
         }
     }

@@ -157,14 +157,16 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
     }
 
     private DayOfWeek mapearDiaSemana(String dia) {
+        if (dia == null) return null;
+        
         return switch (dia.trim().toUpperCase()) {
-            case "L" -> DayOfWeek.MONDAY;
-            case "M" -> DayOfWeek.TUESDAY;
-            case "X" -> DayOfWeek.WEDNESDAY;
-            case "J" -> DayOfWeek.THURSDAY;
-            case "V" -> DayOfWeek.FRIDAY;
-            case "S" -> DayOfWeek.SATURDAY;
-            case "D" -> DayOfWeek.SUNDAY;
+            case "L", "LUNES", "MONDAY" -> DayOfWeek.MONDAY;
+            case "M", "MARTES", "TUESDAY" -> DayOfWeek.TUESDAY;
+            case "X", "MIERCOLES", "MIÉRCOLES", "WEDNESDAY" -> DayOfWeek.WEDNESDAY;
+            case "J", "JUEVES", "THURSDAY" -> DayOfWeek.THURSDAY;
+            case "V", "VIERNES", "FRIDAY" -> DayOfWeek.FRIDAY;
+            case "S", "SABADO", "SÁBADO", "SATURDAY" -> DayOfWeek.SATURDAY;
+            case "D", "DOMINGO", "SUNDAY" -> DayOfWeek.SUNDAY;
             default -> null;
         };
     }
