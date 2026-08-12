@@ -1,9 +1,11 @@
 package com.compicar.viajeRecurrente;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -11,26 +13,51 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.notificacion.Notificacion;
+import com.compicar.notificacion.NotificacionRepository;
+import com.compicar.notificacion.TipoNotificacion;
+import com.compicar.pago.EstadoPago;
+import com.compicar.pago.Pago;
+import com.compicar.pago.PagoRepository;
+import com.compicar.pago.StripeService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.dto.ParadaDTO;
+import com.compicar.persona.Persona;
+import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
+import com.stripe.exception.StripeException;
 
 @Service
 @Transactional
 public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
 
     private final ViajeRecurrenteRepository viajeRecurrenteRepository;
+    private final PersonaRepository personaRepository;
+    private final ReservaRepository reservaRepository;
+    private final PagoRepository pagoRepository;
+    private final NotificacionRepository notificacionRepository;
+    private final StripeService stripeService;
 
-    public ViajeRecurrenteServiceImpl(ViajeRecurrenteRepository viajeRecurrenteRepository) {
+    public ViajeRecurrenteServiceImpl(ViajeRecurrenteRepository viajeRecurrenteRepository, PersonaRepository personaRepository, 
+        ReservaRepository reservaRepository, PagoRepository pagoRepository, NotificacionRepository notificacionRepository, StripeService stripeService) {
         this.viajeRecurrenteRepository = viajeRecurrenteRepository;
+        this.personaRepository = personaRepository;
+        this.reservaRepository = reservaRepository;
+        this.pagoRepository = pagoRepository;
+        this.notificacionRepository = notificacionRepository;
+        this.stripeService = stripeService;
     }
 
     @Override
@@ -154,6 +181,90 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         }
 
         return viajeRecurrenteRepository.saveAll(ocurrencias);
+    }
+
+    /**
+     * FINALIZAR VIAJE RECURRENTE:
+     * Captura en Stripe el pago total (si es la primera fecha del paquete en finalizar),
+     * libera los fondos proporcionales de esta fecha al conductor y actualiza estados.
+     */
+    @Override
+    @Transactional
+    public ViajeRecurrenteDTO finalizarViajeRecurrente(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+
+        if (!viajeRecurrente.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede finalizar este viaje");
+        }
+
+        if (viajeRecurrente.getEstado() == EstadoViaje.CANCELADO || viajeRecurrente.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede finalizar un viaje en estado " + viajeRecurrente.getEstado());
+        }
+
+        BigDecimal totalGanadoEnEsteViaje = BigDecimal.ZERO;
+        List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
+
+        for (Reserva reserva : reservasActivas) {
+            Pago pago = reserva.getPago();
+
+            if (pago != null && pago.getStripePaymentIntentId() != null) {
+                
+                // 1. Capturar el importe en Stripe si es la primera fecha del paquete que finaliza
+                if (pago.getEstado() != EstadoPago.CAPTURADO) {
+                    try {
+                        stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
+                        pago.setEstado(EstadoPago.CAPTURADO);
+                    } catch (StripeException e) {
+                        throw new ResponseStatusException(
+                            HttpStatus.PAYMENT_REQUIRED, 
+                            "Error al capturar el pago en Stripe para la reserva #" + reserva.getId() + ": " + e.getMessage()
+                        );
+                    }
+                }
+
+                // 2. Ganancia exclusiva de ESTA fecha concreta (precio * plazas)
+                BigDecimal gananciaEstaReserva = viajeRecurrente.getPrecio().multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                // 3. Acumular en la entidad Pago lo que ya se ha liberado al conductor
+                BigDecimal liberadoPrevio = pago.getImporteLiberadoConductor() != null 
+                        ? pago.getImporteLiberadoConductor() 
+                        : BigDecimal.ZERO;
+                        
+                pago.setImporteLiberadoConductor(liberadoPrevio.add(gananciaEstaReserva));
+                pagoRepository.save(pago);
+
+                // 4. Sumar al total que se le abonará al conductor en esta fecha
+                totalGanadoEnEsteViaje = totalGanadoEnEsteViaje.add(gananciaEstaReserva);
+            }
+
+            // 5. Notificar al pasajero
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+            String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
+                    ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
+                    : "";
+
+            String msj = "El viaje del " + fechaSalida + " ha finalizado. ¡Gracias por viajar!";
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO);
+            notificacionRepository.save(noti);
+        }
+
+        // 6. Cambiar estado del viaje recurrente
+        viajeRecurrente.setEstado(EstadoViaje.FINALIZADO);
+        viajeRecurrenteRepository.save(viajeRecurrente);
+
+        // 7. Liberar saldo al conductor solo por la ganancia correspondiente a este día
+        BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
+        BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
+
+        conductor.setFondosActuales(actuales.add(totalGanadoEnEsteViaje));
+        conductor.setFondosTotales(totales.add(totalGanadoEnEsteViaje));
+        personaRepository.save(conductor);
+
+        return mapearADTO(viajeRecurrente);
     }
 
     private DayOfWeek mapearDiaSemana(String dia) {

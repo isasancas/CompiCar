@@ -9,5 +9,6 @@ public interface ViajeRecurrenteService {
 
     ViajeRecurrenteDTO mapearADTO(ViajeRecurrente viajeRecurrente);
     List<ViajeRecurrente> generarOcurrencias(Viaje viajePadre);
+    ViajeRecurrenteDTO finalizarViajeRecurrente(String usuarioEmail, String slug);
     
 }
