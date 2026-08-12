@@ -267,6 +267,91 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         return mapearADTO(viajeRecurrente);
     }
 
+    @Override
+    @Transactional
+    public ViajeRecurrenteDTO cancelarViajeRecurrente(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+
+        if (!viajeRecurrente.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede cancelar este viaje");
+        }
+
+        if (viajeRecurrente.getEstado() == EstadoViaje.CANCELADO || viajeRecurrente.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viajeRecurrente.getEstado());
+        }
+
+        List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
+        boolean teniaReservasActivas = !reservasActivas.isEmpty();
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
+                ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
+                : "";
+
+        for (Reserva reserva : reservasActivas) {
+            reserva.setEstado(EstadoReserva.CANCELADA);
+            reservaRepository.save(reserva);
+
+            Pago pago = reserva.getPago();
+            if (pago != null && pago.getStripePaymentIntentId() != null) {
+                BigDecimal importeADevolver = viajeRecurrente.getPrecio().multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                // Comprobar si al pasajero le quedan OTRAS fechas activas bajo este mismo pago
+                List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(
+                        pago.getId(), EstadoReserva.CANCELADA
+                );
+
+                try {
+                    if (reservasRestantes.isEmpty()) {
+                        // Si era la única fecha o no quedan más activas -> Reembolso / Liberación total
+                        stripeService.liberarFondos(pago.getStripePaymentIntentId());
+                        pago.setEstado(EstadoPago.REEMBOLSADO);
+                        pago.setImporteTotal(BigDecimal.ZERO);
+                        pago.setComision(BigDecimal.ZERO);
+                        pago.setImporteConductor(BigDecimal.ZERO);
+                    } else {
+                        // Si el paquete sigue activo en otras fechas -> Reembolso / Ajuste parcial
+                        BigDecimal nuevoTotal = pago.getImporteTotal().subtract(importeADevolver);
+                        if (nuevoTotal.compareTo(BigDecimal.ZERO) < 0) {
+                            nuevoTotal = BigDecimal.ZERO;
+                        }
+
+                        pago.setImporteTotal(nuevoTotal);
+                        BigDecimal nuevaComision = nuevoTotal.multiply(new BigDecimal("0.10"));
+                        pago.setComision(nuevaComision);
+                        pago.setImporteConductor(nuevoTotal.subtract(nuevaComision));
+
+                        if (pago.getEstado() == EstadoPago.CAPTURADO) {
+                            stripeService.reembolsarParcial(pago.getStripePaymentIntentId(), importeADevolver);
+                        }
+                    }
+                    pagoRepository.save(pago);
+                } catch (StripeException e) {
+                    throw new RuntimeException("Error al procesar el reembolso en Stripe: " + e.getMessage(), e);
+                }
+            }
+
+            // Notificar al pasajero
+            String msj = "El viaje del " + fechaSalida + " ha sido cancelado por el conductor.";
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
+            notificacionRepository.save(noti);
+        }
+
+        viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
+        viajeRecurrenteRepository.save(viajeRecurrente);
+
+        if (teniaReservasActivas) {
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return mapearADTO(viajeRecurrente);
+    }
+
     private DayOfWeek mapearDiaSemana(String dia) {
         if (dia == null) return null;
         
