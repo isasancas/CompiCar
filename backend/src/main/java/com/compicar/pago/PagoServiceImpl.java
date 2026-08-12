@@ -337,7 +337,7 @@ public class PagoServiceImpl implements PagoService {
     @Override
     @Transactional
     public void liberarPagoProgresivoPorViaje(Long viajeId) throws StripeException {
-        // 1. Obtener todas las reservas pagadas/confirmadas para este viaje específico
+        // 1. Obtener las reservas asociadas a este viaje (o viaje recurrente)
         List<Reserva> reservasDelViaje = reservaRepository.findByViajeId(viajeId);
 
         for (Reserva reserva : reservasDelViaje) {
@@ -350,34 +350,49 @@ public class PagoServiceImpl implements PagoService {
                 continue;
             }
 
-            // 2. Si el dinero aún estaba congelado en Stripe, lo capturamos definitivamente
-            PaymentIntent intent = PaymentIntent.retrieve(pago.getStripePaymentIntentId());
-            if ("requires_capture".equals(intent.getStatus())) {
+            // 2. Si el dinero aún está en 'requires_capture', Stripe lo captura
+            if (pago.getEstado() != EstadoPago.CAPTURADO) {
                 stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
                 pago.setEstado(EstadoPago.CAPTURADO);
             }
 
-            // 3. Calcular la parte proporcional correspondiente a ESTE viaje específico
-            // Ejemplo: Subtotal de la reserva minus 10% de comisión
-            BigDecimal precioPorPlaza = reserva.getViaje().getPrecio();
-            BigDecimal subtotal = precioPorPlaza.multiply(new BigDecimal(reserva.getCantidadPlazas()));
-            BigDecimal comisionReserva = subtotal.multiply(new BigDecimal("0.10"));
-            BigDecimal parteConductorEstaReserva = subtotal.subtract(comisionReserva);
+            // 3. Obtener el precio por plaza según el tipo de viaje
+            BigDecimal precioPorPlaza;
+            Persona conductor;
 
-            // 4. Actualizar el importe liberado acumulado en el Pago
+            if (reserva.getViaje() != null) {
+                precioPorPlaza = reserva.getViaje().getPrecio();
+                conductor = reserva.getViaje().getPersona();
+            } else if (reserva.getViajeRecurrente() != null) {
+                precioPorPlaza = reserva.getViajeRecurrente().getPrecio();
+                conductor = reserva.getViajeRecurrente().getPersona();
+            } else {
+                continue;
+            }
+
+            // 4. Calcular la parte NETA del conductor para ESTA fecha (Subtotal - 10% Comisión)
+            BigDecimal subtotal = precioPorPlaza.multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+            BigDecimal comisionReserva = subtotal.multiply(new BigDecimal("0.10"));
+            BigDecimal parteConductorEstaReserva = subtotal.subtract(comisionReserva); // Ej: 13.50 €
+
+            // 5. Acumular en el pago el saldo liberado al conductor
             BigDecimal nuevoSaldoLiberado = pago.getImporteLiberadoConductor().add(parteConductorEstaReserva);
             pago.setImporteLiberadoConductor(nuevoSaldoLiberado);
 
-            // 5. Transferir dinero al conductor (si tiene Stripe Connect configurado)
-            Persona conductor = reserva.getViaje().getPersona();
+            // 6. Incrementar los fondos en la entidad Persona del conductor
+            conductor.setFondosActuales(conductor.getFondosActuales().add(parteConductorEstaReserva));
+            conductor.setFondosTotales(conductor.getFondosTotales().add(parteConductorEstaReserva));
+            personaRepository.save(conductor);
+
+            // 7. Si usa Stripe Connect, transferir el dinero neto a su cuenta bancaria
             if (conductor.getStripeConductorId() != null) {
                 stripeService.transferirAConductor(conductor.getStripeConductorId(), parteConductorEstaReserva);
             }
 
             pagoRepository.save(pago);
 
-            // 6. Notificar al conductor
-            String msj = String.format("Se te han liberado %.2f € por la finalización del viaje.", parteConductorEstaReserva);
+            // 8. Notificar al conductor el importe neto abonado
+            String msj = String.format("Se te han liberado %.2f € netos por la finalización del viaje.", parteConductorEstaReserva);
             notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.NUEVA_RESERVA));
         }
     }
