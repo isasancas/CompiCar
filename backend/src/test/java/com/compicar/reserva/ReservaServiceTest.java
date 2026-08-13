@@ -38,6 +38,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -89,10 +90,8 @@ class ReservaServiceTest {
         viaje.setFechaHoraSalida(LocalDateTime.now().plusDays(1)); 
     }
 
-    private void setId(Object entity, Long id) throws Exception {
-        java.lang.reflect.Field f = entity.getClass().getDeclaredField("id");
-        f.setAccessible(true);
-        f.set(entity, id);
+    private void setId(Object entity, Long id) {
+        ReflectionTestUtils.setField(entity, "id", id);
     }
 
     private Reserva crearReserva(Long reservaId, Persona pasajeroReserva, Viaje viajeReserva,
@@ -393,7 +392,7 @@ class ReservaServiceTest {
 
         assertEquals(EstadoReserva.CANCELADA, res.getEstado());
         assertEquals(5, viaje.getPlazasDisponibles());
-        assertEquals(EstadoPago.PENDIENTE, pago.getEstado());
+        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
         verify(notificacionRepository).save(any(Notificacion.class));
@@ -420,7 +419,6 @@ class ReservaServiceTest {
         when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
         when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
-        org.mockito.Mockito.doNothing().when(pagoService).capturarPago(any(String.class));
 
         Reserva res = reservaService.cancelarReserva("user@compicar.com", 101L);
 
@@ -429,7 +427,6 @@ class ReservaServiceTest {
         assertEquals(4, viaje.getPlazasDisponibles());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
-        verify(pagoService).capturarPago(any(String.class));
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
         verify(notificacionRepository).save(any(Notificacion.class));

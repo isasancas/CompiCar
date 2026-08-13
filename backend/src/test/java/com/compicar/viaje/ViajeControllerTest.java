@@ -21,6 +21,7 @@ import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeBase.ViajeRouterService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,9 @@ class ViajeControllerTest {
 
     @Mock
     private ViajeService viajeService;
+
+    @Mock
+    private ViajeRouterService viajeRouterService;
 
     @InjectMocks
     private ViajeController viajeController;
@@ -302,7 +306,7 @@ class ViajeControllerTest {
                 List.of()
         );
 
-        when(viajeService.obtenerViajePorSlug("sevilla-huelva-2026-06-01")).thenReturn(dto);
+        when(viajeRouterService.obtenerPorSlug("sevilla-huelva-2026-06-01")).thenReturn(dto);
 
         mockMvc.perform(get("/api/viajes/sevilla-huelva-2026-06-01"))
                 .andExpect(status().isOk())
@@ -312,7 +316,7 @@ class ViajeControllerTest {
 
     @Test
     void obtenerViajePorSlug_noExiste_404() throws Exception {
-        when(viajeService.obtenerViajePorSlug("no-existe"))
+        when(viajeRouterService.obtenerPorSlug("no-existe"))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
 
         mockMvc.perform(get("/api/viajes/no-existe"))
@@ -450,7 +454,7 @@ class ViajeControllerTest {
                 List.of()
         );
 
-        when(viajeService.obtenerViajePorSlug("alicante-ibiza-2026-06-10")).thenReturn(dto);
+        when(viajeRouterService.obtenerPorSlug("alicante-ibiza-2026-06-10")).thenReturn(dto);
 
         mockMvc.perform(get("/api/viajes/publicos/alicante-ibiza-2026-06-10"))
                 .andExpect(status().isOk())
@@ -479,14 +483,14 @@ class ViajeControllerTest {
                 List.of()
         );
 
-        when(viajeService.cancelarViaje("driver@compicar.com", "sevilla-jaen-2026-05-30"))
+        when(viajeRouterService.cancelarViaje("driver@compicar.com", "sevilla-jaen-2026-05-30"))
                 .thenReturn(viajeActualizado);
 
         mockMvc.perform(put("/api/viajes/sevilla-jaen-2026-05-30/cancelar"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("CANCELADO"));
 
-        verify(viajeService).cancelarViaje("driver@compicar.com", "sevilla-jaen-2026-05-30");
+        verify(viajeRouterService).cancelarViaje("driver@compicar.com", "sevilla-jaen-2026-05-30");
     }
 
     @Test
@@ -502,7 +506,7 @@ class ViajeControllerTest {
     @Test
     void cancelarViaje_errorServicio_403() throws Exception {
         autenticar("otro@compicar.com");
-        when(viajeService.cancelarViaje("otro@compicar.com", "slug-no-suyo"))
+        when(viajeRouterService.cancelarViaje("otro@compicar.com", "slug-no-suyo"))
                 .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "No eres el conductor"));
 
         mockMvc.perform(put("/api/viajes/slug-no-suyo/cancelar"))
@@ -512,7 +516,7 @@ class ViajeControllerTest {
     @Test
     void cancelarViaje_errorServicio_404() throws Exception {
         autenticar("driver@compicar.com");
-        when(viajeService.cancelarViaje("driver@compicar.com", "no-existe"))
+        when(viajeRouterService.cancelarViaje("driver@compicar.com", "no-existe"))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
 
         mockMvc.perform(put("/api/viajes/no-existe/cancelar"))
@@ -541,7 +545,7 @@ class ViajeControllerTest {
                 List.of()
         );
 
-        when(viajeService.actualizarViaje(
+        when(viajeRouterService.actualizarViaje(
                 ArgumentMatchers.eq("driver@compicar.com"),
                 ArgumentMatchers.eq("sevilla-cadiz-2026-06-05"),
                 any(Viaje.class)))
@@ -554,7 +558,7 @@ class ViajeControllerTest {
                 .andExpect(jsonPath("$.id").value(11))
                 .andExpect(jsonPath("$.precio").value(15.00));
 
-        verify(viajeService).actualizarViaje(
+        verify(viajeRouterService).actualizarViaje(
                 ArgumentMatchers.eq("driver@compicar.com"),
                 ArgumentMatchers.eq("sevilla-cadiz-2026-06-05"),
                 any(Viaje.class));
@@ -569,13 +573,13 @@ class ViajeControllerTest {
                 .content("{}"))
                 .andExpect(status().isUnauthorized());
 
-        verifyNoInteractions(viajeService);
+        verifyNoInteractions(viajeRouterService);
     }
 
     @Test
     void actualizarViaje_errorServicio_403() throws Exception {
         autenticar("otro@compicar.com");
-        when(viajeService.actualizarViaje(
+        when(viajeRouterService.actualizarViaje(
                 ArgumentMatchers.eq("otro@compicar.com"),
                 ArgumentMatchers.eq("slug-otro"),
                 any(Viaje.class)))
@@ -590,7 +594,7 @@ class ViajeControllerTest {
     @Test
     void actualizarViaje_errorServicio_400_menosDe12h() throws Exception {
         autenticar("driver@compicar.com");
-        when(viajeService.actualizarViaje(
+        when(viajeRouterService.actualizarViaje(
                 ArgumentMatchers.eq("driver@compicar.com"),
                 ArgumentMatchers.eq("viaje-urgente"),
                 any(Viaje.class)))
@@ -605,7 +609,7 @@ class ViajeControllerTest {
     @Test
     void actualizarViaje_errorServicio_404() throws Exception {
         autenticar("driver@compicar.com");
-        when(viajeService.actualizarViaje(
+        when(viajeRouterService.actualizarViaje(
                 ArgumentMatchers.eq("driver@compicar.com"),
                 ArgumentMatchers.eq("no-existe"),
                 any(Viaje.class)))

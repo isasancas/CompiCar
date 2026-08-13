@@ -293,29 +293,28 @@ public class ReservaServiceImpl implements ReservaService {
                 // Si falta MENOS de 12 horas: Penalización (no se devuelve el importe de esta fecha)
                 if (horasHastaSalida < HORAS_LIMITE_CANCELACION) {
                     System.out.println("[CANCELACIÓN] Fuera de plazo (<12h). No se reembolsa el importe de esta fecha.");
-                } 
                 // Si se cancela A TIEMPO (>= 12 horas): Procesar devolución proporcional
-                else {
+                } else {
                     BigDecimal importeADevolver = precioUnitario.multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
 
-                    // Marcamos la reserva actual como CANCELADA antes de buscar el resto
+                    // 1. Marcamos la reserva actual como CANCELADA en memoria
                     reserva.setEstado(EstadoReserva.CANCELADA);
-                    reservaRepository.save(reserva);
 
-                    // Consultar si al pasajero le quedan OTRAS reservas activas en este mismo pago
-                    List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(
-                            pago.getId(), EstadoReserva.CANCELADA
-                    );
+                    // 2. Usamos la QUERY 9 existente y filtramos en Java para ignorar la reserva actual
+                    List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(pago.getId(), EstadoReserva.CANCELADA)
+                            .stream()
+                            .filter(r -> !r.getId().equals(reserva.getId()))
+                            .toList();
 
                     if (reservasRestantes.isEmpty()) {
-                        // CASO A: Era la única fecha activa del paquete/reserva -> Reembolsar o Liberar el 100%
+                        // CASO A: Era la única fecha activa del paquete/reserva -> Reembolso total
                         pagoService.cancelarPago(pago.getStripePaymentIntentId());
                         pago.setEstado(EstadoPago.REEMBOLSADO);
                         pago.setImporteTotal(BigDecimal.ZERO);
                         pago.setComision(BigDecimal.ZERO);
                         pago.setImporteConductor(BigDecimal.ZERO);
                     } else {
-                        // CASO B: Es un paquete y aún tiene otras fechas activas -> Reembolso Parcial / Ajuste
+                        // CASO B: Aún tiene otras fechas activas -> Ajuste proporcional
                         BigDecimal nuevoTotal = pago.getImporteTotal().subtract(importeADevolver);
                         if (nuevoTotal.compareTo(BigDecimal.ZERO) < 0) {
                             nuevoTotal = BigDecimal.ZERO;
@@ -326,12 +325,9 @@ public class ReservaServiceImpl implements ReservaService {
                         pago.setComision(nuevaComision);
                         pago.setImporteConductor(nuevoTotal.subtract(nuevaComision));
 
-                        // Si Stripe YA había cobrado/capturado el dinero en una fecha anterior:
                         if (pago.getEstado() == EstadoPago.CAPTURADO) {
                             stripeService.reembolsarParcial(pago.getStripePaymentIntentId(), importeADevolver);
                         }
-                        // Si el dinero aún estaba congelado/autorizado en Stripe (requires_capture),
-                        // al actualizar pago.importeTotal en la BD, la captura futura solo tomará el total actualizado.
                     }
 
                     pagoRepository.save(pago);

@@ -32,6 +32,7 @@ import com.compicar.vehiculo.VehiculoRepository;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrenteService;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +62,10 @@ class ViajeServiceTest {
     private PagoRepository pagoRepository;
     @Mock
     private NotificacionRepository notificacionRepository;
+    @Mock
+    private ViajeRecurrenteRepository viajeRecurrenteRepository;
+    @Mock
+    private ViajeRecurrenteService viajeRecurrenteService;
 
     @InjectMocks
     private ViajeServiceImpl viajeService;
