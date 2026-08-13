@@ -1,7 +1,6 @@
 package com.compicar.reserva;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 import com.compicar.pago.Pago;
 import com.compicar.parada.Parada;
@@ -22,8 +21,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 
 @Entity

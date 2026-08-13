@@ -20,7 +20,6 @@ import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.EventDataObjectDeserializationException;
@@ -30,7 +29,6 @@ import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.StripeObject;
-import com.stripe.net.ApiResource;
 import com.stripe.net.Webhook;
 
 import jakarta.persistence.EntityNotFoundException;
