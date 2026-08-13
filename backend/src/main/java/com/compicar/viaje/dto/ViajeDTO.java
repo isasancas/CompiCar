@@ -19,18 +19,20 @@ public class ViajeDTO {
     private String conductorNombre;
     private String conductorSlug;
     private List<ReservaDTO> reservas;
+    private String checkin; // Añadido opcionalmente por si el viaje contiene el código de check-in
 
     public ViajeDTO() {
     }
 
     public ViajeDTO(Long id, LocalDateTime fechaHoraSalida, String estado, Integer plazasDisponibles,
                    BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug,
-                   Long conductorId, String conductorNombre, String conductorSlug, List<ReservaDTO> reservas) {
+                   Long conductorId, String conductorNombre, String conductorSlug, List<ReservaDTO> reservas, String checkin) {
         this.id = id;
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
         this.plazasDisponibles = plazasDisponibles;
         this.precio = precio;
+        this.checkin = checkin;
         this.vehiculo = vehiculo;
         this.paradas = paradas;
         this.slug = slug;
@@ -58,6 +60,14 @@ public class ViajeDTO {
 
     public String getEstado() {
         return estado;
+    }
+
+    public String getCheckin() {
+        return checkin;
+    }
+
+    public void setCheckin(String checkin) {
+        this.checkin = checkin;
     }
 
     public void setEstado(String estado) {

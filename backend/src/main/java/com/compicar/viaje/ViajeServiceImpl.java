@@ -525,6 +525,28 @@ public class ViajeServiceImpl implements ViajeService {
         return convertirADTO(viaje);
     }
 
+    @Override
+    public ViajeDTO ponerEnCursoAutomatico(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+        }
+
+        if (viaje.getEstado() != EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje debe estar iniciado");
+        }
+
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
     private String generarCheckin() {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         StringBuilder sb = new StringBuilder(6);
@@ -748,7 +770,8 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPersona().getId(),
             viaje.getPersona().getNombre(),
             viaje.getPersona().getSlug(),
-            reservasDTO
+            reservasDTO,
+            viaje.getCheckin()
         );
     }
 

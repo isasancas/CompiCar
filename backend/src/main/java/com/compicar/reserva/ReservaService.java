@@ -21,5 +21,6 @@ public interface ReservaService {
     Reserva reservaNoPresentado(Long reservaId);
     Reserva marcarNoPresentadoPorConductor(String usuarioEmail, Long reservaId);
     List<Reserva> obtenerReservasComoConductor(String conductorEmail);
+    Reserva reservaPresentado(Long reservaId);
 
 }

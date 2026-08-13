@@ -40,6 +40,7 @@ interface Viaje {
   };
   paradas: Parada[];
   reservas?: Reserva[];
+  checkin?: string; // Añadido opcionalmente por si el viaje contiene el código de check-in
 }
 
 interface Reserva {
@@ -89,10 +90,20 @@ const DetalleViaje: React.FC = () => {
   const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
   const [iniciando, setIniciando] = useState(false);
   const [iniciarMsg, setIniciarMsg] = useState<string | null>(null);
-  const [modalCheckinAbierto, setModalCheckinAbierto] = useState(false);
-  const [codigoCheckin, setCodigoCheckin] = useState('');
-  const [verificandoCheckin, setVerificandoCheckin] = useState(false);
-  const [checkinMsg, setCheckinMsg] = useState<string | null>(null);
+  
+  // Nuevos estados para el flujo de check-in de pasajeros y global
+  const [estadosPasajeros, setEstadosPasajeros] = useState<Record<number, 'PRESENTE' | 'NO_PRESENTADO'>>({});
+  const [modalCheckinGlobalAbierto, setModalCheckinGlobalAbierto] = useState(false);
+  const [codigoCheckinGlobal, setCodigoCheckinGlobal] = useState('');
+  const [verificandoCheckinGlobal, setVerificandoCheckinGlobal] = useState(false);
+  const [checkinGlobalMsg, setCheckinGlobalMsg] = useState<string | null>(null);
+
+  // Estados añadidos específicamente para el pop-up individual de presente con código de check-in
+  const [modalPresenteAbierto, setModalPresenteAbierto] = useState(false);
+  const [reservaSeleccionadaParaPresente, setReservaSeleccionadaParaPresente] = useState<number | null>(null);
+  const [codigoCheckinIndividual, setCodigoCheckinIndividual] = useState('');
+  const [errorCheckinIndividual, setErrorCheckinIndividual] = useState<string | null>(null);
+
   const [finalizando, setFinalizando] = useState(false);
   const [finalizarMsg, setFinalizarMsg] = useState<string | null>(null);
   const [modalCancelarReservaAbierto, setModalCancelarReservaAbierto] = useState(false);
@@ -304,17 +315,135 @@ const DetalleViaje: React.FC = () => {
     }
   };
 
-  const confirmarCheckin = async () => {
+  // Función para manejar el botón PRESENTE de un pasajero llamando al endpoint[cite: 1]
+  const marcarPresentePasajero = async (reservaId: number) => {
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/reservas/presentado?reservaId=${reservaId}`),
+        {
+          method: 'PUT', // Ajusta a 'POST' si tu backend usa @PostMapping
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo marcar como presente');
+      }
+
+      // Actualizamos el estado visual local y recargamos los datos del viaje para refrescar el listado
+      setEstadosPasajeros(prev => ({ ...prev, [reservaId]: 'PRESENTE' }));
+      await fetchViaje();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al marcar presente';
+      console.error(msg);
+    }
+  };
+
+  // Función para manejar la validación del código introducido en el pop-up y proceder a marcar presente
+  const handleAceptarCheckinIndividual = async () => {
+    if (!reservaSeleccionadaParaPresente || !viaje) return;
+
+    // Obtenemos el código usando la propiedad real de tu entidad Java: 'checkin'
+    const checkinViaje = viaje.checkin || '';
+    
+    // Normalizamos ambos a mayúsculas y eliminamos espacios sobrantes para evitar fallos por formato
+    const codigoIngresadoLimpiado = codigoCheckinIndividual.trim().toUpperCase();
+    const checkinViajeLimpiado = String(checkinViaje).trim().toUpperCase();
+
+    if (codigoIngresadoLimpiado !== checkinViajeLimpiado) {
+      setErrorCheckinIndividual('❌ El código introducido no coincide con el check-in del viaje.');
+      return;
+    }
+    console.log(viaje.checkin)
+    setErrorCheckinIndividual(null);
+    try {
+      await marcarPresentePasajero(reservaSeleccionadaParaPresente);
+      setModalPresenteAbierto(false);
+      setCodigoCheckinIndividual('');
+      setReservaSeleccionadaParaPresente(null);
+    } catch {
+      setErrorCheckinIndividual('❌ Error al procesar la solicitud.');
+    }
+  };
+
+  // Función para manejar el botón NO PRESENTADO llamando al endpoint y controlando el flujo automático si es el único
+  const marcarNoPresentadoPasajero = async (reservaId: number) => {
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/reservas/noPresentado?reservaId=${reservaId}`),
+        {
+          method: 'PUT', // Ajusta a 'POST' si tu backend usa @PostMapping
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo marcar como no presentado');
+      }
+
+      setEstadosPasajeros(prev => ({ ...prev, [reservaId]: 'NO_PRESENTADO' }));
+
+      // Comprobar si solamente hay un pasajero en todo el viaje
+      if (viaje && viaje.reservas && viaje.reservas.length === 1) {
+        try {
+          const cursoResponse = await fetch(
+            buildApiUrl(`/api/viajes/${viaje.slug}/en-curso`),
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          );
+
+          if (!cursoResponse.ok) {
+            const data = await cursoResponse.json().catch(() => null);
+            throw new Error(data?.message || 'No se pudo poner el viaje en curso automáticamente');
+          }
+
+          const viajeActualizado = await cursoResponse.json();
+          setViaje(viajeActualizado);
+          setIniciarMsg('✅ Único pasajero no presentado. Viaje pasado a EN_CURSO automáticamente.');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Error al poner en curso';
+          setIniciarMsg(`❌ ${msg}`);
+        }
+      } else {
+        await fetchViaje();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al marcar no presentado';
+      console.error(msg);
+    }
+  };
+
+  // Cálculo para verificar si todos los pasajeros han sido revisados (tienen estado PRESENTE o NO_PRESENTADO)
+  const todosPasajerosRevisados = Boolean(
+    viaje?.reservas &&
+    viaje.reservas.length > 0 &&
+    viaje.reservas.every(r => estadosPasajeros[r.id] !== undefined)
+  );
+
+  const confirmarCheckinGlobal = async () => {
     if (!viaje) return;
 
-    const checkinNormalizado = codigoCheckin.trim();
+    const checkinNormalizado = codigoCheckinGlobal.trim();
     if (!checkinNormalizado) {
-      setCheckinMsg('❌ Debes introducir el código de check-in');
+      setCheckinGlobalMsg('❌ Debes introducir el código de check-in');
       return;
     }
 
-    setVerificandoCheckin(true);
-    setCheckinMsg(null);
+    setVerificandoCheckinGlobal(true);
+    setCheckinGlobalMsg(null);
 
     try {
       const response = await fetch(
@@ -336,15 +465,15 @@ const DetalleViaje: React.FC = () => {
 
       const viajeActualizado = await response.json();
       setViaje(viajeActualizado);
-      setCodigoCheckin('');
-      setModalCheckinAbierto(false);
-      setCheckinMsg(null);
+      setCodigoCheckinGlobal('');
+      setModalCheckinGlobalAbierto(false);
+      setCheckinGlobalMsg(null);
       setIniciarMsg('✅ Check-in validado correctamente. El viaje ha pasado a EN_CURSO.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al validar el check-in';
-      setCheckinMsg(`❌ ${msg}`);
+      setCheckinGlobalMsg(`❌ ${msg}`);
     } finally {
-      setVerificandoCheckin(false);
+      setVerificandoCheckinGlobal(false);
     }
   };
 
@@ -789,28 +918,75 @@ const DetalleViaje: React.FC = () => {
                 Pasajeros
               </h3>
               <div className="space-y-3">
-                {viaje.reservas.map((res) => (
-                  <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
-                        {res.nombrePasajero.charAt(0)}
+                {viaje.reservas.map((res) => {
+                  // Buscar la parada de subida para este pasajero
+                  const paradaSubida = viaje.paradas.find(p => p.id === res.paradaSubidaId);
+                  const estadoActualPasajero = estadosPasajeros[res.id];
+
+                  return (
+                    <div key={res.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
+                          {res.nombrePasajero.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-800">{res.nombrePasajero}</p>
+                          <p className="text-xs text-slate-500">
+                            {res.cantidadPlazas} plaza(s) • {res.estado}
+                          </p>
+                          <p className="text-xs font-medium text-indigo-600 mt-0.5">
+                            📍 Se sube en: {paradaSubida ? paradaSubida.localizacion : 'Parada no especificada'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-slate-800">{res.nombrePasajero}</p>
-                        <p className="text-xs text-slate-500">{res.cantidadPlazas} plaza(s) • {res.estado}</p>
+
+                      <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                        {/* Botones de presente / no presentado cuando el viaje está INICIADO */}
+                        {viaje.estado === 'INICIADO' && (
+                          <div className="flex items-center gap-2 mr-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReservaSeleccionadaParaPresente(res.id);
+                                setCodigoCheckinIndividual('');
+                                setErrorCheckinIndividual(null);
+                                setModalPresenteAbierto(true);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                estadoActualPasajero === 'PRESENTE'
+                                  ? 'bg-emerald-600 text-white shadow-sm'
+                                  : 'bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50'
+                              }`}
+                            >
+                              Presente
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => marcarNoPresentadoPasajero(res.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                estadoActualPasajero === 'NO_PRESENTADO'
+                                  ? 'bg-rose-600 text-white shadow-sm'
+                                  : 'bg-white border border-rose-600 text-rose-700 hover:bg-rose-50'
+                              }`}
+                            >
+                              No presentado
+                            </button>
+                          </div>
+                        )}
+
+                        {res.pasajeroSlug && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)}
+                            className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                          >
+                            Ver perfil público
+                          </button>
+                        )}
                       </div>
                     </div>
-                    {res.pasajeroSlug && (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)}
-                        className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-                      >
-                        Ver perfil público
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -983,19 +1159,86 @@ const DetalleViaje: React.FC = () => {
 
                 {viaje.estado === 'INICIADO' && (
                   <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCheckinMsg(null);
-                        setCodigoCheckin('');
-                        setModalCheckinAbierto(true);
-                      }}
-                      className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
-                    >
-                      📲 Realizar check-in
-                    </button>
+                    {(() => {
+                      // 1. Comprobamos si TODAS las reservas tienen estado asignado (PRESENTE o NO_PRESENTADO)
+                      const todosRevisados = Boolean(
+                        viaje?.reservas &&
+                        viaje.reservas.length > 0 &&
+                        viaje.reservas.every(r => estadosPasajeros[r.id] !== undefined || r.estado === 'PRESENTE' || r.estado === 'NO_PRESENTADO')
+                      );
+
+                      if (!todosRevisados) {
+                        return (
+                          <div className="text-center p-3 bg-amber-50 rounded-xl text-amber-700 text-xs font-medium border border-amber-200">
+                            ⚠️ Debes revisar el estado (presente o no presentado) de todos los pasajeros antes de continuar.
+                          </div>
+                        );
+                      }
+
+                      // 2. Si ya están todos revisados, comprobamos si hay ALGUNO presente
+                      const hayPasajeroPresente = viaje.reservas?.some(res => 
+                        estadosPasajeros[res.id] === 'PRESENTE' || res.estado === 'PRESENTE'
+                      );
+
+                      if (hayPasajeroPresente) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCheckinGlobalMsg(null);
+                              setCodigoCheckinGlobal('');
+                              setModalCheckinGlobalAbierto(true);
+                            }}
+                            className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
+                          >
+                            📲 Realizar check-in global
+                          </button>
+                        );
+                      } else {
+                        return (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setIniciando(true);
+                              setIniciarMsg(null);
+                              try {
+                                const response = await fetch(
+                                  buildApiUrl(`/api/viajes/${viaje.slug}/en-curso`),
+                                  {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${token}`
+                                    }
+                                  }
+                                );
+
+                                if (!response.ok) {
+                                  const data = await response.json().catch(() => null);
+                                  throw new Error(data?.message || 'No se pudo poner el viaje en curso');
+                                }
+
+                                const viajeActualizado = await response.json();
+                                setViaje(viajeActualizado);
+                                setIniciarMsg('✅ El viaje ha pasado a EN_CURSO automáticamente.');
+                              } catch (err) {
+                                const msg = err instanceof Error ? err.message : 'Error al poner en curso';
+                                setIniciarMsg(`❌ ${msg}`);
+                              } finally {
+                                setIniciando(false);
+                              }
+                            }}
+                            disabled={iniciando}
+                            className="w-full rounded-lg bg-indigo-600 px-6 py-3 text-base font-bold text-white hover:bg-indigo-700 transition-all shadow-md flex items-center justify-center gap-2 disabled:bg-slate-300"
+                          >
+                            {iniciando ? 'Procesando...' : '⚡ Poner viaje en curso automáticamente'}
+                          </button>
+                        );
+                      }
+                    })()}
+
                     <p className="text-xs text-slate-500 text-center">
-                      El viaje ya está iniciado. Ahora puedes validar el código para pasar a EN_CURSO.
+                      El viaje ya está iniciado. Gestiona la presencia de los pasajeros para habilitar la opción correspondiente.
                     </p>
                   </div>
                 )}
@@ -1499,8 +1742,74 @@ const DetalleViaje: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Checkin */}
-      {modalCheckinAbierto && viaje && (
+      {/* MODAL: POP-UP DE VERIFICACIÓN DE CÓDIGO DE CHECK-IN PARA EL BOTÓN PRESENTE */}
+      {modalPresenteAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Verificar Check-in de Pasajero</h3>
+                <p className="text-xs text-slate-500">Introduce el código para confirmar la presencia.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setModalPresenteAbierto(false);
+                  setCodigoCheckinIndividual('');
+                  setErrorCheckinIndividual(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Código del viaje
+                </label>
+                <input
+                  type="text"
+                  value={codigoCheckinIndividual}
+                  onChange={(e) => setCodigoCheckinIndividual(e.target.value)}
+                  placeholder="Introduce el código"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 uppercase tracking-[0.2em]"
+                  autoComplete="off"
+                />
+              </div>
+
+              {errorCheckinIndividual && (
+                <div className="p-3 rounded-xl text-xs font-bold border bg-red-50 border-red-200 text-red-700">
+                  {errorCheckinIndividual}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => {
+                    setModalPresenteAbierto(false);
+                    setCodigoCheckinIndividual('');
+                    setErrorCheckinIndividual(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAceptarCheckinIndividual}
+                  className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-bold text-white hover:bg-emerald-700 transition-all"
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Checkin Global */}
+      {modalCheckinGlobalAbierto && viaje && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -1510,8 +1819,8 @@ const DetalleViaje: React.FC = () => {
               </div>
               <button
                 onClick={() => {
-                  setModalCheckinAbierto(false);
-                  setCheckinMsg(null);
+                  setModalCheckinGlobalAbierto(false);
+                  setCheckinGlobalMsg(null);
                 }}
                 className="text-slate-400 hover:text-slate-900 text-2xl"
               >
@@ -1526,25 +1835,25 @@ const DetalleViaje: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={codigoCheckin}
-                  onChange={(e) => setCodigoCheckin(e.target.value)}
+                  value={codigoCheckinGlobal}
+                  onChange={(e) => setCodigoCheckinGlobal(e.target.value)}
                   placeholder="Introduce el código"
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 uppercase tracking-[0.2em]"
                   autoComplete="off"
                 />
               </div>
 
-              {checkinMsg && (
-                <div className={`p-3 rounded-xl text-xs font-bold border ${checkinMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                  {checkinMsg}
+              {checkinGlobalMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${checkinGlobalMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {checkinGlobalMsg}
                 </div>
               )}
 
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
                   onClick={() => {
-                    setModalCheckinAbierto(false);
-                    setCheckinMsg(null);
+                    setModalCheckinGlobalAbierto(false);
+                    setCheckinGlobalMsg(null);
                   }}
                   className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
                 >
@@ -1552,11 +1861,11 @@ const DetalleViaje: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={confirmarCheckin}
-                  disabled={verificandoCheckin}
+                  onClick={confirmarCheckinGlobal}
+                  disabled={verificandoCheckinGlobal}
                   className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-all disabled:bg-slate-300"
                 >
-                  {verificandoCheckin ? 'Verificando...' : 'Confirmar check-in'}
+                  {verificandoCheckinGlobal ? 'Verificando...' : 'Confirmar check-in'}
                 </button>
               </div>
             </div>

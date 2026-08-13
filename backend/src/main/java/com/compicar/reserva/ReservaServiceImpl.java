@@ -443,6 +443,14 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     @Override
+    public Reserva reservaPresentado(Long reservaId) {
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada con ID: " + reservaId));
+        reserva.setEstado(EstadoReserva.PRESENTE);
+        return reservaRepository.save(reserva);
+    }
+
+    @Override
     public Reserva marcarNoPresentadoPorConductor(String usuarioEmail, Long reservaId) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado con email: " + usuarioEmail));

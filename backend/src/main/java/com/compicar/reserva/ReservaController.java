@@ -161,6 +161,12 @@ public class ReservaController {
         return ResponseEntity.ok(noPresentado);
     }
 
+    @RequestMapping("/presentado")
+    public ResponseEntity<Reserva> reservaPresentado(Long reservaId) {
+        Reserva presentado = reservaService.reservaPresentado(reservaId);
+        return ResponseEntity.ok(presentado);
+    }
+
     @GetMapping("/pendientes-conductor")
     public ResponseEntity<List<Reserva>> obtenerPendientes(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();

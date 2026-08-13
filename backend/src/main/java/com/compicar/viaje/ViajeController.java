@@ -157,4 +157,10 @@ public class ViajeController {
         return ResponseEntity.ok(viaje);
     }
 
+    @PutMapping("/{slug}/en-curso")
+    public ResponseEntity<ViajeDTO> ponerEnCurso(Principal principal, @PathVariable String slug) {
+        ViajeDTO viaje = viajeService.ponerEnCursoAutomatico(principal.getName(), slug);
+        return ResponseEntity.ok(viaje);
+    }
+
 }
