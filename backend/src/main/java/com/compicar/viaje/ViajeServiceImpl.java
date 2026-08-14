@@ -803,10 +803,10 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPersona().getNombre(),
             viaje.getPersona().getSlug(),
             reservasDTO,
-            viaje.getCheckin()
             viaje.getFechaFinRecurrencia(),
             viaje.getDiasSemana(),
-            viajesRecurrentesDTO
+            viajesRecurrentesDTO,
+            viaje.getCheckin()
         );
     }
 
