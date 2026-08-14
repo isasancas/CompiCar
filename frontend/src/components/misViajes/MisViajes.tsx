@@ -19,6 +19,9 @@ interface Viaje {
     tipo: string;
     orden: number;
   }>;
+  diasSemana?: string[]; // Para viajes recurrentes
+  viajesRecurrentes?: Viaje[]; // Para viajes recurrentes
+  fechaFinRecurrencia?: string; // Para viajes recurrentes
 }
 
 interface ViajeConRol extends Viaje {
@@ -162,6 +165,13 @@ const MisViajes: React.FC = () => {
     );
   }
 
+  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
+    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
+    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
+    
+    return Boolean(tieneDias || tieneInstancias);
+  };
+
   return (
     <div className="min-h-screen bg-gray-200 pb-10 pt-6">
       <div className="mx-auto max-w-6xl px-4">
@@ -209,6 +219,8 @@ const MisViajes: React.FC = () => {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {viajesFiltrados.map((viaje) => {
                   const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
+                  const esRecurrente = esViajeRecurrentePadre(viaje); // <--- 1. Evaluamos si es recurrente
+
                   return (
                     <div key={`${viaje.id}-${viaje.rol}`} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm flex flex-col justify-between">
                       <div>
@@ -217,6 +229,12 @@ const MisViajes: React.FC = () => {
                             {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
                           </h3>
                           <div className="flex flex-col items-end space-y-1">
+                            {/* <--- 2. Badge opcional para indicar que es recurrente */}
+                            {esRecurrente && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                🔄 Recurrente
+                              </span>
+                            )}
                             <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getEstadoBadgeStyle(viaje.estado)}`}>
                               {viaje.estado}
                             </span>
@@ -247,9 +265,44 @@ const MisViajes: React.FC = () => {
                             </div>
                           </div>
                         )}
-                        <p className="text-sm text-slate-600 mb-1">
-                          {formatFecha(viaje.fechaHoraSalida)}
-                        </p>
+
+                        {/* <--- 3. Renderizado condicional: Si es recurrente mostramos días y acordeón de instancias */}
+                        {esRecurrente ? (
+                          <div className="my-2 p-2 bg-amber-50/50 rounded-lg border border-amber-200 text-sm text-slate-700">
+                            <p className="mb-1">
+                              <span className="font-medium text-amber-900">Días activos:</span> {viaje.diasSemana?.join(', ')}
+                            </p>
+                            {viaje.fechaFinRecurrencia && (
+                              <p className="text-xs text-slate-500 mb-2">
+                                Fin serie: {formatFecha(viaje.fechaFinRecurrencia)}
+                              </p>
+                            )}
+
+                            {/* Acordeón para las instancias futuras */}
+                            {viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0 && (
+                              <details className="mt-2 text-xs text-slate-600 group">
+                                <summary className="cursor-pointer font-medium text-amber-900 hover:underline">
+                                  Ver próximas fechas ({viaje.viajesRecurrentes.length})
+                                </summary>
+                                <ul className="mt-2 space-y-1 pl-2 border-l-2 border-amber-300">
+                                  {viaje.viajesRecurrentes.map((instancia) => (
+                                    <li key={instancia.id} className="flex justify-between items-center py-1">
+                                      <span>{formatFecha(instancia.fechaHoraSalida)}</span>
+                                      <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-700">
+                                        Plazas: {instancia.plazasDisponibles}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-600 mb-1">
+                            {formatFecha(viaje.fechaHoraSalida)}
+                          </p>
+                        )}
+
                         <p className="text-sm text-slate-600 mb-1">
                           Plazas disponibles: {viaje.plazasDisponibles}
                         </p>

@@ -33,6 +33,7 @@ interface Viaje {
   precio: number;
   conductorNombre?: string;
   conductorSlug?: string;
+  conductorId?: number; // Añadido para identificar al conductor
   vehiculo: {
     marca: string;
     modelo: string;
@@ -41,6 +42,9 @@ interface Viaje {
   paradas: Parada[];
   reservas?: Reserva[];
   checkin?: string; // Añadido opcionalmente por si el viaje contiene el código de check-in
+  diasSemana?: string[]; // Para viajes recurrentes
+  viajesRecurrentes?: Viaje[]; // Para viajes recurrentes
+  fechaFinRecurrencia?: string; // Para viajes recurrentes
 }
 
 interface Reserva {
@@ -125,6 +129,13 @@ const DetalleViaje: React.FC = () => {
 
   const backTo = navState.backTo || '/';
   const backLabel = navState.backLabel || 'Volver al inicio';
+
+  const usuarioActual = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const usuarioIdActual = usuarioActual.id;
+
+// Esta es la lógica maestra: compara el ID del usuario con el ID del conductor del viaje
+  const esConductor = Boolean(viaje?.conductorId && usuarioIdActual && viaje.conductorId === usuarioIdActual);
+  const rolActual: 'conductor' | 'pasajero' = esConductor ? 'conductor' : 'pasajero';
 
   const volver = () => navigate(backTo);
 
@@ -842,6 +853,13 @@ const DetalleViaje: React.FC = () => {
     return horasRestantes > 12;
   };
 
+  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
+    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
+    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
+    
+    return Boolean(tieneDias || tieneInstancias);
+  };
+
   const handleGuardarCambiosViaje = async () => {
     setErrorEdicion(null);
 
@@ -1066,27 +1084,94 @@ const DetalleViaje: React.FC = () => {
           )}
 
           {/* Información del viaje */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Fecha y Hora</p>
-              <p className="text-sm font-semibold text-slate-900">{formatFecha(viaje.fechaHoraSalida)}</p>
-            </div>
+            <div className="mb-6 space-y-4">
+              
+              {/* 1. Si es un viaje recurrente padre, mostramos su configuración y el listado interactivo en un bloque ancho */}
+              {esViajeRecurrentePadre ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-xs">
+                  <h4 className="text-amber-900 font-semibold mb-3 flex items-center gap-2 text-base">
+                    <span>🔄</span> Configuración de Viaje Recurrente
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm text-slate-700">
+                    <p>
+                      <strong>Días activos:</strong> {viaje.diasSemana?.join(', ')}
+                    </p>
+                    {viaje.fechaFinRecurrencia && (
+                      <p>
+                        <strong>Válido hasta:</strong> {formatFecha(viaje.fechaFinRecurrencia)}
+                      </p>
+                    )}
+                  </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Plazas Disponibles</p>
-              <p className="text-sm font-semibold text-slate-900">{viaje.plazasDisponibles}</p>
-            </div>
+                  {/* Lista de instancias hijas interactivas */}
+                  {viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0 && (
+                    <div className="border-t border-amber-200/80 pt-3">
+                      <p className="text-xs font-semibold text-amber-900 uppercase tracking-wider mb-2">
+                        Próximas instancias programadas ({viaje.viajesRecurrentes.length}):
+                      </p>
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {viaje.viajesRecurrentes.map((instancia) => (
+                          <div 
+                            key={instancia.id} 
+                            onClick={() => navigate(`/viajes/${instancia.slug}`, { 
+                              state: { 
+                                backTo: location.state?.backTo || '/viajes', 
+                                backLabel: 'Volver al Viaje Recurrente',
+                                rol: navState.rol || 'pasajero'
+                              } 
+                            })}
+                            className="bg-white p-3 rounded-xl border border-amber-200/60 flex justify-between items-center text-sm shadow-xs cursor-pointer hover:bg-amber-100/50 hover:border-amber-300 transition-all group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium text-slate-800 group-hover:text-amber-900">
+                                {formatFecha(instancia.fechaHoraSalida)}
+                              </span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                {instancia.estado}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-600">
+                              <span>Plazas libres: <span className="font-semibold text-slate-900">{instancia.plazasDisponibles}</span></span>
+                              <span className="text-amber-700 font-semibold group-hover:translate-x-0.5 transition-transform">Ver →</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Si es un viaje normal / puntual */
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-sm text-slate-700">
+                    <strong className="text-slate-900">Fecha y hora de salida:</strong> {formatFecha(viaje.fechaHoraSalida)}
+                  </p>
+                </div>
+              )}
 
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Precio</p>
-              <p className="text-sm font-semibold text-slate-900">{viaje.precio}€</p>
-            </div>
+              {/* 2. Tarjetas de métricas generales (Plazas, Precio, Estado) organizadas limpiamente en grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Fecha y hora de salida</p>
+                  <p className="text-base font-bold text-slate-900">{formatFecha(viaje.fechaHoraSalida)}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Plazas Disponibles</p>
+                  <p className="text-base font-bold text-slate-900">{viaje.plazasDisponibles}</p>
+                </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Estado</p>
-              <p className="text-sm font-semibold text-slate-900">{viaje.estado}</p>
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Precio por plaza</p>
+                  <p className="text-base font-bold text-slate-900">{viaje.precio}€</p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Estado actual</p>
+                  <p className="text-base font-bold text-slate-900">{viaje.estado}</p>
+                </div>
+              </div>
+
             </div>
-          </div>
 
           {/* SECCIÓN DE BOTONES DINÁMICOS */}
           <div className="space-y-3">
