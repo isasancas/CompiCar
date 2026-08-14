@@ -9,6 +9,7 @@ import com.compicar.valoracion.Valoracion;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.viaje.Viaje;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -37,6 +38,7 @@ public class Persona {
 
     private String segundoApellido;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String contrasena;
 

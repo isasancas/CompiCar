@@ -3,7 +3,7 @@ package com.compicar.valoracion;
 import java.time.LocalDateTime;
 
 import com.compicar.persona.Persona;
-import com.compicar.viaje.Viaje; // <-- IMPORTANTE: Importar la entidad Viaje
+import com.compicar.viaje.Viaje;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;

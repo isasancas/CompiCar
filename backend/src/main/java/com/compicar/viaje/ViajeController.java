@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeBase.ViajeRouterService;
 
 import jakarta.validation.Valid;
 
@@ -31,59 +32,41 @@ import jakarta.validation.Valid;
 public class ViajeController {
 
     private final ViajeService viajeService;
+    private final ViajeRouterService viajeRouterService;
 
     @Autowired
-    public ViajeController(ViajeService viajeService) {
+    public ViajeController(ViajeService viajeService, ViajeRouterService viajeRouterService) {
         this.viajeService = viajeService;
+        this.viajeRouterService = viajeRouterService;
     }
-    
+
     @PostMapping("/crear")
     public Viaje crearViaje(@RequestBody Viaje viaje) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-
-        String usuarioEmail = auth.getName();
+        String usuarioEmail = getUsuarioAutenticado();
         return viajeService.crearViaje(usuarioEmail, viaje);
     }
 
     @PostMapping("/precio/calcular")
     public PrecioTrayectoResponseDTO calcularPrecioTrayecto(@Valid @RequestBody CalcularPrecioTrayectoRequestDTO request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-
-        String usuarioEmail = auth.getName();
-        return viajeService.calcularPrecioTrayecto(usuarioEmail, request);
+        getUsuarioAutenticado();
+        return viajeService.calcularPrecioTrayecto(getUsuarioAutenticado(), request);
     }
 
     @GetMapping("/mis-viajes")
     public List<ViajeDTO> obtenerMisViajes() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-
-        String usuarioEmail = auth.getName();
+        String usuarioEmail = getUsuarioAutenticado();
         return viajeService.obtenerMisViajes(usuarioEmail);
     }
 
     @GetMapping("/participados")
     public List<ViajeDTO> obtenerViajesParticipados() {
-       Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-
-        String usuarioEmail = auth.getName();
+        String usuarioEmail = getUsuarioAutenticado();
         return viajeService.obtenerViajesParticipados(usuarioEmail);
     }
 
     @GetMapping("/{slug}")
-    public ViajeDTO obtenerViajePorSlug(@PathVariable String slug) {
-        return viajeService.obtenerViajePorSlug(slug);
+    public ResponseEntity<Object> obtenerViajePorSlug(@PathVariable String slug) {
+        return ResponseEntity.ok(viajeRouterService.obtenerPorSlug(slug));
     }
 
     @GetMapping("/publicos")
@@ -101,60 +84,40 @@ public class ViajeController {
     }
 
     @GetMapping("/publicos/{slug}")
-    public ViajeDTO obtenerViajePublicoPorSlug(@PathVariable String slug) {
-        return viajeService.obtenerViajePorSlug(slug);
+    public ResponseEntity<Object> obtenerViajePublicoPorSlug(@PathVariable String slug) {
+        return ResponseEntity.ok(viajeRouterService.obtenerPorSlug(slug));
     }
 
     @PutMapping("/{slug}/cancelar")
-    public ViajeDTO cancelarViaje(@PathVariable String slug) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-
-        String usuarioEmail = auth.getName();
-        return viajeService.cancelarViaje(usuarioEmail, slug);
+    public ResponseEntity<Object> cancelarViaje(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.cancelarViaje(usuarioEmail, slug));
     }
 
     @PutMapping("/{slug}")
-    public ResponseEntity<ViajeDTO> actualizarViaje(
+    public ResponseEntity<Object> actualizarViaje(
             @PathVariable String slug, 
             @RequestBody Viaje viajeEditado) {
-        
-        // 1. Obtener el email del usuario autenticado
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-        String usuarioEmail = auth.getName();
-
-        // 2. Llamar al servicio que ya tienes implementado
-        ViajeDTO actualizado = viajeService.actualizarViaje(usuarioEmail, slug, viajeEditado);
-        
-        return ResponseEntity.ok(actualizado);
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.actualizarViaje(usuarioEmail, slug, viajeEditado));
     }
 
     @PutMapping("/{slug}/finalizar")
-    public ViajeDTO finalizarViaje(@PathVariable String slug) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-
-        String usuarioEmail = auth.getName();
-        return viajeService.finalizarViaje(usuarioEmail, slug);
+    public ResponseEntity<Object> finalizarViaje(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.finalizarViaje(usuarioEmail, slug));
     }
 
     @PutMapping("/{slug}/iniciar")
-    public ResponseEntity<ViajeDTO> iniciarViaje(Principal principal, @PathVariable String slug) {
-        ViajeDTO viaje = viajeService.iniciarViaje(principal.getName(), slug);
-        return ResponseEntity.ok(viaje);
+    public ResponseEntity<Object> iniciarViaje(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.iniciarViaje(usuarioEmail, slug));
     }
 
     @PutMapping("/{slug}/checkin")
-    public ResponseEntity<ViajeDTO> confirmarCheckin(Principal principal, @PathVariable String slug, @RequestParam("checkin") String checkin) {
-        ViajeDTO viaje = viajeService.confirmarCheckin(principal.getName(), slug, checkin);
-        return ResponseEntity.ok(viaje);
+    public ResponseEntity<Object> confirmarCheckin(@PathVariable String slug, @RequestParam("checkin") String checkin) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.confirmarCheckin(usuarioEmail, slug, checkin));
     }
 
     @PutMapping("/{slug}/en-curso")
@@ -163,4 +126,13 @@ public class ViajeController {
         return ResponseEntity.ok(viaje);
     }
 
+    // --- Auxiliar de Autenticación ---
+
+    private String getUsuarioAutenticado() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        return auth.getName();
+    }
 }

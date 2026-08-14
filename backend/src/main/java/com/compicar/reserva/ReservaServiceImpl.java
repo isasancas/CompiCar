@@ -3,6 +3,8 @@ package com.compicar.reserva;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,7 @@ import com.compicar.pago.EstadoPago;
 import com.compicar.pago.Pago;
 import com.compicar.pago.PagoRepository;
 import com.compicar.pago.PagoService;
+import com.compicar.pago.StripeService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.ParadaRepository;
 import com.compicar.persona.Persona;
@@ -28,7 +31,13 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.stripe.exception.StripeException;
+
+import jakarta.persistence.EntityNotFoundException;
 
 @Service
 @Transactional
@@ -43,6 +52,9 @@ public class ReservaServiceImpl implements ReservaService {
     private final NotificacionRepository notificacionRepository;
     private final ParadaRepository paradaRepository;
     private final PagoService pagoService;
+    private final ViajeRecurrenteRepository viajeRecurrenteRepository;
+    private final ViajeRecurrenteService viajeRecurrenteService;
+    private final StripeService stripeService;
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
@@ -51,7 +63,10 @@ public class ReservaServiceImpl implements ReservaService {
                               PagoRepository pagoRepository,
                               NotificacionRepository notificacionRepository,
                               ParadaRepository paradaRepository,
-                              PagoService pagoService) {
+                              PagoService pagoService,
+                              ViajeRecurrenteRepository viajeRecurrenteRepository,
+                              ViajeRecurrenteService viajeRecurrenteService,
+                              StripeService stripeService) {
         this.reservaRepository = reservaRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
@@ -59,6 +74,9 @@ public class ReservaServiceImpl implements ReservaService {
         this.notificacionRepository = notificacionRepository;
         this.paradaRepository = paradaRepository;
         this.pagoService = pagoService;
+        this.viajeRecurrenteRepository = viajeRecurrenteRepository;
+        this.viajeRecurrenteService = viajeRecurrenteService;
+        this.stripeService = stripeService;
     }
 
     public ReservaDTO toDTO(Reserva r) {
@@ -213,6 +231,7 @@ public class ReservaServiceImpl implements ReservaService {
     }
 
     @Override
+    @Transactional
     public Reserva cancelarReserva(String usuarioEmail, Long reservaId) {
         Persona pasajero = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
@@ -228,33 +247,93 @@ public class ReservaServiceImpl implements ReservaService {
             return reserva;
         }
 
-        Viaje viaje = reserva.getViaje();
+        // 1. Obtener datos según el tipo de viaje (Puntual vs Recurrente)
+        LocalDateTime fechaHoraSalida;
+        Persona conductor;
+        BigDecimal precioUnitario;
 
-        // Solo devolver plazas si la reserva se había pagado
-        if (reserva.getEstado() == EstadoReserva.PAGADA) {
-            int plazasADevolver = reserva.getCantidadPlazas();
-            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + plazasADevolver);
-            viajeRepository.save(viaje);
+        if (reserva.getViaje() != null) {
+            Viaje viaje = reserva.getViaje();
+            fechaHoraSalida = viaje.getFechaHoraSalida();
+            conductor = viaje.getPersona();
+            precioUnitario = viaje.getPrecio();
+
+            // Si la reserva estaba pagada o confirmada, devolver las plazas
+            if (reserva.getEstado() == EstadoReserva.PAGADA || reserva.getEstado() == EstadoReserva.CONFIRMADA) {
+                viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
+                viajeRepository.save(viaje);
+            }
+        } else if (reserva.getViajeRecurrente() != null) {
+            ViajeRecurrente vr = reserva.getViajeRecurrente();
+            fechaHoraSalida = vr.getFechaHoraSalida();
+            conductor = vr.getPersona();
+            precioUnitario = vr.getPrecio();
+
+            // Si la reserva estaba pagada o confirmada, devolver las plazas
+            if (reserva.getEstado() == EstadoReserva.PAGADA || reserva.getEstado() == EstadoReserva.CONFIRMADA) {
+                vr.setPlazasDisponibles(vr.getPlazasDisponibles() + reserva.getCantidadPlazas());
+                viajeRecurrenteRepository.save(vr);
+            }
+        } else {
+            throw new IllegalStateException("La reserva no tiene un viaje ni viaje recurrente asociado.");
         }
 
-        String msj = pasajero.getNombre() + " ha cancelado su reserva en tu viaje.";
-        notificacionRepository.save(new Notificacion(msj, viaje.getPersona(), TipoNotificacion.RESERVA_CANCELADA));
+        // 2. Notificar al conductor
+        String msj = pasajero.getNombre() + " ha cancelado su reserva.";
+        notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.RESERVA_CANCELADA));
 
+        // 3. Evaluar política de cancelación y Stripe
         LocalDateTime ahora = LocalDateTime.now();
-        long horasHastaSalida = Duration.between(ahora, viaje.getFechaHoraSalida()).toHours();
-        
+        long horasHastaSalida = Duration.between(ahora, fechaHoraSalida).toHours();
+
         Pago pago = reserva.getPago();
+
         if (pago != null && pago.getStripePaymentIntentId() != null) {
             try {
-                // Si faltan menos de 12h, capturamos el dinero (penalización)
+                // Si falta MENOS de 12 horas: Penalización (no se devuelve el importe de esta fecha)
                 if (horasHastaSalida < HORAS_LIMITE_CANCELACION) {
-                    pagoService.capturarPago(pago.getStripePaymentIntentId());
+                    System.out.println("[CANCELACIÓN] Fuera de plazo (<12h). No se reembolsa el importe de esta fecha.");
+                // Si se cancela A TIEMPO (>= 12 horas): Procesar devolución proporcional
                 } else {
-                    // Si es pronto, liberamos el dinero (el pasajero no paga nada)
-                    pagoService.cancelarPago(pago.getStripePaymentIntentId());
+                    BigDecimal importeADevolver = precioUnitario.multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                    // 1. Marcamos la reserva actual como CANCELADA en memoria
+                    reserva.setEstado(EstadoReserva.CANCELADA);
+
+                    // 2. Usamos la QUERY 9 existente y filtramos en Java para ignorar la reserva actual
+                    List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(pago.getId(), EstadoReserva.CANCELADA)
+                            .stream()
+                            .filter(r -> !r.getId().equals(reserva.getId()))
+                            .toList();
+
+                    if (reservasRestantes.isEmpty()) {
+                        // CASO A: Era la única fecha activa del paquete/reserva -> Reembolso total
+                        pagoService.cancelarPago(pago.getStripePaymentIntentId());
+                        pago.setEstado(EstadoPago.REEMBOLSADO);
+                        pago.setImporteTotal(BigDecimal.ZERO);
+                        pago.setComision(BigDecimal.ZERO);
+                        pago.setImporteConductor(BigDecimal.ZERO);
+                    } else {
+                        // CASO B: Aún tiene otras fechas activas -> Ajuste proporcional
+                        BigDecimal nuevoTotal = pago.getImporteTotal().subtract(importeADevolver);
+                        if (nuevoTotal.compareTo(BigDecimal.ZERO) < 0) {
+                            nuevoTotal = BigDecimal.ZERO;
+                        }
+
+                        pago.setImporteTotal(nuevoTotal);
+                        BigDecimal nuevaComision = nuevoTotal.multiply(new BigDecimal("0.10"));
+                        pago.setComision(nuevaComision);
+                        pago.setImporteConductor(nuevoTotal.subtract(nuevaComision));
+
+                        if (pago.getEstado() == EstadoPago.CAPTURADO) {
+                            stripeService.reembolsarParcial(pago.getStripePaymentIntentId(), importeADevolver);
+                        }
+                    }
+
+                    pagoRepository.save(pago);
                 }
             } catch (StripeException e) {
-                throw new RuntimeException("Error al procesar la devolución en Stripe");
+                throw new RuntimeException("Error al procesar el reembolso en Stripe: " + e.getMessage(), e);
             }
         }
 
@@ -262,7 +341,6 @@ public class ReservaServiceImpl implements ReservaService {
         personaRepository.save(pasajero);
 
         reserva.setEstado(EstadoReserva.CANCELADA);
-        
         return reservaRepository.save(reserva);
     }
 
@@ -432,8 +510,6 @@ public class ReservaServiceImpl implements ReservaService {
         return reservaRepository.save(reserva);
     }
 
-    
-
     @Override
     public Reserva reservaNoPresentado(Long reservaId) {
         Reserva reserva = reservaRepository.findById(reservaId)
@@ -493,6 +569,233 @@ public class ReservaServiceImpl implements ReservaService {
         List<Reserva> lista = reservaRepository.findPendientesParaConductor(conductorEmail);
         System.out.println("Reservas encontradas: " + lista.size());
         return lista;
+    }
+
+    @Override
+    @Transactional
+    public ReservaCreadaResponse crearReservasRecurrentes(String usuarioEmail, 
+                                                        List<Long> viajeRecurrenteIds, 
+                                                        Integer plazasSolicitadas, 
+                                                        Long paradaSubidaId, 
+                                                        Long paradaBajadaId) {
+
+        if (viajeRecurrenteIds == null || viajeRecurrenteIds.isEmpty()) {
+            throw new IllegalArgumentException("Debes seleccionar al menos un viaje recurrente.");
+        }
+
+        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+            throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
+        }
+
+        Persona pasajero = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesRecurrentes = viajeRecurrenteRepository.findAllById(viajeRecurrenteIds);
+
+        if (viajesRecurrentes.size() != viajeRecurrenteIds.size()) {
+            throw new IllegalArgumentException("Alguno de los viajes recurrentes seleccionados no existe.");
+        }
+
+        BigDecimal totalAcumulado = BigDecimal.ZERO;
+        List<Reserva> reservasCreadas = new ArrayList<>();
+        Persona conductor = viajesRecurrentes.get(0).getPersona();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        StringBuilder detalleFechas = new StringBuilder();
+
+        for (ViajeRecurrente vr : viajesRecurrentes) {
+            // Validaciones por cada fecha seleccionada
+            if (vr.getEstado() != EstadoViaje.PENDIENTE) {
+                throw new IllegalArgumentException("El viaje del " + vr.getFechaHoraSalida().format(formatter) + " no está disponible.");
+            }
+
+            if (vr.getFechaHoraSalida() != null && vr.getFechaHoraSalida().isBefore(LocalDateTime.now())) {
+                throw new IllegalArgumentException("El viaje del " + vr.getFechaHoraSalida().format(formatter) + " ya ha transcurrido.");
+            }
+
+            if (vr.getPlazasDisponibles() < plazasSolicitadas) {
+                throw new IllegalArgumentException("No hay suficiente sitio para la fecha " + vr.getFechaHoraSalida().format(formatter));
+            }
+
+            if (vr.getPersona().getId().equals(pasajero.getId())) {
+                throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
+            }
+
+            boolean yaTieneReserva = reservaRepository.existsByPersonaIdAndViajeRecurrenteIdAndEstadoNot(
+                    pasajero.getId(), vr.getId(), EstadoReserva.CANCELADA
+            );
+            
+            if (yaTieneReserva) {
+                throw new IllegalArgumentException("Ya tienes una reserva activa en la fecha " + vr.getFechaHoraSalida().format(formatter));
+            }
+
+            Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
+                    .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
+            Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
+                    .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
+
+            // Crear la reserva para esta fecha concreta
+            Reserva reserva = new Reserva(
+                    EstadoReserva.PENDIENTE,
+                    LocalDateTime.now(),
+                    pasajero,
+                    paradaSubida,
+                    paradaBajada,
+                    vr, // Si ViajeRecurrente hereda de Viaje, si no usar vr.getViajePadre() o setViajeRecurrente
+                    plazasSolicitadas
+            );
+            reserva.setSlug("reserva-rec-tmp-" + System.currentTimeMillis() + "-" + vr.getId());
+            reserva = reservaRepository.saveAndFlush(reserva);
+            reserva.setSlug("reserva-" + reserva.getId());
+            reserva = reservaRepository.saveAndFlush(reserva);
+
+            reservasCreadas.add(reserva);
+
+            // Sumar importe: precio de la instancia * plazas
+            BigDecimal subtotal = vr.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
+            totalAcumulado = totalAcumulado.add(subtotal);
+
+            // Formatear texto para la notificación agrupada
+            detalleFechas.append("\n• ").append(vr.getFechaHoraSalida().format(formatter));
+        }
+
+        // Usar la primera reserva como principal para la pasarela Stripe
+        Reserva reservaPrincipal = reservasCreadas.get(0);
+
+        // Crear 1 único pago acumulado para Stripe
+        Pago pago = new Pago();
+        pago.setImporteTotal(totalAcumulado);
+        BigDecimal comision = totalAcumulado.multiply(new BigDecimal("0.10"));
+        pago.setComision(comision);
+        pago.setImporteConductor(totalAcumulado.subtract(comision));
+        pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setFechaCreacion(LocalDateTime.now());
+        pago.setReserva(reservaPrincipal);
+
+        pago = pagoRepository.saveAndFlush(pago);
+        reservaPrincipal.setPago(pago);
+
+        // GUARDAR 1 SOLA NOTIFICACIÓN AGRUPADA PARA EL CONDUCTOR
+        String msjNotificación = String.format(
+            "El usuario %s ha solicitado reservar %d fechas para tu viaje recurrente:%s\nImporte total: %.2f €",
+            pasajero.getNombre(),
+            viajesRecurrentes.size(),
+            detalleFechas.toString(),
+            totalAcumulado
+        );
+
+        notificacionRepository.save(new Notificacion(
+            msjNotificación,
+            conductor,
+            TipoNotificacion.NUEVA_RESERVA
+        ));
+
+        pago = pagoRepository.saveAndFlush(pago);
+
+        // Asignar el pago a TODAS las reservas del paquete recurrente
+        for (Reserva r : reservasCreadas) {
+            r.setPago(pago);
+            reservaRepository.save(r);
+        }
+
+        try {
+            String clientSecret = pagoService.crearIntentoDePago(reservaPrincipal);
+            return new ReservaCreadaResponse(reservaPrincipal.getId(), reservaPrincipal.getSlug(), clientSecret);
+        } catch (StripeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<ViajeRecurrenteDTO> obtenerRecurrentesPorViajePadre(Long viajePadreId) {
+        List<ViajeRecurrente> recurrentes = viajeRecurrenteRepository.findByViajePadreId(viajePadreId);
+        return recurrentes.stream()
+                .map(viajeRecurrenteService::mapearADTO)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void cancelarOcurrenciaPorConductor(Long viajeRecurrenteId, String conductorEmail) throws StripeException {
+        ViajeRecurrente vr = viajeRecurrenteRepository.findById(viajeRecurrenteId)
+                .orElseThrow(() -> new EntityNotFoundException("Viaje recurrente no encontrado"));
+
+        // 1. Validar que la persona que cancela sea el conductor de dicho viaje
+        if (!vr.getPersona().getEmail().equals(conductorEmail)) {
+            throw new IllegalArgumentException("Solo el conductor del viaje puede realizar esta cancelación.");
+        }
+
+        // 2. Marcar la ocurrencia del viaje como CANCELADO (opcional si usas EstadoViaje)
+        vr.setEstado(EstadoViaje.CANCELADO);
+        viajeRecurrenteRepository.save(vr);
+
+        // 3. Buscar TODAS las reservas activas de los distintos pasajeros en este viaje
+        List<Reserva> reservasAfectadas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(
+                viajeRecurrenteId, EstadoReserva.CANCELADA
+        );
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String fechaFormateada = vr.getFechaHoraSalida().format(formatter);
+
+        // 4. Procesar el reembolso e independizar la lógica para CADA PASAJERO
+        for (Reserva reserva : reservasAfectadas) {
+            
+            // Marcar la reserva individual como CANCELADA
+            reserva.setEstado(EstadoReserva.CANCELADA);
+            reservaRepository.save(reserva);
+
+            Pago pagoPasajero = reserva.getPago();
+
+            if (pagoPasajero != null && pagoPasajero.getStripePaymentIntentId() != null) {
+                
+                // Importe a devolver a ESTE pasajero = precioUnitario * plazasReservadasPorEl
+                BigDecimal importeDevolucionPasajero = vr.getPrecio()
+                        .multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                // Comprobar si al pasajero le quedan OTRAS reservas activas vinculadas a este mismo pago
+                List<Reserva> reservasRestantesPasajero = reservaRepository.findByPagoIdAndEstadoNot(
+                        pagoPasajero.getId(), EstadoReserva.CANCELADA
+                );
+
+                if (reservasRestantesPasajero.isEmpty()) {
+                    // Caso A: Era la única fecha que tenía reservada el pasajero -> Reembolsar/Liberar el 100% de su Pago
+                    stripeService.liberarFondos(pagoPasajero.getStripePaymentIntentId());
+                    pagoPasajero.setEstado(EstadoPago.REEMBOLSADO);
+                    pagoPasajero.setImporteTotal(BigDecimal.ZERO);
+                    pagoPasajero.setComision(BigDecimal.ZERO);
+                    pagoPasajero.setImporteConductor(BigDecimal.ZERO);
+                } else {
+                    // Caso B: El pasajero reservó varias fechas en paquete -> Reembolso Parcial de esta fecha
+                    BigDecimal nuevoTotalPago = pagoPasajero.getImporteTotal().subtract(importeDevolucionPasajero);
+                    
+                    if (nuevoTotalPago.compareTo(BigDecimal.ZERO) < 0) {
+                        nuevoTotalPago = BigDecimal.ZERO;
+                    }
+
+                    pagoPasajero.setImporteTotal(nuevoTotalPago);
+                    BigDecimal nuevaComision = nuevoTotalPago.multiply(new BigDecimal("0.10"));
+                    pagoPasajero.setComision(nuevaComision);
+                    pagoPasajero.setImporteConductor(nuevoTotalPago.subtract(nuevaComision));
+
+                    // Si Stripe ya había cobrado el dinero (succeeded), hacemos el reembolso parcial
+                    if (pagoPasajero.getEstado() == EstadoPago.CAPTURADO) {
+                        stripeService.reembolsarParcial(
+                            pagoPasajero.getStripePaymentIntentId(), 
+                            importeDevolucionPasajero
+                        );
+                    }
+                }
+                
+                pagoRepository.save(pagoPasajero);
+            }
+
+            // 5. Notificar de manera individual a cada pasajero afectado
+            notificacionRepository.save(new Notificacion(
+                    String.format("El conductor ha cancelado el viaje del %s. Se ha procesado el reembolso de tus %d plaza(s).",
+                            fechaFormateada, reserva.getCantidadPlazas()),
+                    reserva.getPersona(),
+                    TipoNotificacion.RESERVA_CANCELADA
+            ));
+        }
     }
 
 }

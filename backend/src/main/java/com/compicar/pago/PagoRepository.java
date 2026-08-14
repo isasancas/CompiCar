@@ -14,15 +14,14 @@ import com.compicar.reserva.Reserva;
 @Repository
 public interface PagoRepository extends JpaRepository<Pago, Long> {
     
-    @Query("SELECT p FROM Pago p WHERE p.reserva.persona = :persona")
+    @Query("SELECT DISTINCT p FROM Pago p JOIN p.reservas r WHERE r.persona = :persona")
     List<Pago> findByPersona(@Param("persona") Persona persona);
 
-    @Query("SELECT p FROM Pago p WHERE p.reserva = :reserva")
+    @Query("SELECT DISTINCT p FROM Pago p JOIN p.reservas r WHERE r = :reserva")
     Optional<Pago> findByReserva(@Param("reserva") Reserva reserva);
 
-    // Para encontrar el pago cuando Stripe nos envíe una notificación (Webhook)
     Optional<Pago> findByStripePaymentIntentId(String stripePaymentIntentId);
-    
-    // Para obtener el pago asociado a una reserva específica
-    Optional<Pago> findByReservaId(Long reservaId);
+
+    @Query("SELECT DISTINCT p FROM Pago p JOIN p.reservas r WHERE r.id = :reservaId")
+    Optional<Pago> findByReservaId(@Param("reservaId") Long reservaId);
 }

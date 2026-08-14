@@ -2,116 +2,73 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.compicar.parada.Parada;
 import com.compicar.persona.Persona;
 import com.compicar.reserva.Reserva;
 import com.compicar.vehiculo.Vehiculo;
+import com.compicar.viajeBase.ViajeBase;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "viaje")
-public class Viaje {
+public class Viaje extends ViajeBase {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private LocalDateTime fechaFinRecurrencia;
 
-    @Column(nullable = false)
-    private LocalDateTime fechaHoraSalida;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "viaje_dias_semana", joinColumns = @JoinColumn(name = "viaje_id"))
+    @Column(name = "dia_semana", nullable = false)
+    private List<String> diasSemana = new ArrayList<>();
 
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
-    private EstadoViaje estado;
-
-    @Column(nullable = false)
-    private Integer plazasDisponibles;
-
-    @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal precio;
-
-    @ManyToOne
-    @JoinColumn(name = "persona_id", nullable = false)
-    @JsonIgnoreProperties({"viajes", "reservas", "vehiculos"})
-    private Persona persona;
-
-    @ManyToOne
-    @JoinColumn(name = "vehiculo_id", nullable = false)
-    private Vehiculo vehiculo;
+    @OneToMany(mappedBy = "viajePadre", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties("viajePadre")
+    private List<ViajeRecurrente> viajesRecurrentes = new ArrayList<>();
 
     @OneToMany(mappedBy = "viaje")
     @JsonIgnore
-    private List<Reserva> reservas;
+    private List<Reserva> reservas = new ArrayList<>();
 
     @OneToMany(mappedBy = "viaje", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("orden ASC")
     @JsonIgnoreProperties("viaje")
-    private List<Parada> paradas;
-
-    @Column(nullable = false, unique = true, length = 180)
-    private String slug;
-
-    @Column(nullable = false, length = 6)
-    private String checkin;
+    private List<Parada> paradas = new ArrayList<>();
 
     // Constructores
     public Viaje() {
     }
 
     public Viaje(LocalDateTime fechaHoraSalida, EstadoViaje estado, Integer plazasDisponibles, BigDecimal precio,
-            Persona persona, Vehiculo vehiculo) {
-        this.fechaHoraSalida = fechaHoraSalida;
-        this.estado = estado;
-        this.plazasDisponibles = plazasDisponibles;
-        this.precio = precio;
-        this.persona = persona;
-        this.vehiculo = vehiculo;
-        this.slug = "viaje-" + id;
+            Persona persona, Vehiculo vehiculo, String slug, String checkin) {
+        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug, checkin);
     }
 
     // Getters
-    public Long getId() {
-        return id;
+    public LocalDateTime getFechaFinRecurrencia() {
+        return fechaFinRecurrencia;
     }
 
-    public LocalDateTime getFechaHoraSalida() {
-        return fechaHoraSalida;
+    public List<String> getDiasSemana() {
+        return diasSemana;
     }
 
-    public EstadoViaje getEstado() {
-        return estado;
-    }
-
-    public Integer getPlazasDisponibles() {
-        return plazasDisponibles;
-    }
-
-    public BigDecimal getPrecio() {
-        return precio;
-    }
-
-    public Persona getPersona() {
-        return persona;
-    }
-
-    public Vehiculo getVehiculo() {
-        return vehiculo;
+    public List<ViajeRecurrente> getViajesRecurrentes() {
+        return viajesRecurrentes;
     }
 
     public List<Reserva> getReservas() {
@@ -122,55 +79,32 @@ public class Viaje {
         return paradas;
     }
     
-    public String getSlug() {
-        return slug;
-    }
-
-    public String getCheckin() {
-        return checkin;
-    }
-
     // Setters
-    public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
-        this.fechaHoraSalida = fechaHoraSalida;
+    public void setFechaFinRecurrencia(LocalDateTime fechaFinRecurrencia) {
+        this.fechaFinRecurrencia = fechaFinRecurrencia;
     }
 
-    public void setEstado(EstadoViaje estado) {
-        this.estado = estado;
+    public void setDiasSemana(List<String> diasSemana) {
+        this.diasSemana = diasSemana;
     }
 
-    public void setPlazasDisponibles(Integer plazasDisponibles) {
-        this.plazasDisponibles = plazasDisponibles;
+    public void setViajesRecurrentes(List<ViajeRecurrente> viajesRecurrentes) {
+        this.viajesRecurrentes = viajesRecurrentes;
     }
 
-    public void setPrecio(BigDecimal precio) {
-        this.precio = precio;
-    }
-
-    public void setPersona(Persona persona) {
-        this.persona = persona;
-    }
-
-    public void setVehiculo(Vehiculo vehiculo) {
-        this.vehiculo = vehiculo;
+    public void setReservas(List<Reserva> reservas) {
+        this.reservas = reservas;
     }
 
     public void setParadas(List<Parada> paradas) {
         this.paradas = paradas;
     }
 
-    public void setCheckin(String checkin) {
-        this.checkin = checkin;
-    }
-
-    public void setSlug(String slug) {
-        this.slug = slug;
-    }
-
     @Override
     public String toString() {
-        return "Viaje{id=" + id + ", fechaHoraSalida=" + fechaHoraSalida + ", estado=" + estado
-            + ", plazasDisponibles=" + plazasDisponibles + ", precio=" + precio + ", slug=" + slug + ", checkin=" + checkin + "}";
+        return "Viaje{id=" + getId() + ", fechaHoraSalida=" + getFechaHoraSalida() + ", estado=" + getEstado()
+                + ", plazasDisponibles=" + getPlazasDisponibles() + ", precio=" + getPrecio() 
+                + ", diasSemana=" + diasSemana + "}";
     }
 
 }

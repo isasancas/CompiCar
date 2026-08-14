@@ -2,7 +2,6 @@ package com.compicar.viaje;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -17,8 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.compicar.reserva.EstadoReserva;
-import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.config.SlugUtils;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
@@ -29,17 +26,21 @@ import com.compicar.pago.PagoRepository;
 import com.compicar.pago.StripeService;
 import com.compicar.parada.Parada;
 import com.compicar.parada.TipoParada;
+import com.compicar.parada.dto.ParadaDTO;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
+import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
-import com.compicar.viaje.dto.VehiculoDTO;
-import com.compicar.viaje.dto.ParadaDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.StripeException;
@@ -57,8 +58,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final PagoRepository pagoRepository;
     private final NotificacionRepository notificacionRepository;
     private final StripeService stripeService;
-
-    private static final long HORAS_LIMITE_CANCELACION = 12L;
+    private final ViajeRecurrenteService viajeRecurrenteService;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
@@ -66,7 +66,8 @@ public class ViajeServiceImpl implements ViajeService {
     public ViajeServiceImpl(ViajeRepository viajeRepository, PersonaRepository personaRepository,
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
             ReservaRepository reservaRepository, PagoRepository pagoRepository, 
-            NotificacionRepository notificacionRepository, StripeService stripeService) {
+            NotificacionRepository notificacionRepository, StripeService stripeService,
+            ViajeRecurrenteService viajeRecurrenteService) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -75,6 +76,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.pagoRepository = pagoRepository;
         this.notificacionRepository = notificacionRepository;
         this.stripeService = stripeService;
+        this.viajeRecurrenteService = viajeRecurrenteService;
     }
 
     public boolean tieneReservasActivas(Viaje viaje) {
@@ -105,6 +107,10 @@ public class ViajeServiceImpl implements ViajeService {
         viaje.setPersona(conductor);
         viaje.setVehiculo(vehiculo);
 
+        if (viaje.getEstado() == null) {
+            viaje.setEstado(EstadoViaje.PENDIENTE);
+        }
+
         // Generar checkin aleatorio de 6 caracteres alfanuméricos
         viaje.setCheckin(generarCheckin());
 
@@ -126,7 +132,15 @@ public class ViajeServiceImpl implements ViajeService {
         validarParadas(viaje);
         String baseSlug = construirBaseSlug(viaje);
         viaje.setSlug(generarSlugUnico(baseSlug));
-        return viajeRepository.save(viaje);
+        Viaje viajeGuardado = viajeRepository.save(viaje);
+
+        // Disparo de la generación de ocurrencias recurrentes
+        if (viajeGuardado.getDiasSemana() != null && !viajeGuardado.getDiasSemana().isEmpty() 
+                && viajeGuardado.getFechaFinRecurrencia() != null) {
+            viajeRecurrenteService.generarOcurrencias(viajeGuardado);
+        }
+
+        return viajeGuardado;
     }
 
     @Override
@@ -388,6 +402,7 @@ public class ViajeServiceImpl implements ViajeService {
      * e incrementa los fondos del conductor (fondosActuales y fondosTotales).
      */
     @Override
+    @Transactional
     public ViajeDTO finalizarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
@@ -403,47 +418,58 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede finalizar un viaje en estado " + viaje.getEstado());
         }
 
-        BigDecimal totalGanado = BigDecimal.ZERO;
+        BigDecimal totalGanadoEnEsteViaje = BigDecimal.ZERO;
         List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
 
         for (Reserva reserva : reservasActivas) {
             Pago pago = reserva.getPago();
 
             if (pago != null && pago.getStripePaymentIntentId() != null) {
-                try {
-                    // 1. Cobrar definitivamente en Stripe (descongelar)
-                    stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
-                    
-                    pago.setEstado(EstadoPago.CAPTURADO);
-                    pagoRepository.save(pago);
-
-                    if (pago.getImporteTotal() != null) {
-                        totalGanado = totalGanado.add(pago.getImporteTotal());
+                
+                // 1. Capturar dinero congelado en Stripe SOLO si aún no ha sido capturado
+                if (pago.getEstado() != EstadoPago.CAPTURADO) {
+                    try {
+                        stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
+                        pago.setEstado(EstadoPago.CAPTURADO);
+                    } catch (StripeException e) {
+                        throw new ResponseStatusException(
+                            HttpStatus.PAYMENT_REQUIRED, 
+                            "Error al procesar la captura del pago en Stripe para la reserva #" + reserva.getId() + ": " + e.getMessage()
+                        );
                     }
-                } catch (StripeException e) {
-                    throw new ResponseStatusException(
-                        HttpStatus.PAYMENT_REQUIRED, 
-                        "Error al procesar la captura del pago en Stripe para la reserva #" + reserva.getId() + ": " + e.getMessage()
-                    );
                 }
+
+                // 2. Calcular la ganancia correspondiente EXCLUSIVAMENTE a este viaje/fecha
+                BigDecimal gananciaEstaReserva = viaje.getPrecio().multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                // 3. Actualizar el acumulado liberado en la entidad Pago
+                BigDecimal liberadoPrevio = pago.getImporteLiberadoConductor() != null 
+                        ? pago.getImporteLiberadoConductor() 
+                        : BigDecimal.ZERO;
+                        
+                pago.setImporteLiberadoConductor(liberadoPrevio.add(gananciaEstaReserva));
+                pagoRepository.save(pago);
+
+                // 4. Sumar al total que se le abonará al conductor en esta ejecución
+                totalGanadoEnEsteViaje = totalGanadoEnEsteViaje.add(gananciaEstaReserva);
             }
 
-            // 2. Notificar al pasajero
+            // 5. Notificar al pasajero
             String msj = "El viaje a " + viaje.getSlug() + " ha finalizado. ¡Gracias por viajar!";
-            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO); // Ajusta el TipoNotificacion si tienes uno específico
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO);
             notificacionRepository.save(noti);
         }
 
-        // 3. Cambiar estado del viaje
+        // 6. Cambiar estado del viaje
         viaje.setEstado(EstadoViaje.FINALIZADO);
         viajeRepository.save(viaje);
 
-        // 4. Sumar ganancias a las cuentas del conductor
+        // 7. Liberar saldo al conductor progresivamente
         BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
         BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
 
-        conductor.setFondosActuales(actuales.add(totalGanado));
-        conductor.setFondosTotales(totales.add(totalGanado));
+        conductor.setFondosActuales(actuales.add(totalGanadoEnEsteViaje));
+        conductor.setFondosTotales(totales.add(totalGanadoEnEsteViaje));
         personaRepository.save(conductor);
 
         return convertirADTO(viaje);
@@ -748,7 +774,7 @@ public class ViajeServiceImpl implements ViajeService {
                     r.getId(),
                     r.getEstado().toString(),
                     r.getFechaHoraReserva(),
-                    r.getViaje().getId(),
+                    r.getViaje() != null ? r.getViaje().getId() : null,
                     r.getPersona().getId(),
                     r.getPersona().getNombre(),
                     r.getPersona().getSlug(),
@@ -756,6 +782,12 @@ public class ViajeServiceImpl implements ViajeService {
                     r.getParadaBajada().getId(),
                     r.getCantidadPlazas()
                 )).toList()
+            : List.of();
+
+        List<ViajeRecurrenteDTO> viajesRecurrentesDTO = viaje.getViajesRecurrentes() != null
+            ? viaje.getViajesRecurrentes().stream()
+                .map(viajeRecurrenteService::mapearADTO) // Invocación delegada
+                .toList()
             : List.of();
 
         return new ViajeDTO(
@@ -772,6 +804,9 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getPersona().getSlug(),
             reservasDTO,
             viaje.getCheckin()
+            viaje.getFechaFinRecurrencia(),
+            viaje.getDiasSemana(),
+            viajesRecurrentesDTO
         );
     }
 

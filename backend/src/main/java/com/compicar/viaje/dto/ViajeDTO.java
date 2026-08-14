@@ -4,9 +4,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.compicar.parada.dto.ParadaDTO;
 import com.compicar.reserva.dto.ReservaDTO;
+import com.compicar.vehiculo.dto.VehiculoDTO;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 
 public class ViajeDTO {
+
     private Long id;
     private LocalDateTime fechaHoraSalida;
     private String estado;
@@ -21,12 +25,17 @@ public class ViajeDTO {
     private List<ReservaDTO> reservas;
     private String checkin; // Añadido opcionalmente por si el viaje contiene el código de check-in
 
+    private LocalDateTime fechaFinRecurrencia;
+    private List<String> diasSemana;
+    private List<ViajeRecurrenteDTO> viajesRecurrentes;
+
     public ViajeDTO() {
     }
 
     public ViajeDTO(Long id, LocalDateTime fechaHoraSalida, String estado, Integer plazasDisponibles,
-                   BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug,
-                   Long conductorId, String conductorNombre, String conductorSlug, List<ReservaDTO> reservas, String checkin) {
+                    BigDecimal precio, VehiculoDTO vehiculo, List<ParadaDTO> paradas, String slug,
+                    Long conductorId, String conductorNombre, String conductorSlug, List<ReservaDTO> reservas,
+                    LocalDateTime fechaFinRecurrencia, List<String> diasSemana, List<ViajeRecurrenteDTO> viajesRecurrentes, String checkin) {
         this.id = id;
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
@@ -40,6 +49,9 @@ public class ViajeDTO {
         this.conductorNombre = conductorNombre;
         this.conductorSlug = conductorSlug;
         this.reservas = reservas;
+        this.fechaFinRecurrencia = fechaFinRecurrencia;
+        this.diasSemana = diasSemana;
+        this.viajesRecurrentes = viajesRecurrentes;
     }
 
     public Long getId() {
@@ -144,5 +156,29 @@ public class ViajeDTO {
 
     public void setReservas(List<ReservaDTO> reservas) {
         this.reservas = reservas;
+    }
+
+    public LocalDateTime getFechaFinRecurrencia() {
+        return fechaFinRecurrencia;
+    }
+
+    public void setFechaFinRecurrencia(LocalDateTime fechaFinRecurrencia) {
+        this.fechaFinRecurrencia = fechaFinRecurrencia;
+    }
+
+    public List<String> getDiasSemana() {
+        return diasSemana;
+    }
+
+    public void setDiasSemana(List<String> diasSemana) {
+        this.diasSemana = diasSemana;
+    }
+
+    public List<ViajeRecurrenteDTO> getViajesRecurrentes() {
+        return viajesRecurrentes;
+    }
+
+    public void setViajesRecurrentes(List<ViajeRecurrenteDTO> viajesRecurrentes) {
+        this.viajesRecurrentes = viajesRecurrentes;
     }
 }
