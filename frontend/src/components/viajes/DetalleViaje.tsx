@@ -109,6 +109,9 @@ const DetalleViaje: React.FC = () => {
   const [modalCancelarReservaAbierto, setModalCancelarReservaAbierto] = useState(false);
   const [modalCancelarViajeAbierto, setModalCancelarViajeAbierto] = useState(false);
 
+  const [reportandoIncomparecencia, setReportandoIncomparecencia] = useState(false);
+  const [incomparecenciaMsg, setIncomparecenciaMsg] = useState<string | null>(null);
+
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
   type DetalleNavState = {
@@ -340,6 +343,47 @@ const DetalleViaje: React.FC = () => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al marcar presente';
       console.error(msg);
+    }
+  };
+
+  const reportarIncomparecenciaConductor = async () => {
+    if (!viaje) return;
+
+    setReportandoIncomparecencia(true);
+    setIncomparecenciaMsg(null);
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/cancelarIncompareceConductor`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'No se pudo reportar la incomparecencia';
+        throw new Error(msg);
+      }
+
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setIncomparecenciaMsg('✅ Incomparecencia reportada correctamente. El viaje ha sido cancelado.');
+      
+      setTimeout(async () => {
+        await fetchViaje();
+        await fetchMiReserva();
+      }, 1500);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado';
+      setIncomparecenciaMsg(`❌ ${msg}`);
+    } finally {
+      setReportandoIncomparecencia(false);
     }
   };
 
@@ -1121,7 +1165,30 @@ const DetalleViaje: React.FC = () => {
                     >
                       {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
                     </button>
-                    
+                    {/* BOTÓN: REPORTAR INCOMPARECENCIA DEL CONDUCTOR */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={reportarIncomparecenciaConductor}
+                        disabled={reportandoIncomparecencia}
+                        className="w-full rounded-lg bg-rose-600 px-6 py-3 text-base font-bold text-white hover:bg-rose-700 disabled:opacity-60 transition-all shadow-sm flex items-center justify-center gap-2"
+                      >
+                        {reportandoIncomparecencia ? 'Procesando...' : '⚠️ El conductor no se ha presentado'}
+                      </button>
+                      <p className="mt-1 text-[11px] text-slate-500 text-center">
+                        Usa este botón si ha pasado la hora de salida y el conductor no ha acudido.
+                      </p>
+
+                      {incomparecenciaMsg && (
+                        <div className={`mt-2 p-3 rounded-xl text-xs font-bold border ${
+                          incomparecenciaMsg.includes('✅') 
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}>
+                          {incomparecenciaMsg}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </>

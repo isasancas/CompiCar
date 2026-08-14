@@ -353,6 +353,121 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
     }
 
     @Override
+    @Transactional
+    public ViajeRecurrenteDTO cancelarViajeRecurrenteIncompareceConductor(String usuarioEmail, String slug) {
+        Persona usuario = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje recurrente no encontrado"));
+
+        // 1. Validar que el usuario NO sea el conductor del viaje
+        if (viajeRecurrente.getPersona().getId().equals(usuario.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El conductor no puede reportar su propia incomparecencia");
+        }
+
+        // 2. Validar que este pasajero tenga una reserva activa en este viaje recurrente
+        List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
+        
+        // Buscamos si el usuario actual posee una reserva con estado CONFIRMADA
+        boolean tieneReservaConfirmadaElUsuario = reservasActivas.stream()
+                .anyMatch(r -> r.getPersona().getId().equals(usuario.getId()) 
+                            && r.getEstado() == EstadoReserva.CONFIRMADA);
+
+        if (!tieneReservaConfirmadaElUsuario) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Debes tener una reserva confirmada en este viaje para reportar una incidencia de incomparecencia.");
+        }
+
+        // 3. Validar estados del viaje
+        if (viajeRecurrente.getEstado() == EstadoViaje.EN_CURSO || viajeRecurrente.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viajeRecurrente.getEstado());
+        }
+
+        if (viajeRecurrente.getEstado() == EstadoViaje.CANCELADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya ha sido cancelado");
+        }
+
+        // 4. Validar el tiempo de espera (Ej: Que haya salido y hayan pasado al menos 15 minutos)
+        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime salida = viajeRecurrente.getFechaHoraSalida();
+
+        if (salida != null) {
+            LocalDateTime tiempoMinimo = salida.plusMinutes(15);
+            LocalDateTime tiempoMaximo = salida.plusHours(2);
+
+            if (ahora.isBefore(tiempoMinimo)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aún no ha transcurrido el tiempo de espera prudencial desde la hora de salida.");
+            }
+            if (ahora.isAfter(tiempoMaximo)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El plazo para reportar la incomparecencia ha expirado.");
+            }
+        }
+
+        boolean teniaReservasActivas = !reservasActivas.isEmpty();
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String fechaSalida = salida != null ? salida.format(formatter) : "";
+
+        // 5. Iterar y reembolsar a los pasajeros (tu lógica original de Stripe que está perfecta)
+        for (Reserva reserva : reservasActivas) {
+            reserva.setEstado(EstadoReserva.CANCELADA);
+            reservaRepository.save(reserva);
+
+            Pago pago = reserva.getPago();
+            if (pago != null && pago.getStripePaymentIntentId() != null) {
+                BigDecimal importeADevolver = viajeRecurrente.getPrecio().multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(
+                        pago.getId(), EstadoReserva.CANCELADA
+                );
+
+                try {
+                    if (reservasRestantes.isEmpty()) {
+                        stripeService.liberarFondos(pago.getStripePaymentIntentId());
+                        pago.setEstado(EstadoPago.REEMBOLSADO);
+                        pago.setImporteTotal(BigDecimal.ZERO);
+                        pago.setComision(BigDecimal.ZERO);
+                        pago.setImporteConductor(BigDecimal.ZERO);
+                    } else {
+                        BigDecimal nuevoTotal = pago.getImporteTotal().subtract(importeADevolver);
+                        if (nuevoTotal.compareTo(BigDecimal.ZERO) < 0) {
+                            nuevoTotal = BigDecimal.ZERO;
+                        }
+
+                        pago.setImporteTotal(nuevoTotal);
+                        BigDecimal nuevaComision = nuevoTotal.multiply(new BigDecimal("0.10"));
+                        pago.setComision(nuevaComision);
+                        pago.setImporteConductor(nuevoTotal.subtract(nuevaComision));
+
+                        if (pago.getEstado() == EstadoPago.CAPTURADO) {
+                            stripeService.reembolsarParcial(pago.getStripePaymentIntentId(), importeADevolver);
+                        }
+                    }
+                    pagoRepository.save(pago);
+                } catch (StripeException e) {
+                    throw new RuntimeException("Error al procesar el reembolso en Stripe: " + e.getMessage(), e);
+                }
+            }
+
+            String msj = "El viaje del " + fechaSalida + " ha sido cancelado por incomparecencia del conductor.";
+            Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
+            notificacionRepository.save(noti);
+        }
+
+        viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
+        viajeRecurrenteRepository.save(viajeRecurrente);
+
+        // 6. Penalizar al verdadero conductor del viaje
+        Persona conductor = viajeRecurrente.getPersona();
+        if (teniaReservasActivas) {
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return mapearADTO(viajeRecurrente);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public ViajeRecurrenteDTO obtenerViajeRecurrentePorSlug(String slug) {
         ViajeRecurrente viajeRecurrente = viajeRecurrenteRepository.findBySlug(slug)

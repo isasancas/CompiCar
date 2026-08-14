@@ -73,6 +73,16 @@ public class ViajeRouterService {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado");
     }
 
+    public Object cancelarViajeIncompareceConductor(String usuarioEmail, String slug) {
+        if (viajeRepository.existsBySlug(slug)) {
+            return viajeService.cancelarViajeIncompareceConductor(usuarioEmail, slug);
+        } else if (viajeRecurrenteRepository.existsBySlug(slug)) {
+            return viajeRecurrenteService.cancelarViajeRecurrenteIncompareceConductor(usuarioEmail, slug);
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado");
+    }
+
+
     public Object actualizarViaje(String usuarioEmail, String slug, Viaje viajeEditado) {
         if (viajeRepository.existsBySlug(slug)) {
             return viajeService.actualizarViaje(usuarioEmail, slug, viajeEditado);

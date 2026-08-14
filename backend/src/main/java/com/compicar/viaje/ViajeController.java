@@ -135,4 +135,11 @@ public class ViajeController {
         }
         return auth.getName();
     }
+
+    @PutMapping("/{slug}/cancelarIncompareceConductor")
+    public ResponseEntity<Object> cancelarViajeIncompareceConductor(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.cancelarViajeIncompareceConductor(usuarioEmail, slug));
+    }
+
 }

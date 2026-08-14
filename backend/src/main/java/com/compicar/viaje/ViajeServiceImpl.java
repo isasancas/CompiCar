@@ -301,6 +301,67 @@ public class ViajeServiceImpl implements ViajeService {
 
     @Override
     @Transactional
+    public ViajeDTO cancelarViajeIncompareceConductor(String usuarioEmail, String slug) {
+        Persona usuario = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        // 1. Validar que el usuario sea un pasajero con reserva en este viaje y NO el conductor
+        if (viaje.getPersona().getId().equals(usuario.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El conductor no puede reportar su propia incomparecencia");
+        }
+
+        boolean tieneReservaConfirmadaEnViaje = viaje.getReservas() != null && viaje.getReservas().stream()
+            .anyMatch(r -> r.getPersona().getId().equals(usuario.getId()) && 
+                        r.getEstado() == EstadoReserva.CONFIRMADA);
+
+        if (!tieneReservaConfirmadaEnViaje) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Debes tener una reserva confirmada en este viaje para reportar una incidencia de incomparecencia.");
+        }
+
+        // 2. Validaciones de estado del viaje
+        if (viaje.getEstado() == EstadoViaje.EN_CURSO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viaje.getEstado());
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya ha sido cancelado");
+        }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime salida = viaje.getFechaHoraSalida();
+
+        // 3. Validar tiempos de espera (Ejemplo: Debe haber salido, y damos un margen prudencial de 15 minutos)
+        LocalDateTime tiempoMinimoReclamacion = salida.plusMinutes(15);
+        LocalDateTime tiempoMaximoReclamacion = salida.plusHours(2); // Evita que reclamen días después
+
+        if (ahora.isBefore(tiempoMinimoReclamacion)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aún no ha transcurrido el tiempo de espera prudencial desde la hora de salida.");
+        }
+
+        if (ahora.isAfter(tiempoMaximoReclamacion)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El plazo para reportar la incomparecencia del conductor ha expirado.");
+        }
+
+        Persona conductor = viaje.getPersona();
+
+        // 4. Ejecutar reembolso masivo o de la reserva del pasajero (según cómo tengas diseñada tu función auxiliar)
+        cancelarReservasYReembolsar(viaje, true);
+
+        viaje.setEstado(EstadoViaje.CANCELADO);
+        viajeRepository.save(viaje);
+
+        // 5. Penalizar al conductor
+        conductor.incrementarCancelaciones();
+        personaRepository.save(conductor);
+
+        return convertirADTO(viaje);
+    }
+
+    @Override
+    @Transactional
     public int cancelarViajesPendientesExpirados() {
         LocalDateTime limite = LocalDateTime.now(ZoneId.of("Europe/Madrid")).minusHours(1);
 
