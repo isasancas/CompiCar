@@ -39,6 +39,8 @@ import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrenteService;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,6 +61,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final NotificacionRepository notificacionRepository;
     private final StripeService stripeService;
     private final ViajeRecurrenteService viajeRecurrenteService;
+    private final ViajeRecurrenteRepository viajeRecurrenteRepository;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
@@ -67,7 +70,7 @@ public class ViajeServiceImpl implements ViajeService {
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
             ReservaRepository reservaRepository, PagoRepository pagoRepository, 
             NotificacionRepository notificacionRepository, StripeService stripeService,
-            ViajeRecurrenteService viajeRecurrenteService) {
+            ViajeRecurrenteService viajeRecurrenteService, ViajeRecurrenteRepository viajeRecurrenteRepository) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -77,6 +80,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.notificacionRepository = notificacionRepository;
         this.stripeService = stripeService;
         this.viajeRecurrenteService = viajeRecurrenteService;
+        this.viajeRecurrenteRepository = viajeRecurrenteRepository;
     }
 
     public boolean tieneReservasActivas(Viaje viaje) {
@@ -240,17 +244,38 @@ public class ViajeServiceImpl implements ViajeService {
 
         Set<EstadoViaje> estadosPublicos = Set.of(EstadoViaje.PENDIENTE, EstadoViaje.INICIADO);
 
+        // 1. Obtener viajes normales
         List<Viaje> base = (inicio != null && fin != null)
-            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin)
+            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin) 
             : viajeRepository.buscarViajesPublicosSinFecha(estadosPublicos);
+
+        // 2. Obtener viajes recurrentes
+        List<ViajeRecurrente> baseRecurrentes = (inicio != null && fin != null)
+            ? viajeRecurrenteRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin) 
+            : viajeRecurrenteRepository.buscarViajesPublicosSinFecha(estadosPublicos);
 
         String origenNorm = normalizar(origen);
         String destinoNorm = normalizar(destino);
 
-        return base.stream()
+        // 3. Procesar y convertir viajes normales a DTO
+        List<ViajeDTO> resultadosNormales = base.stream()
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
-            .map(this::convertirADTO)
+            .map(this::convertirADTO) // Asegúrate de que esRecurrente sea false o null aquí
             .toList();
+
+        // 4. Procesar y convertir viajes recurrentes a DTO 
+        // (Asegúrate de marcar esRecurrente = true en tu conversor o método de mapeo)
+        List<ViajeDTO> resultadosRecurrentes = baseRecurrentes.stream()
+            .filter(vr -> coincideEnParadasRecurrente(vr, origenNorm, destinoNorm)) // O tu método de paradas adaptado
+            .map(this::convertirRecurrenteADTO) 
+            .toList();
+
+        // 5. Unir ambas listas en una sola respuesta
+        List<ViajeDTO> resultadosTotales = new java.util.ArrayList<>();
+        resultadosTotales.addAll(resultadosNormales);
+        resultadosTotales.addAll(resultadosRecurrentes);
+
+        return resultadosTotales;
     }
 
     @Override
@@ -802,6 +827,27 @@ public class ViajeServiceImpl implements ViajeService {
         return origenOk && destinoOk;
     }
 
+    private boolean coincideEnParadasRecurrente(ViajeRecurrente viaje, String origenNorm, String destinoNorm) {
+        List<Parada> paradas = viaje.getParadas();
+        if (paradas == null || paradas.isEmpty()) {
+            return false;
+        }
+
+        boolean origenOk = origenNorm.isBlank() || paradas.stream()
+            .map(Parada::getLocalizacion)
+            .filter(loc -> loc != null && !loc.isBlank())
+            .map(this::normalizar)
+            .anyMatch(locNorm -> locNorm.contains(origenNorm));
+
+        boolean destinoOk = destinoNorm.isBlank() || paradas.stream()
+            .map(Parada::getLocalizacion)
+            .filter(loc -> loc != null && !loc.isBlank())
+            .map(this::normalizar)
+            .anyMatch(locNorm -> locNorm.contains(destinoNorm));
+
+        return origenOk && destinoOk;
+    }
+
     private String normalizar(String texto) {
         if (texto == null) {
             return "";
@@ -868,6 +914,74 @@ public class ViajeServiceImpl implements ViajeService {
             viaje.getDiasSemana(),
             viajesRecurrentesDTO,
             viaje.getCheckin()
+        );
+    }
+
+        private ViajeDTO convertirRecurrenteADTO(ViajeRecurrente viajeRecurrente) {
+        // 1. Mapear Vehículo
+        VehiculoDTO vehiculoDTO = null;
+        if (viajeRecurrente.getVehiculo() != null) {
+            vehiculoDTO = new VehiculoDTO(
+                viajeRecurrente.getVehiculo().getId(),
+                viajeRecurrente.getVehiculo().getMarca(),
+                viajeRecurrente.getVehiculo().getModelo(),
+                viajeRecurrente.getVehiculo().getMatricula()
+            );
+        }
+
+        // 2. Mapear Paradas ordenadas
+        List<ParadaDTO> paradasDTO = viajeRecurrente.getParadas() != null
+            ? viajeRecurrente.getParadas().stream()
+                .map(parada -> new ParadaDTO(
+                    parada.getId(),
+                    parada.getLocalizacion(),
+                    parada.getTipo().toString(),
+                    parada.getOrden()
+                ))
+                .toList()
+            : List.of();
+
+        // 3. Mapear Reservas (filtrando las canceladas, igual que en el viaje normal)
+        List<ReservaDTO> reservasDTO = viajeRecurrente.getReservas() != null 
+            ? viajeRecurrente.getReservas().stream()
+                .filter(r -> r.getEstado() != EstadoReserva.CANCELADA)
+                .map(r -> new ReservaDTO(
+                    r.getId(),
+                    r.getEstado().toString(),
+                    r.getFechaHoraReserva(),
+                    r.getViaje() != null ? r.getViaje().getId() : null, // o ajustarlo si mapeas a viajeRecurrenteId
+                    r.getPersona().getId(),
+                    r.getPersona().getNombre(),
+                    r.getPersona().getSlug(),
+                    r.getParadaSubida().getId(),
+                    r.getParadaBajada().getId(),
+                    r.getCantidadPlazas()
+                )).toList()
+            : List.of();
+
+        // 4. Obtener datos del conductor (Persona) de forma segura
+        Long conductorId = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getId() : null;
+        String conductorNombre = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getNombre() : null;
+        String conductorSlug = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getSlug() : null;
+
+        // 5. Retornar el ViajeDTO marcándolo como recurrente (esRecurrente = true)
+        return new ViajeDTO(
+            viajeRecurrente.getId(),
+            viajeRecurrente.getFechaHoraSalida(),
+            viajeRecurrente.getEstado().toString(),
+            viajeRecurrente.getPlazasDisponibles(),
+            viajeRecurrente.getPrecio(),
+            vehiculoDTO,
+            paradasDTO,
+            viajeRecurrente.getSlug(),
+            conductorId,
+            conductorNombre,
+            conductorSlug,
+            reservasDTO,
+            viajeRecurrente.getFechaHoraFin(), // Mapea la fecha fin de recurrencia si tu DTO la acepta en este constructor
+            null, // diasSemana (si aplica en tu DTO de viaje normal, o ajústalo según tu constructor de ViajeDTO)
+            List.of(), // lista vacía de sub-recurrentes para evitar recursión infinita
+            viajeRecurrente.getCheckin() 
         );
     }
 
