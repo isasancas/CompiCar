@@ -45,5 +45,10 @@ public interface ViajeRecurrenteRepository extends JpaRepository<ViajeRecurrente
         @Param("inicio") LocalDateTime inicio,
         @Param("fin") LocalDateTime fin
     );
+
+    @Query("SELECT DISTINCT r.viajeRecurrente FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL")
+    List<ViajeRecurrente> findViajesRecurrentesParticipadosByPersonaId(@Param("personaId") Long personaId);
     
+    @Query("SELECT DISTINCT r.viajeRecurrente.viajePadre FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL")
+    List<Viaje> findViajesPadreParticipadosByPersonaId(@Param("personaId") Long personaId);
 }

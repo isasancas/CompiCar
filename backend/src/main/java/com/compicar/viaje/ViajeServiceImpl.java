@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -232,8 +233,20 @@ public class ViajeServiceImpl implements ViajeService {
     public List<ViajeDTO> obtenerViajesParticipados(String email) {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertirADTO).toList();
+        
+        // 1. Viajes normales donde participa directamente
+        List<Viaje> viajesNormales = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
+        
+        // 2. Viajes padre obtenidos a través de las reservas en viajes recurrentes
+        List<Viaje> viajesPadresRecurrentes = viajeRecurrenteRepository.findViajesPadreParticipadosByPersonaId(persona.getId());
+
+        // 3. Unir ambos listados usando un Set para evitar duplicados
+        Set<Viaje> todosLosViajes = new HashSet<>();
+        todosLosViajes.addAll(viajesNormales);
+        todosLosViajes.addAll(viajesPadresRecurrentes);
+
+        // 4. Convertir a DTO y retornar
+        return todosLosViajes.stream().map(this::convertirADTO).toList();
     }
 
     @Override

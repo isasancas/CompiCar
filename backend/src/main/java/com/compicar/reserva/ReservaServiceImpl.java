@@ -79,19 +79,50 @@ public class ReservaServiceImpl implements ReservaService {
         this.stripeService = stripeService;
     }
 
-    public ReservaDTO toDTO(Reserva r) {
-        return new ReservaDTO(
-            r.getId(),
-            r.getEstado().name(),
-            r.getFechaHoraReserva(),
-            r.getViaje().getId(),
-            r.getPersona().getId(),
-            r.getPersona().getNombre(),
-            r.getPersona().getSlug(),
-            r.getParadaSubida().getId(),
-            r.getParadaBajada().getId(),
-            r.getCantidadPlazas()
-        );
+    private ReservaDTO toDTO(Reserva reserva) {
+        if (reserva == null) {
+            return null;
+        }
+
+        ReservaDTO dto = new ReservaDTO();
+        dto.setId(reserva.getId());
+        
+        // Convertir el enum EstadoReserva a String de forma segura
+        if (reserva.getEstado() != null) {
+            dto.setEstado(reserva.getEstado().name());
+        }
+        
+        dto.setFechaHoraReserva(reserva.getFechaHoraReserva());
+        dto.setCantidadPlazas(reserva.getCantidadPlazas());
+
+        // Mapeo seguro de Paradas (extrayendo su ID)
+        if (reserva.getParadaSubida() != null) {
+            dto.setParadaSubidaId(reserva.getParadaSubida().getId());
+        }
+        
+        if (reserva.getParadaBajada() != null) {
+            dto.setParadaBajadaId(reserva.getParadaBajada().getId());
+        }
+
+        // Mapeo seguro de la Persona / Pasajero
+        if (reserva.getPersona() != null) {
+            dto.setPersonaId(reserva.getPersona().getId());
+            // Ajusta estos getters según los nombres reales en tu entidad Persona
+            // dto.setNombrePasajero(reserva.getPersona().getNombre()); 
+            // dto.setPasajeroSlug(reserva.getPersona().getSlug());
+        }
+
+        // 🔍 SOLUCIÓN CLAVE PARA EL VIAJE: 
+        // Aprovechamos tu método getViajeBase() o evaluamos ambos campos de manera segura
+        if (reserva.getViaje() != null) {
+            dto.setViajeId(reserva.getViaje().getId());
+        } else if (reserva.getViajeRecurrente() != null) {
+            dto.setViajeId(reserva.getViajeRecurrente().getId());
+        } else {
+            dto.setViajeId(null);
+        }
+
+        return dto;
     }
 
     @Override
@@ -353,7 +384,10 @@ public class ReservaServiceImpl implements ReservaService {
         Reserva reserva = reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
 
-        if (!reserva.getViaje().getPersona().getId().equals(conductor.getId())) {
+        // Obtenemos de forma segura el viaje base (sea Viaje normal o ViajeRecurrente)
+        com.compicar.viajeBase.ViajeBase viajeBase = reserva.getViajeBase();
+
+        if (viajeBase == null || viajeBase.getPersona() == null || !viajeBase.getPersona().getId().equals(conductor.getId())) {
             throw new IllegalArgumentException("Solo el conductor del viaje puede rechazar esta reserva");
         }
 
@@ -361,12 +395,16 @@ public class ReservaServiceImpl implements ReservaService {
         if (reserva.getEstado() != EstadoReserva.PAGADA) {
             throw new IllegalStateException("Solo puedes rechazar reservas que están pendientes de tu confirmación.");
         }
-
-        Viaje viaje = reserva.getViaje();
         
-        // 2. Devolver las plazas al viaje (porque se restaron al pasar a PAGADA)
-        viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
-        viajeRepository.save(viaje);
+        // 2. Devolver las plazas al viaje correspondiente de forma polimórfica
+        viajeBase.setPlazasDisponibles(viajeBase.getPlazasDisponibles() + reserva.getCantidadPlazas());
+        
+        // Guardamos dependiendo de qué tipo de instancia sea
+        if (viajeBase instanceof com.compicar.viaje.Viaje) {
+            viajeRepository.save((com.compicar.viaje.Viaje) viajeBase);
+        } else if (viajeBase instanceof com.compicar.viajeRecurrente.ViajeRecurrente) {
+            viajeRecurrenteRepository.save((com.compicar.viajeRecurrente.ViajeRecurrente) viajeBase);
+        }
 
         // 3. Cancelar la retención en Stripe (Libera el dinero de la tarjeta)
         Pago pago = reserva.getPago();
@@ -381,7 +419,7 @@ public class ReservaServiceImpl implements ReservaService {
 
         // 4. Notificar al pasajero
         notificacionRepository.save(new Notificacion(
-                "El conductor ha rechazado tu reserva en el viaje " + viaje.getSlug() + ".",
+                "El conductor ha rechazado tu reserva en el viaje " + (viajeBase.getSlug() != null ? viajeBase.getSlug() : "") + ".",
                 reserva.getPersona(),
                 TipoNotificacion.RESERVA_RECHAZADA
         ));
@@ -487,26 +525,31 @@ public class ReservaServiceImpl implements ReservaService {
         Reserva reserva = reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada")); 
             
-        if (!reserva.getViaje().getPersona().getEmail().equals(conductorEmail)) {
+        // Obtenemos de forma segura el viaje base (sea Viaje normal o ViajeRecurrente)
+        com.compicar.viajeBase.ViajeBase viajeBase = reserva.getViajeBase();
+
+        if (viajeBase == null || viajeBase.getPersona() == null || !viajeBase.getPersona().getEmail().equals(conductorEmail)) {
             throw new IllegalArgumentException("No tienes permiso para confirmar esta reserva");
         }
 
-        // NUEVO: Validar que la reserva ya haya sido pagada por el pasajero
+        // Validar que la reserva ya haya sido pagada por el pasajero
         if (reserva.getEstado() != EstadoReserva.PAGADA) {
             throw new IllegalStateException("Solo puedes confirmar reservas que ya han sido pagadas por el pasajero.");
         }
 
         reserva.setEstado(EstadoReserva.CONFIRMADA);
 
-        String mensaje = "El conductor ha confirmado tu reserva en el viaje " + reserva.getViaje().getSlug() + ".";
-        if (reserva.getViaje().getCheckin() != null) {
-            mensaje += " Código de checkin: " + reserva.getViaje().getCheckin() + ".";
+        String mensaje = "El conductor ha confirmado tu reserva en el viaje " + (viajeBase.getSlug() != null ? viajeBase.getSlug() : "") + ".";
+        if (viajeBase.getCheckin() != null) {
+            mensaje += " Código de checkin: " + viajeBase.getCheckin() + ".";
         }
+        
         notificacionRepository.save(new Notificacion(
             mensaje,
             reserva.getPersona(),
             TipoNotificacion.RESERVA_ACEPTADA
         ));
+        
         return reservaRepository.save(reserva);
     }
 
