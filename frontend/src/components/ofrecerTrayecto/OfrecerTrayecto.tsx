@@ -6,7 +6,8 @@ import {
   CircleMarker,
   Polyline,
   Tooltip,
-  useMapEvents
+  useMapEvents,
+  useMap
 } from 'react-leaflet';
 import { buildApiUrl } from '../../apiConfig';
 
@@ -34,6 +35,7 @@ type Horquilla = {
   detalle: string;
 };
 
+// Componente para capturar clics en el mapa
 function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
@@ -42,6 +44,42 @@ function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => voi
   });
   return null;
 }
+
+// Componente para reencuadrar el mapa automáticamente cuando hay puntos
+function MapBoundsFitter({ coords }: { coords: Array<{ lat: number; lng: number }> }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords.length > 0) {
+      const bounds = coords.map((c) => [c.lat, c.lng] as [number, number]);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    }
+  }, [coords, map]);
+  return null;
+}
+
+// Función auxiliar para obtener coordenadas a partir de un texto (Geocoding inverso)
+const forwardGeocode = async (query: string): Promise<{ lat: number; lng: number } | null> => {
+  if (!query || query.trim().length < 2) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+      query.trim()
+    )}&limit=1&accept-language=es`;
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.length > 0) {
+      return {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon)
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
 
 const diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -93,14 +131,10 @@ const OfrecerTrayecto: React.FC = () => {
       setLoadingVehiculos(true);
       try {
         const res = await fetch(buildApiUrl('/api/vehiculos/propios'), {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          headers: { Authorization: `Bearer ${token}` }
         });
 
-        if (!res.ok) {
-          throw new Error('No se pudieron cargar los vehículos');
-        }
+        if (!res.ok) throw new Error('No se pudieron cargar los vehículos');
 
         const data: Vehiculo[] = await res.json();
         setVehiculos(data);
@@ -127,6 +161,41 @@ const OfrecerTrayecto: React.FC = () => {
       return prev;
     });
   }, [vehiculoSeleccionado]);
+
+  // ESTRUCTURA DE GEOCODIFICACIÓN AUTOMÁTICA AL ESCRIBIR
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      // 1. Geocodificar Origen
+      if (origen.localizacion.trim() && (origen.lat === undefined || origen.lng === undefined)) {
+        const coords = await forwardGeocode(origen.localizacion);
+        if (coords) setOrigen((prev) => ({ ...prev, lat: coords.lat, lng: coords.lng }));
+      }
+
+      // 2. Geocodificar Destino
+      if (destino.localizacion.trim() && (destino.lat === undefined || destino.lng === undefined)) {
+        const coords = await forwardGeocode(destino.localizacion);
+        if (coords) setDestino((prev) => ({ ...prev, lat: coords.lat, lng: coords.lng }));
+      }
+
+      // 3. Geocodificar Intermedias
+      intermedias.forEach(async (p, idx) => {
+        if (p.localizacion.trim() && (p.lat === undefined || p.lng === undefined)) {
+          const coords = await forwardGeocode(p.localizacion);
+          if (coords) {
+            setIntermedias((prev) => {
+              const copy = [...prev];
+              if (copy[idx]) {
+                copy[idx] = { ...copy[idx], lat: coords.lat, lng: coords.lng };
+              }
+              return copy;
+            });
+          }
+        }
+      });
+    }, 700);
+
+    return () => clearTimeout(timer);
+  }, [origen.localizacion, origen.lat, destino.localizacion, destino.lat, intermedias]);
 
   const coordsParadas = useMemo(() => {
     const coords: Array<{ lat: number; lng: number }> = [];
@@ -182,20 +251,14 @@ const OfrecerTrayecto: React.FC = () => {
   const reverseGeocode = async (lat: number, lng: number): Promise<string> => {
     try {
       const url =
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2`
-        + `&lat=${encodeURIComponent(String(lat))}`
-        + `&lon=${encodeURIComponent(String(lng))}`
-        + `&accept-language=es`;
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2` +
+        `&lat=${encodeURIComponent(String(lat))}` +
+        `&lon=${encodeURIComponent(String(lng))}` +
+        `&accept-language=es`;
 
-      const res = await fetch(url, {
-        headers: {
-          Accept: 'application/json'
-        }
-      });
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
 
-      if (!res.ok) {
-        return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-      }
+      if (!res.ok) return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
       const data = await res.json();
       return data?.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
@@ -291,9 +354,7 @@ const OfrecerTrayecto: React.FC = () => {
         })
       });
 
-      if (!res.ok) {
-        throw new Error();
-      }
+      if (!res.ok) throw new Error();
 
       const data = await res.json();
 
@@ -449,12 +510,14 @@ const OfrecerTrayecto: React.FC = () => {
             <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_340px]">
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Trayecto inicial</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Origen</label>
                   <input
                     className="w-full rounded-md border border-slate-400 px-3 py-2"
                     value={origen.localizacion}
-                    onChange={(e) => setOrigen((prev) => ({ ...prev, localizacion: e.target.value, lat: undefined, lng: undefined }))}
-                    placeholder="Ciudad/dirección de salida"
+                    onChange={(e) =>
+                      setOrigen({ localizacion: e.target.value, lat: undefined, lng: undefined })
+                    }
+                    placeholder="Ciudad/dirección de salida (ej: Madrid)"
                   />
                 </div>
 
@@ -500,12 +563,14 @@ const OfrecerTrayecto: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Punto final</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Destino</label>
                   <input
                     className="w-full rounded-md border border-slate-400 px-3 py-2"
                     value={destino.localizacion}
-                    onChange={(e) => setDestino((prev) => ({ ...prev, localizacion: e.target.value, lat: undefined, lng: undefined }))}
-                    placeholder="Ciudad/dirección de llegada"
+                    onChange={(e) =>
+                      setDestino({ localizacion: e.target.value, lat: undefined, lng: undefined })
+                    }
+                    placeholder="Ciudad/dirección de llegada (ej: Barcelona)"
                   />
                 </div>
               </div>
@@ -513,33 +578,36 @@ const OfrecerTrayecto: React.FC = () => {
               <div className="rounded-xl border border-slate-400 bg-white p-2">
                 <div className="mb-2 rounded border border-slate-300 bg-slate-50 p-2">
                   <p className="text-xs font-semibold text-slate-700">
-                    Paso actual:
-                    {' '}
-                    {targetMapa === 'ORIGEN' ? 'Seleccionando ORIGEN' : targetMapa === 'DESTINO' ? 'Seleccionando DESTINO' : 'Añadiendo INTERMEDIA'}
+                    Paso actual:{' '}
+                    {targetMapa === 'ORIGEN'
+                      ? 'Seleccionando ORIGEN'
+                      : targetMapa === 'DESTINO'
+                      ? 'Seleccionando DESTINO'
+                      : 'Añadiendo INTERMEDIA'}
                   </p>
                   <p className="text-xs text-slate-600">
-                    Haz clic en el mapa para colocar el punto.
+                    Escribe una ciudad/dirección o haz clic directamente en el mapa.
                   </p>
 
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className={`rounded px-3 py-2 text-xs font-semibold transition cursor-pointer ${
-                        targetMapa === 'ORIGEN' 
-                          ? 'bg-green-600 text-white shadow-md' 
+                        targetMapa === 'ORIGEN'
+                          ? 'bg-green-600 text-white shadow-md'
                           : 'bg-green-100 text-green-700 hover:bg-green-200'
-                      }`} 
+                      }`}
                       onClick={() => setTargetMapa('ORIGEN')}
                     >
                       Editar origen
                     </button>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className={`rounded px-3 py-2 text-xs font-semibold transition cursor-pointer ${
-                        targetMapa === 'DESTINO' 
-                          ? 'bg-red-600 text-white shadow-md' 
+                        targetMapa === 'DESTINO'
+                          ? 'bg-red-600 text-white shadow-md'
                           : 'bg-red-100 text-red-700 hover:bg-red-200'
-                      }`} 
+                      }`}
                       onClick={() => setTargetMapa('DESTINO')}
                     >
                       Editar destino
@@ -547,8 +615,8 @@ const OfrecerTrayecto: React.FC = () => {
                     <button
                       type="button"
                       className={`rounded px-3 py-2 text-xs font-semibold transition cursor-pointer ${
-                        targetMapa === 'INTERMEDIA' 
-                          ? 'bg-blue-600 text-white shadow-md' 
+                        targetMapa === 'INTERMEDIA'
+                          ? 'bg-blue-600 text-white shadow-md'
                           : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                       }`}
                       onClick={() => {
@@ -563,7 +631,7 @@ const OfrecerTrayecto: React.FC = () => {
 
                 <MapContainer
                   center={[40.4168, -3.7038]}
-                  zoom={11}
+                  zoom={6}
                   style={{ height: 360, width: '100%' }}
                   scrollWheelZoom
                   whenReady={() => setMapError('')}
@@ -573,6 +641,7 @@ const OfrecerTrayecto: React.FC = () => {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <MapClickHandler onPick={onMapPick} />
+                  <MapBoundsFitter coords={coordsParadas} />
 
                   {origen.lat !== undefined && origen.lng !== undefined && (
                     <CircleMarker center={[origen.lat, origen.lng]} radius={8} pathOptions={{ color: '#16a34a' }}>
@@ -744,15 +813,16 @@ const OfrecerTrayecto: React.FC = () => {
                   placeholder="Elige precio"
                 />
                 {horquilla && precioElegido && (
-                  <p className={`text-xs mt-1 ${
-                    Number(precioElegido) < horquilla.min || Number(precioElegido) > horquilla.max
-                      ? 'text-red-600'
-                      : 'text-green-600'
-                  }`}>
+                  <p
+                    className={`text-xs mt-1 ${
+                      Number(precioElegido) < horquilla.min || Number(precioElegido) > horquilla.max
+                        ? 'text-red-600'
+                        : 'text-green-600'
+                    }`}
+                  >
                     {Number(precioElegido) < horquilla.min || Number(precioElegido) > horquilla.max
                       ? `❌ Fuera de rango. Rango válido: ${horquilla.min.toFixed(2)}€ - ${horquilla.max.toFixed(2)}€`
-                      : `✅ Precio válido (${horquilla.min.toFixed(2)}€ - ${horquilla.max.toFixed(2)}€)`
-                    }
+                      : `✅ Precio válido (${horquilla.min.toFixed(2)}€ - ${horquilla.max.toFixed(2)}€)`}
                   </p>
                 )}
               </div>
