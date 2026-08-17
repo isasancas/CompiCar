@@ -119,6 +119,21 @@ public class ViajeController {
         return ResponseEntity.ok(viajeRouterService.confirmarCheckin(usuarioEmail, slug, checkin));
     }
 
+    @GetMapping("/proximo")
+    public ResponseEntity<ViajeDTO> obtenerProximoViaje(Authentication authentication) {
+        // Extraemos el email del usuario autenticado mediante el JWT / Spring Security
+        String email = authentication.getName();
+        
+        ViajeDTO proximoViaje = viajeService.obtenerProximoViajeUsuario(email);
+
+        // Si el usuario no tiene ningún viaje futuro (ni como conductor ni como pasajero)
+        if (proximoViaje == null) {
+            return ResponseEntity.noContent().build(); // HTTP 204 No Content
+        }
+
+        return ResponseEntity.ok(proximoViaje); // HTTP 200 OK con el ViajeDTO
+    }
+
     // --- Auxiliar de Autenticación ---
 
     private String getUsuarioAutenticado() {

@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.compicar.persona.Persona;
+import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 
 @Repository
@@ -51,6 +52,32 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
 
     // 10. Comprobar si un pasajero ya tiene reserva activa en un viaje RECURRENTE concreto
     boolean existsByPersonaIdAndViajeRecurrenteIdAndEstadoNot(Long personaId, Long viajeRecurrenteId, EstadoReserva estado);
+
+    // 11. Próximo viaje simple como pasajero
+    @Query("SELECT r FROM Reserva r WHERE r.persona = :persona " +
+           "AND r.estado != :estadoReservaCancelado " +
+           "AND r.viaje.fechaHoraSalida >= :fechaHora " +
+           "AND r.viaje.estado != :estadoViajeCancelado " +
+           "ORDER BY r.viaje.fechaHoraSalida ASC LIMIT 1")
+    Optional<Reserva> findProximaReservaViaje(
+        @Param("persona") Persona persona,
+        @Param("fechaHora") LocalDateTime fechaHora,
+        @Param("estadoReservaCancelado") EstadoReserva estadoReservaCancelado,
+        @Param("estadoViajeCancelado") EstadoViaje estadoViajeCancelado
+    );
+
+    // 12. Próximo viaje recurrente como pasajero
+    @Query("SELECT r FROM Reserva r WHERE r.persona = :persona " +
+           "AND r.estado != :estadoReservaCancelado " +
+           "AND r.viajeRecurrente.fechaHoraSalida >= :fechaHora " +
+           "AND r.viajeRecurrente.estado != :estadoViajeCancelado " +
+           "ORDER BY r.viajeRecurrente.fechaHoraSalida ASC LIMIT 1")
+    Optional<Reserva> findProximaReservaViajeRecurrente(
+        @Param("persona") Persona persona,
+        @Param("fechaHora") LocalDateTime fechaHora,
+        @Param("estadoReservaCancelado") EstadoReserva estadoReservaCancelado,
+        @Param("estadoViajeCancelado") EstadoViaje estadoViajeCancelado
+    );
 
 }
 

@@ -5,10 +5,13 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -39,6 +42,9 @@ import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeBase.ViajeBase;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrenteService;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,6 +65,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final NotificacionRepository notificacionRepository;
     private final StripeService stripeService;
     private final ViajeRecurrenteService viajeRecurrenteService;
+    private final ViajeRecurrenteRepository viajeRecurrenteRepository;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
@@ -67,7 +74,7 @@ public class ViajeServiceImpl implements ViajeService {
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
             ReservaRepository reservaRepository, PagoRepository pagoRepository, 
             NotificacionRepository notificacionRepository, StripeService stripeService,
-            ViajeRecurrenteService viajeRecurrenteService) {
+            ViajeRecurrenteService viajeRecurrenteService, ViajeRecurrenteRepository viajeRecurrenteRepository) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -77,6 +84,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.notificacionRepository = notificacionRepository;
         this.stripeService = stripeService;
         this.viajeRecurrenteService = viajeRecurrenteService;
+        this.viajeRecurrenteRepository = viajeRecurrenteRepository;
     }
 
     public boolean tieneReservasActivas(Viaje viaje) {
@@ -549,6 +557,112 @@ public class ViajeServiceImpl implements ViajeService {
         viajeRepository.save(viaje);
 
         return convertirADTO(viaje);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ViajeDTO obtenerProximoViajeUsuario(String email) {
+        Persona usuario = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        LocalDateTime ahora = LocalDateTime.now();
+
+        // 1. Conductor en Viaje simple/padre
+        Viaje vConductor = viajeRepository
+            .findProximoViajeConductor(usuario, ahora, EstadoViaje.CANCELADO)
+            .orElse(null);
+
+        // 2. Conductor en ViajeRecurrente
+        ViajeRecurrente vrConductor = viajeRecurrenteRepository
+            .findProximoViajeRecurrenteConductor(usuario, ahora, EstadoViaje.CANCELADO)
+            .orElse(null);
+
+        // 3. Pasajero en Viaje simple (Se incluyen reservas CONFIRMADA, PAGADA, etc.)
+        Reserva rPasajeroViaje = reservaRepository
+            .findProximaReservaViaje(usuario, ahora, EstadoReserva.CANCELADA, EstadoViaje.CANCELADO)
+            .orElse(null);
+        Viaje vPasajero = (rPasajeroViaje != null) ? rPasajeroViaje.getViaje() : null;
+
+        // 4. Pasajero en ViajeRecurrente
+        Reserva rPasajeroRecurrente = reservaRepository
+            .findProximaReservaViajeRecurrente(usuario, ahora, EstadoReserva.CANCELADA, EstadoViaje.CANCELADO)
+            .orElse(null);
+        ViajeRecurrente vrPasajero = (rPasajeroRecurrente != null) ? rPasajeroRecurrente.getViajeRecurrente() : null;
+
+        // Seleccionar el viaje que sale más pronto entre los 4 candidatos
+        ViajeBase proximoViaje = Stream.of(vConductor, vrConductor, vPasajero, vrPasajero)
+            .filter(Objects::nonNull)
+            .min(Comparator.comparing(ViajeBase::getFechaHoraSalida))
+            .orElse(null);
+
+        if (proximoViaje == null) {
+            return null;
+        }
+
+        if (proximoViaje instanceof Viaje viaje) {
+            return convertirADTO(viaje); 
+        } else if (proximoViaje instanceof ViajeRecurrente vr) {
+            return convertirRecurrenteADTO(vr);
+        }
+
+        return null;
+    }
+
+    // Helper análogo a convertirADTO para mapear las instancias de ViajeRecurrente
+    private ViajeDTO convertirRecurrenteADTO(ViajeRecurrente vr) {
+        VehiculoDTO vehiculoDTO = vr.getVehiculo() != null ? new VehiculoDTO(
+            vr.getVehiculo().getId(),
+            vr.getVehiculo().getMarca(),
+            vr.getVehiculo().getModelo(),
+            vr.getVehiculo().getMatricula()
+        ) : null;
+
+        List<ParadaDTO> paradasDTO = vr.getParadas() != null ? vr.getParadas().stream()
+            .map(parada -> new ParadaDTO(
+                parada.getId(),
+                parada.getLocalizacion(),
+                parada.getTipo() != null ? parada.getTipo().toString() : null,
+                parada.getOrden()
+            ))
+            .toList() : List.of();
+
+        List<ReservaDTO> reservasDTO = vr.getReservas() != null 
+            ? vr.getReservas().stream()
+                .filter(r -> r.getEstado() != EstadoReserva.CANCELADA)
+                .map(r -> new ReservaDTO(
+                    r.getId(),
+                    r.getEstado().toString(),
+                    r.getFechaHoraReserva(),
+                    r.getViajeRecurrente() != null ? r.getViajeRecurrente().getId() : null,
+                    r.getPersona().getId(),
+                    r.getPersona().getNombre(),
+                    r.getPersona().getSlug(),
+                    r.getParadaSubida() != null ? r.getParadaSubida().getId() : null,
+                    r.getParadaBajada() != null ? r.getParadaBajada().getId() : null,
+                    r.getCantidadPlazas()
+                )).toList()
+            : List.of();
+
+        LocalDateTime fechaFinRecurrencia = vr.getViajePadre() != null ? vr.getViajePadre().getFechaFinRecurrencia() : null;
+        List<String> diasSemana = vr.getViajePadre() != null ? vr.getViajePadre().getDiasSemana() : List.of();
+
+        return new ViajeDTO(
+            vr.getId(),
+            vr.getFechaHoraSalida(),
+            vr.getEstado() != null ? vr.getEstado().toString() : null,
+            vr.getPlazasDisponibles(),
+            vr.getPrecio(),
+            vehiculoDTO,
+            paradasDTO,
+            vr.getSlug(),
+            vr.getPersona() != null ? vr.getPersona().getId() : null,
+            vr.getPersona() != null ? vr.getPersona().getNombre() : null,
+            vr.getPersona() != null ? vr.getPersona().getSlug() : null,
+            reservasDTO,
+            fechaFinRecurrencia,
+            diasSemana,
+            List.of()
+        );
     }
 
     private String generarCheckin() {
