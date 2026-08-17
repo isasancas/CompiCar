@@ -1153,7 +1153,11 @@ const DetalleViaje: React.FC = () => {
           <div className="space-y-3">
             {navState.rol !== 'conductor' && (
               <>
-                {(!miReserva || miReserva.estado === 'CANCELADA') ? (
+                {viaje.estado === 'FINALIZADO' ? (
+                  <div className="text-center p-4 bg-slate-100 rounded-xl text-slate-600 text-sm italic border border-slate-200">
+                    Este viaje ha finalizado. No hay acciones disponibles.
+                  </div>
+                ) : (!miReserva || miReserva.estado === 'CANCELADA') ? (
                   <button
                     type="button"
                     className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
@@ -1161,7 +1165,6 @@ const DetalleViaje: React.FC = () => {
                       !viaje.fechaFinRecurrencia && (
                         viaje.plazasDisponibles <= 0 ||
                         viaje.estado === 'CANCELADO' ||
-                        viaje.estado === 'FINALIZADO' ||
                         viaje.estado === 'INICIADO' ||
                         viaje.estado === 'EN_CURSO' ||
                         yaEsHoraDeSalida

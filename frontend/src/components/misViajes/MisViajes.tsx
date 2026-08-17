@@ -133,15 +133,36 @@ const MisViajes: React.FC = () => {
     }
   };
 
+  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
+    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
+    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
+    return Boolean(tieneDias || tieneInstancias);
+  };
+
+  // 🛠️ FILTRADO CORREGIDO PARA VIAJES RECURRENTES
   const viajesFiltrados = todosLosViajes.filter(v => {
     const estado = v.estado?.toUpperCase();
-    const esFinalizadoOCancelado = estado === 'FINALIZADO' || estado === 'CANCELADO';
+    const esCancelado = estado === 'CANCELADO';
+    
+    // Verificamos si es un viaje recurrente y si su fecha de fin aún es posterior al momento actual
+    const esRecurrente = esViajeRecurrentePadre(v);
+    const tieneRecurrenciaVigente = esRecurrente && v.fechaFinRecurrencia 
+      ? new Date(v.fechaFinRecurrencia).getTime() > new Date().getTime() 
+      : false;
+
+    // Un viaje se considera realmente finalizado si su estado es cancelado o 
+    // (siendo recurrente, ya pasó su fecha fin) o (siendo normal, está finalizado).
+    const esEfectivamenteFinalizado = esCancelado || (esRecurrente ? !tieneRecurrenciaVigente && estado === 'FINALIZADO' : estado === 'FINALIZADO');
 
     if (filtroEstado === 'FINALIZADO') {
-      return esFinalizadoOCancelado;
+      return esEfectivamenteFinalizado;
     }
-    // Para 'PENDIENTE' incluye PENDIENTE, INICIADO, EN_CURSO
-    return !esFinalizadoOCancelado;
+
+    // Para la pestaña 'PENDIENTE (Activos)': 
+    // Mostramos el viaje si NO está cancelado y (está pendiente/en curso o tiene una recurrencia vigente aunque el padre marque finalizado)
+    if (esCancelado) return false;
+    
+    return estado !== 'FINALIZADO' || tieneRecurrenciaVigente;
   });
 
   if (loading) {
@@ -164,13 +185,6 @@ const MisViajes: React.FC = () => {
       </div>
     );
   }
-
-  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
-    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
-    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
-    
-    return Boolean(tieneDias || tieneInstancias);
-  };
 
   return (
     <div className="min-h-screen bg-gray-200 pb-10 pt-6">
@@ -219,7 +233,7 @@ const MisViajes: React.FC = () => {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {viajesFiltrados.map((viaje) => {
                   const { origen, destino, paradasIntermedias } = getOrigenDestino(viaje.paradas);
-                  const esRecurrente = esViajeRecurrentePadre(viaje); // <--- 1. Evaluamos si es recurrente
+                  const esRecurrente = esViajeRecurrentePadre(viaje);
 
                   return (
                     <div key={`${viaje.id}-${viaje.rol}`} className="rounded-2xl border border-slate-300 bg-gray-50 p-4 shadow-sm flex flex-col justify-between">
@@ -229,7 +243,6 @@ const MisViajes: React.FC = () => {
                             {viaje.vehiculo.marca} {viaje.vehiculo.modelo}
                           </h3>
                           <div className="flex flex-col items-end space-y-1">
-                            {/* <--- 2. Badge opcional para indicar que es recurrente */}
                             {esRecurrente && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                 🔄 Recurrente
@@ -266,7 +279,6 @@ const MisViajes: React.FC = () => {
                           </div>
                         )}
 
-                        {/* <--- 3. Renderizado condicional: Si es recurrente mostramos días y acordeón de instancias */}
                         {esRecurrente ? (
                           <div className="my-2 p-2 bg-amber-50/50 rounded-lg border border-amber-200 text-sm text-slate-700">
                             <p className="mb-1">
@@ -278,7 +290,6 @@ const MisViajes: React.FC = () => {
                               </p>
                             )}
 
-                            {/* Acordeón para las instancias futuras */}
                             {viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0 && (
                               <details className="mt-2 text-xs text-slate-600 group">
                                 <summary className="cursor-pointer font-medium text-amber-900 hover:underline">
