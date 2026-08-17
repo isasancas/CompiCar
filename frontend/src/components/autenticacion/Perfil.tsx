@@ -61,7 +61,6 @@ const Perfil: React.FC = () => {
   const [vehiculosError, setVehiculosError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Estados para retirada de fondos
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [withdrawSuccess, setWithdrawSuccess] = useState<string | null>(null);
@@ -328,11 +327,10 @@ const Perfil: React.FC = () => {
 
       // SI LA RETIRADA FUE EXITOSA:
       if (data.status === 'SUCCESS') {
-        // Actualizamos los fondos disponibles en el estado local del perfil a 0
         setPerfil((prevPerfil) => 
           prevPerfil ? { ...prevPerfil, fondosActuales: 0 } : null
         );
-        setWithdrawSuccess('¡Retiro completado con éxito!');
+        setWithdrawSuccess('¡Retiro completado con éxito! El dinero llegará a su cuenta bancaria en un plazo de 1 a 3 días hábiles');
         setTimeout(() => {
           setWithdrawSuccess(null);
         }, 4000);
