@@ -129,7 +129,7 @@ const DetalleViaje: React.FC = () => {
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
-  const usuarioActual = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const usuarioActual = JSON.parse(localStorage.getItem('perfil') || '{}');
   const usuarioIdActual = usuarioActual.id;
 
   // Esta es la lógica maestra: compara el ID del usuario con el ID del conductor del viaje
@@ -1096,6 +1096,8 @@ const DetalleViaje: React.FC = () => {
                         state: {
                           rol: navState.rol,
                           viajesRecurrentes: viaje.viajesRecurrentes,
+                          usuarioActual: usuarioActual,       // <-- Añadido aquí
+                          usuarioId: usuarioIdActual,
                           slugPadre: viaje.slug,
                           esRecurrente: true,
                           viajePadre: {
@@ -1106,7 +1108,8 @@ const DetalleViaje: React.FC = () => {
                             precio: viaje.precio,
                             diasSemana: viaje.diasSemana,
                             fechaFinRecurrencia: viaje.fechaFinRecurrencia,
-                            paradas: viaje.paradas
+                            paradas: viaje.paradas,
+                            reservas: viaje.reservas
                           }
                         }
                       })}
@@ -1169,6 +1172,7 @@ const DetalleViaje: React.FC = () => {
                         navigate(`/viajes/${viaje.slug}/asociados`, {
                           state: {
                           rol: navState.rol,
+                          usuarioId: usuarioActual?.id,
                           viajesRecurrentes: viaje.viajesRecurrentes,
                           slugPadre: viaje.slug,
                           esRecurrente: true,

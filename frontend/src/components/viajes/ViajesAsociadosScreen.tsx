@@ -5,6 +5,20 @@ import { Elements } from '@stripe/react-stripe-js';
 import CheckoutForm from '../pagos/CheckoutForm';
 import { buildApiUrl } from '../../apiConfig';
 
+interface PerfilData {
+  id?: number;
+  nombre: string;
+  primerApellido: string;
+  segundoApellido?: string;
+  email: string;
+  telefono: string;
+  reputacion?: number;
+  preferenciasViaje?: string[];
+  fondosActuales?: number | string;
+  fondosTotales?: number | string;
+  numeroCancelaciones?: number;
+}
+
 interface ViajeInstancia {
   id: number;
   slug: string;
@@ -13,8 +27,8 @@ interface ViajeInstancia {
   plazasDisponibles: number;
   precio: number;
   paradas?: { id: number; localizacion: string; tipo: string; orden: number }[];
-  reserva?: Reserva; // Puede ser null o un objeto con detalles de la reserva
-  reservas?: Reserva[]; // Añadido para consistencia con el backend
+  reserva?: Reserva | null;
+  reservas?: Reserva[] | null;
 }
 
 interface ViajePadreInfo {
@@ -27,8 +41,7 @@ interface ViajePadreInfo {
   fechaFinRecurrencia?: string;
   viajesRecurrentes?: ViajeInstancia[];
   paradas?: { id: number; localizacion: string; tipo: string; orden: number }[];
-  reservas?: Reserva[]; // Puede ser null o un objeto con detalles de la reserva
-   // Añadido para consistencia
+  reservas?: Reserva[] | Reserva | null;
 }
 
 interface DetalleReservaConfig {
@@ -60,6 +73,8 @@ const ViajesAsociadosScreen: React.FC = () => {
     slugPadre?: string;
     rol?: string;
     reserva?: Reserva;
+    usuarioId?: number;
+    usuarioActual?: PerfilData;
   };
 
   const viajes = state.viajesRecurrentes || [];
@@ -108,6 +123,83 @@ const ViajesAsociadosScreen: React.FC = () => {
     return { subida: origen, bajada: destino };
   };
 
+// 🛠️ Búsqueda robusta priorizando state.usuarioId / state.usuarioActual, con fallback a localStorage o JWT
+  const obtenerUsuarioId = (): number | null => {
+    if (state.usuarioId && !isNaN(Number(state.usuarioId))) {
+      return Number(state.usuarioId);
+    }
+    if (state.usuarioActual?.id && !isNaN(Number(state.usuarioActual.id))) {
+      return Number(state.usuarioActual.id);
+    }
+
+    const possibleKeys = ['userId', 'id', 'user_id', 'usuarioId', 'personaId'];
+    for (const key of possibleKeys) {
+      const val = localStorage.getItem(key);
+      if (val && !isNaN(Number(val))) {
+        return Number(val);
+      }
+    }
+
+    try {
+      const tokenStr = localStorage.getItem('token');
+      if (tokenStr) {
+        const base64Url = tokenStr.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const payload = JSON.parse(jsonPayload);
+        const tokenUserId = payload.userId || payload.id || payload.sub || payload.personaId || payload.usuarioId;
+        if (tokenUserId && !isNaN(Number(tokenUserId))) {
+          return Number(tokenUserId);
+        }
+      }
+    } catch (e) {
+      // Ignorar error de decodificación
+    }
+
+    return null;
+  };
+
+  const usuarioIdActual = obtenerUsuarioId();
+
+  const esSeleccionableParaCliente = (reservasData?: Reserva[] | Reserva | null): boolean => {
+    if (esConductor) return false;
+    if (!reservasData) return true; 
+
+    const lista = Array.isArray(reservasData) ? reservasData : [reservasData];
+    if (lista.length === 0) return true;
+
+    // Si por cualquier motivo el ID de usuario es nulo, evitamos bloquear visualmente de forma incorrecta
+    if (!usuarioIdActual) {
+      console.warn('⚠️ No se pudo determinar el ID del usuario actual. Comprueba el state o el token.');
+      return true; 
+    }
+
+    // Comprobamos si alguna de las reservas activas pertenece al usuario actual
+    const tieneReservaDelUsuarioActiva = lista.some(r => {
+      if (!r) return false;
+      const esDelUsuario = Number(r.personaId) === Number(usuarioIdActual);
+      const estadoActiva = r.estado ? r.estado.trim().toUpperCase() !== 'CANCELADA' : true;
+      return esDelUsuario && estadoActiva;
+    });
+
+    // Si tiene una reserva activa propia, NO es seleccionable para reservar (mostrará gestionar)
+    return !tieneReservaDelUsuarioActiva;
+  };
+
+  const padreSeleccionable = padre ? esSeleccionableParaCliente(padre.reservas) : false;
+  const padreTieneReservaActiva = padre && padre.reservas ? !esSeleccionableParaCliente(padre.reservas) : false;
+
+  const viajesSeleccionables = viajes.filter(v => esSeleccionableParaCliente(v.reservas || v.reserva));
+
+  const totalElementosSeleccionables = viajesSeleccionables.length + (padreSeleccionable ? 1 : 0);
+  const isAllSelected = totalElementosSeleccionables > 0 && selectedIds.length === totalElementosSeleccionables;
+  const isSomeSelected = selectedIds.length > 0 && !isAllSelected;
+
   const handleToggleInstancia = (instancia: ViajeInstancia) => {
     if (selectedIds.includes(instancia.id)) {
       setSelectedIds(selectedIds.filter((item) => item !== instancia.id));
@@ -143,21 +235,6 @@ const ViajesAsociadosScreen: React.FC = () => {
       }));
     }
   };
-
-  // 🔍 Evaluación ultra robusta para detectar si el padre ya tiene reserva de cualquier forma posible
-  // 🔍 Evaluación ultra robusta para detectar si el padre ya tiene reserva de cualquier forma posible
-  const padreTieneReserva = Boolean(padre?.reservas);
-
-  // 🛠️ Cambia el console.log para que refleje exactamente el formato que solicitas:
-  console.log(`padreTieneReserva: ${padreTieneReserva} padre.reservas: ${padre?.reservas}`);
-  console.log(padre)
-  // 🔍 Evaluación coherente para las instancias hijas
-  const viajesSeleccionables = viajes.filter(v => !esConductor && !v.reserva && !v.reservas); 
-  const padreSeleccionable = padre && !esConductor && !padreTieneReserva;
-
-  const totalElementosSeleccionables = viajesSeleccionables.length + (padreSeleccionable ? 1 : 0);
-  const isAllSelected = totalElementosSeleccionables > 0 && selectedIds.length === totalElementosSeleccionables;
-  const isSomeSelected = selectedIds.length > 0 && !isAllSelected;
 
   const handleToggleTodo = () => {
     if (isAllSelected) {
@@ -202,15 +279,11 @@ const ViajesAsociadosScreen: React.FC = () => {
 
     setReservando(true);
     try {
-      // 1. Identificar si el viaje padre está seleccionado y tiene fechaFinRecurrencia
       const incluyePadre = selectedIds.includes('padre') && padre && padre.fechaFinRecurrencia;
-      
-      // 2. Identificar las instancias hijas seleccionadas (IDs numéricos)
       const instanciasSeleccionadasIds = selectedIds.filter(id => id !== 'padre').map(Number);
 
       let clientSecretFinal = null;
 
-      // CASO A: Si se ha seleccionado el viaje padre, llamamos al endpoint individual POST /api/reservas/crear
       if (incluyePadre && padre) {
         const configPadre = configReservas['padre'] || { plazas: 1, paradaSubidaId: null, paradaBajadaId: null };
         
@@ -241,9 +314,7 @@ const ViajesAsociadosScreen: React.FC = () => {
         }
       }
 
-      // CASO B: Si hay instancias hijas seleccionadas, llamamos al endpoint POST /api/reservas/crear-recurrentes
       if (instanciasSeleccionadasIds.length > 0) {
-        // Tomamos la configuración del primer elemento hijo como referencia global o ajustamos según prefieras
         const primerIdHijo = instanciasSeleccionadasIds[0];
         const configHijo = configReservas[primerIdHijo] || { plazas: 1, paradaSubidaId: null, paradaBajadaId: null };
 
@@ -331,7 +402,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                       Ver detalles
                     </button>
                   </div>
-                ) : padre.reservas != null ? (
+                ) : padreTieneReservaActiva ? (
                   <button
                     type="button"
                     onClick={() => navigate(`/viajes/${padre.slug}`, { state: { rol: state.rol } })}
@@ -341,15 +412,17 @@ const ViajesAsociadosScreen: React.FC = () => {
                   </button>
                 ) : (
                   <>
-                    <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition">
-                      <input
-                        type="checkbox"
-                        checked={isPadreSelected}
-                        onChange={handleTogglePadreUnico}
-                        className="w-4 h-4 text-slate-900 rounded border-slate-300 focus:ring-slate-900"
-                      />
-                      <span>Seleccionar viaje padre</span>
-                    </label>
+                    {padreSeleccionable && (
+                      <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition">
+                        <input
+                          type="checkbox"
+                          checked={isPadreSelected}
+                          onChange={handleTogglePadreUnico}
+                          className="w-4 h-4 text-slate-900 rounded border-slate-300 focus:ring-slate-900"
+                        />
+                        <span>Seleccionar viaje padre</span>
+                      </label>
+                    )}
                     {totalElementosSeleccionables > 0 && (
                       <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition">
                         <input
@@ -396,8 +469,12 @@ const ViajesAsociadosScreen: React.FC = () => {
           <div className="space-y-4">
             {viajes.map((instancia) => {
               const isSelected = selectedIds.includes(instancia.id);
-              // 🔍 Verificación unificada para la instancia hija
-              const tieneReservaBool = Boolean(instancia.reserva || instancia.reservas);
+              const reservasInstancia = instancia.reservas || instancia.reserva;
+              const esHijaSeleccionable = esSeleccionableParaCliente(reservasInstancia);
+              
+              const tieneReservaActiva = reservasInstancia 
+                ? !esSeleccionableParaCliente(reservasInstancia)
+                : false;
 
               return (
                 <div
@@ -407,8 +484,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-start gap-3.5">
-                    {/* Solo mostramos checkbox si NO es conductor y la hija NO tiene reserva */}
-                    {!esConductor && !tieneReservaBool && (
+                    {esHijaSeleccionable && (
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -428,7 +504,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200">
                           Plazas libres: <strong className="text-slate-900">{instancia.plazasDisponibles}</strong>
                         </span>
-                        {tieneReservaBool && (
+                        {tieneReservaActiva && (
                           <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
                             Reservado por ti
                           </span>
@@ -443,7 +519,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                       <span className="text-lg font-bold text-slate-900">{instancia.precio}€</span>
                     </div>
 
-                    {(esConductor || tieneReservaBool) && (
+                    {(esConductor || tieneReservaActiva) && (
                       <button
                         type="button"
                         onClick={() => navigate(`/viajes/${instancia.slug}`, { state: { rol: state.rol } })}
