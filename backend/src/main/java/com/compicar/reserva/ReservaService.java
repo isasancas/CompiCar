@@ -6,6 +6,8 @@ import com.compicar.persona.Persona;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
+import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
+import com.stripe.exception.StripeException;
 
 public interface ReservaService {
     
@@ -21,5 +23,15 @@ public interface ReservaService {
     Reserva reservaNoPresentado(Long reservaId);
     Reserva marcarNoPresentadoPorConductor(String usuarioEmail, Long reservaId);
     List<Reserva> obtenerReservasComoConductor(String conductorEmail);
+    ReservaCreadaResponse crearReservasRecurrentes(
+        String usuarioEmail, 
+        List<Long> viajeRecurrenteIds, 
+        Integer plazas, 
+        Long paradaSubidaId, 
+        Long paradaBajadaId
+    );
+
+    List<ViajeRecurrenteDTO> obtenerRecurrentesPorViajePadre(Long viajePadreId);
+    void cancelarOcurrenciaPorConductor(Long viajeRecurrenteId, String conductorEmail) throws StripeException;
 
 }

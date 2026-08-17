@@ -6,14 +6,18 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.compicar.viaje.ViajeService;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
 
 @Component
 public class ProgramadorCancelacionViajes {
 
     private final ViajeService viajeService;
+    private final ViajeRecurrenteService viajeRecurrenteService;
 
-    public ProgramadorCancelacionViajes(ViajeService viajeService) {
+    public ProgramadorCancelacionViajes(ViajeService viajeService, 
+                                        ViajeRecurrenteService viajeRecurrenteService) {
         this.viajeService = viajeService;
+        this.viajeRecurrenteService = viajeRecurrenteService;
     }
 
     /**
@@ -22,7 +26,7 @@ public class ProgramadorCancelacionViajes {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void cancelarAlDespertar() {
-        System.out.println("[KOYEB] Servidor despierto/iniciado. Ejecutando limpieza inicial de viajes expirados...");
+        System.out.println("[KOYEB] Servidor despierto/iniciado. Ejecutando limpieza inicial de viajes expirados (normales y recurrentes)...");
         cancelarViajesExpirados();
     }
 
@@ -31,6 +35,11 @@ public class ProgramadorCancelacionViajes {
      */
     @Scheduled(fixedRate = 600000)
     public void cancelarViajesExpirados() {
-        viajeService.cancelarViajesPendientesExpirados();
+        try {
+            viajeService.cancelarViajesPendientesExpirados();
+            viajeRecurrenteService.cancelarViajesRecurrentesPendientesExpirados();
+        } catch (Exception e) {
+            System.err.println("Error durante la limpieza programada de viajes expirados: " + e.getMessage());
+        }
     }
 }

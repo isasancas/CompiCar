@@ -25,4 +25,7 @@ public interface PagoService {
     
     // 4. Procesar notificaciones automáticas de Stripe (Webhooks)
     void procesarEventoWebhook(String payload, String sigHeader);
+
+    // 5. Liberar el dinero del conductor de forma progresiva según el avance del viaje
+    void liberarPagoProgresivoPorViaje(Long viajeId) throws StripeException;
 }

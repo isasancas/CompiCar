@@ -40,5 +40,17 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     // 6. Comprueba si existe una reserva activa (no cancelada) de un pasajero en un viaje
     boolean existsByPersonaIdAndViajeIdAndEstadoNot(Long personaId, Long viajeId, EstadoReserva estado);
 
+    // 7. Buscar todas las reservas activas vinculadas a un ViajeRecurrente específico
+    List<Reserva> findByViajeRecurrenteIdAndEstadoNot(Long viajeRecurrenteId, EstadoReserva estado);
+
+    // 8. Buscar todas las reservas asociadas a un pago específico
+    List<Reserva> findByPagoId(Long pagoId);
+
+    // 9. Buscar reservas de un pago excluyendo un estado (ej. ignorar las CANCELADAS)
+    List<Reserva> findByPagoIdAndEstadoNot(Long pagoId, EstadoReserva estado);
+
+    // 10. Comprobar si un pasajero ya tiene reserva activa en un viaje RECURRENTE concreto
+    boolean existsByPersonaIdAndViajeRecurrenteIdAndEstadoNot(Long personaId, Long viajeRecurrenteId, EstadoReserva estado);
+
 }
 
