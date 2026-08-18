@@ -49,6 +49,9 @@ public interface ViajeRecurrenteRepository extends JpaRepository<ViajeRecurrente
     @Query("SELECT DISTINCT r.viajeRecurrente FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL")
     List<ViajeRecurrente> findViajesRecurrentesParticipadosByPersonaId(@Param("personaId") Long personaId);
     
-   @Query("SELECT DISTINCT r.viajeRecurrente.viajePadre FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL AND r.estado != 'CANCELADA'")
+    @Query("SELECT DISTINCT r.viajeRecurrente.viajePadre FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL AND r.estado != 'CANCELADA'")
     List<Viaje> findViajesPadreParticipadosByPersonaId(@Param("personaId") Long personaId);
+
+    @Query("SELECT v FROM ViajeRecurrente v WHERE v.viajePadre = :viajePadre")
+    List<ViajeRecurrente> findByViaje(Viaje viajePadre);
 }

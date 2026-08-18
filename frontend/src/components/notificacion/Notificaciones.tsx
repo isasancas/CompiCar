@@ -92,8 +92,11 @@ const Notificaciones: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {reservas.map((reserva) => {
-                    // Ajusta según cómo te devuelva el backend la fecha del viaje (ej: reserva.viaje?.fechaHoraSalida o reserva.fechaHoraSalida)
-                    const fechaViaje = reserva.viaje?.fechaHoraSalida || reserva.fechaHoraSalida;
+                    // Comprobamos todas las posibles rutas donde el backend podría enviar la fecha del viaje
+                    const fechaViaje = 
+                      reserva.viaje?.fechaHoraSalida || 
+                      reserva.viajeRecurrente?.fechaHoraSalida || 
+                      reserva.fechaHoraSalida;
 
                     return (
                       <div key={reserva.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
@@ -105,7 +108,7 @@ const Notificaciones: React.FC = () => {
                             </div>
                             <p className="text-sm text-slate-600 italic">Reserva para {reserva.cantidadPlazas} plazas</p>
                             
-                            {/* Fecha del viaje correspondiente */}
+                            {/* Fecha del viaje correspondiente (ya sea normal o recurrente) */}
                             {fechaViaje && (
                               <p className="text-xs font-semibold text-green-700 mt-1.5 flex items-center gap-1">
                                 📅 Fecha del viaje: {formatFecha(fechaViaje)}

@@ -94,6 +94,12 @@ public class ViajeController {
         return ResponseEntity.ok(viajeRouterService.cancelarViaje(usuarioEmail, slug));
     }
 
+    @PutMapping("/{slug}/cancelar-conjunto")
+    public ResponseEntity<Object> cancelarViajeConjunto(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeService.cancelarViajeConjunto(usuarioEmail, slug));
+    }
+
     @PutMapping("/{slug}")
     public ResponseEntity<Object> actualizarViaje(
             @PathVariable String slug, 

@@ -24,4 +24,5 @@ public interface ViajeService {
     ViajeDTO confirmarCheckin(String usuarioEmail, String slug, String checkin);
     ViajeDTO ponerEnCursoAutomatico(String usuarioEmail, String slug);
     ViajeDTO cancelarViajeIncompareceConductor(String usuarioEmail, String slug);
+    ViajeDTO cancelarViajeConjunto(String usuarioEmail, String slug);
 }
