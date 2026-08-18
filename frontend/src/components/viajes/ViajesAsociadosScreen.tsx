@@ -37,6 +37,7 @@ interface ViajePadreInfo {
   origen?: string;
   destino?: string;
   precio: number;
+  estado: string;
   diasSemana?: string[];
   fechaFinRecurrencia?: string;
   viajesRecurrentes?: ViajeInstancia[];
@@ -166,20 +167,27 @@ const ViajesAsociadosScreen: React.FC = () => {
 
   const usuarioIdActual = obtenerUsuarioId();
 
-  const esSeleccionableParaCliente = (reservasData?: Reserva[] | Reserva | null): boolean => {
+  const esSeleccionableParaCliente = (
+    reservasData?: Reserva[] | Reserva | null,
+    estadoViaje?: string // <-- Añadimos el estado del viaje opcionalmente
+  ): boolean => {
     if (esConductor) return false;
+    
+    // 🚫 Si el viaje está cancelado, bloqueamos la selección inmediatamente
+    if (estadoViaje && estadoViaje.trim().toUpperCase() === 'CANCELADO') {
+      return false;
+    }
+
     if (!reservasData) return true; 
 
     const lista = Array.isArray(reservasData) ? reservasData : [reservasData];
     if (lista.length === 0) return true;
 
-    // Si por cualquier motivo el ID de usuario es nulo, evitamos bloquear visualmente de forma incorrecta
     if (!usuarioIdActual) {
       console.warn('⚠️ No se pudo determinar el ID del usuario actual. Comprueba el state o el token.');
       return true; 
     }
 
-    // Comprobamos si alguna de las reservas activas pertenece al usuario actual
     const tieneReservaDelUsuarioActiva = lista.some(r => {
       if (!r) return false;
       const esDelUsuario = Number(r.personaId) === Number(usuarioIdActual);
@@ -187,14 +195,13 @@ const ViajesAsociadosScreen: React.FC = () => {
       return esDelUsuario && estadoActiva;
     });
 
-    // Si tiene una reserva activa propia, NO es seleccionable para reservar (mostrará gestionar)
     return !tieneReservaDelUsuarioActiva;
   };
 
-  const padreSeleccionable = padre ? esSeleccionableParaCliente(padre.reservas) : false;
-  const padreTieneReservaActiva = padre && padre.reservas ? !esSeleccionableParaCliente(padre.reservas) : false;
-
-  const viajesSeleccionables = viajes.filter(v => esSeleccionableParaCliente(v.reservas || v.reserva));
+  const padreSeleccionable = padre ? esSeleccionableParaCliente(padre.reservas, padre.estado) : false;
+  const padreTieneReservaActiva = padre && padre.reservas ? !esSeleccionableParaCliente(padre.reservas, padre.estado) : false;
+  
+  const viajesSeleccionables = viajes.filter(v => esSeleccionableParaCliente(v.reservas || v.reserva, v.estado));
 
   const totalElementosSeleccionables = viajesSeleccionables.length + (padreSeleccionable ? 1 : 0);
   const isAllSelected = totalElementosSeleccionables > 0 && selectedIds.length === totalElementosSeleccionables;
@@ -470,8 +477,8 @@ const ViajesAsociadosScreen: React.FC = () => {
             {viajes.map((instancia) => {
               const isSelected = selectedIds.includes(instancia.id);
               const reservasInstancia = instancia.reservas || instancia.reserva;
-              const esHijaSeleccionable = esSeleccionableParaCliente(reservasInstancia);
-              
+              const esHijaSeleccionable = esSeleccionableParaCliente(reservasInstancia, instancia.estado);
+
               const tieneReservaActiva = reservasInstancia 
                 ? !esSeleccionableParaCliente(reservasInstancia)
                 : false;

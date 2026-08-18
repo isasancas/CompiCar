@@ -1196,141 +1196,136 @@ const DetalleViaje: React.FC = () => {
             </div>
 
           {/* SECCIÓN DE BOTONES DINÁMICOS */}
-<div className="space-y-3">
-  {navState.rol !== 'conductor' && (
-    <>
-      {viaje.estado === 'FINALIZADO' ? (
-        <div className="text-center p-4 bg-slate-100 rounded-xl text-slate-600 text-sm italic border border-slate-200">
-          Este viaje ha finalizado. No hay acciones disponibles.
-        </div>
-      ) : (!miReserva || miReserva.estado === 'CANCELADA') ? (
-        <button
-          type="button"
-          className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
-          disabled={
-            !viaje.fechaFinRecurrencia && (
-              viaje.plazasDisponibles <= 0 ||
-              viaje.estado === 'CANCELADO' ||
-              viaje.estado === 'INICIADO' ||
-              viaje.estado === 'EN_CURSO' ||
-              yaEsHoraDeSalida
-            )
-          }
-          onClick={() => {
-            // NUEVA CONDICIÓN: Si es un viaje recurrente PERO el usuario ya ha reservado 
-            // el padre o queremos manejar su flujo de otra forma, o mantenemos la redirección de recurrencia:
-            if (viaje.fechaFinRecurrencia) {
-              navigate(`/viajes/${viaje.slug}/asociados`, {
-                state: {
-                  rol: navState.rol,
-                  usuarioId: usuarioActual?.id,
-                  viajesRecurrentes: viaje.viajesRecurrentes,
-                  slugPadre: viaje.slug,
-                  esRecurrente: true,
-                  viajePadre: {
-                    id: viaje.id,
-                    slug: viaje.slug,
-                    origen: viaje.paradas.find(p => p.tipo === 'ORIGEN')?.localizacion || 'Desconocido',
-                    destino: viaje.paradas.find(p => p.tipo === 'DESTINO')?.localizacion || 'Desconocido',
-                    precio: viaje.precio,
-                    diasSemana: viaje.diasSemana,
-                    fechaFinRecurrencia: viaje.fechaFinRecurrencia,
-                    paradas: viaje.paradas,
-                    reservas: viaje.reservas
-                  }
-                }
-              });
-            } else {
-              setReservaMsg(null);
-              setAceptaBloqueoPago(false);
-              setCantidadPlazas(miReserva?.cantidadPlazas || 1);
-              setParadaSubidaId(miReserva?.paradaSubidaId || viaje.paradas.find(p => p.tipo === 'ORIGEN')?.id || null);
-              setParadaBajadaId(miReserva?.paradaBajadaId || viaje.paradas.find(p => p.tipo === 'DESTINO')?.id || null);
-              setModalReservaAbierto(true);
-            }
-          }}
-        >
-          {viaje.plazasDisponibles <= 0 ? (
-            '🚫 Sin plazas disponibles'
-          ) : viaje.estado === 'INICIADO' || viaje.estado === 'EN_CURSO' ? (
-            '🚫 Viaje iniciado'
-          ) : yaEsHoraDeSalida ? (
-            '🚫 La hora de salida ya ha pasado'
-          ) : viaje.fechaFinRecurrencia ? (
-            <span className="flex items-center justify-center gap-2">
-              🔍 Ver viajes asociados para reservar
-            </span>
-          ) : (
-            <span className="flex items-center justify-center gap-2">
-              ✨ Reservar ahora
-            </span>
-          )}
-        </button>
-      ) : (
-        /* SI YA TIENE UNA RESERVA ACTIVA */
-        <div className="space-y-3">
-          {esModificable(viaje.fechaHoraSalida) ? (
-            <button
-              type="button"
-              onClick={() => {
-                setReservaMsg(null);
-                setAceptaBloqueoPago(false);
-                const idS = miReserva.paradaSubidaId ? Number(miReserva.paradaSubidaId) : null;
-                const idB = miReserva.paradaBajadaId ? Number(miReserva.paradaBajadaId) : null;
-                setCantidadPlazas(miReserva.cantidadPlazas);
-                setParadaSubidaId(idS);
-                setParadaBajadaId(idB);
-                setModalReservaAbierto(true);
-              }}
-              className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-sm"
-            >
-              🔄 Modificar mi reserva
-            </button>
-          ) : (
-            <div className="text-center p-3 bg-slate-100 rounded-xl text-slate-500 text-sm italic border border-dashed border-slate-300">
-              La reserva ya no se puede modificar (falta menos de 12h)
-            </div>
-          )}
+          <div className="space-y-3">
+            {navState.rol !== 'conductor' && (
+              <>
+                {viaje.estado === 'FINALIZADO' ? (
+                  <div className="text-center p-4 bg-slate-100 rounded-xl text-slate-600 text-sm italic border border-slate-200">
+                    Este viaje ha finalizado. No hay acciones disponibles.
+                  </div>
+                ) : (!miReserva || miReserva.estado === 'CANCELADA') ? (
+                  <button
+                    type="button"
+                    className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
+                    disabled={
+                      !viaje.fechaFinRecurrencia && (
+                        viaje.plazasDisponibles <= 0 ||
+                        viaje.estado === 'CANCELADO' ||
+                        viaje.estado === 'INICIADO' ||
+                        viaje.estado === 'EN_CURSO' ||
+                        yaEsHoraDeSalida
+                      )
+                    }
+                    onClick={() => {
+                      if (viaje.fechaFinRecurrencia) {
+                        navigate(`/viajes/${viaje.slug}/asociados`, {
+                          state: {
+                            rol: navState.rol,
+                            usuarioId: usuarioActual?.id,
+                            viajesRecurrentes: viaje.viajesRecurrentes,
+                            slugPadre: viaje.slug,
+                            esRecurrente: true,
+                            viajePadre: {
+                              id: viaje.id,
+                              slug: viaje.slug,
+                              origen: viaje.paradas.find(p => p.tipo === 'ORIGEN')?.localizacion || 'Desconocido',
+                              destino: viaje.paradas.find(p => p.tipo === 'DESTINO')?.localizacion || 'Desconocido',
+                              precio: viaje.precio,
+                              diasSemana: viaje.diasSemana,
+                              fechaFinRecurrencia: viaje.fechaFinRecurrencia,
+                              paradas: viaje.paradas,
+                              reservas: viaje.reservas,
+                              estado: viaje.estado
+                            }
+                          }
+                        });
+                      } else {
+                        setReservaMsg(null);
+                        setAceptaBloqueoPago(false);
+                        setCantidadPlazas(miReserva?.cantidadPlazas || 1);
+                        setParadaSubidaId(miReserva?.paradaSubidaId || viaje.paradas.find(p => p.tipo === 'ORIGEN')?.id || null);
+                        setParadaBajadaId(miReserva?.paradaBajadaId || viaje.paradas.find(p => p.tipo === 'DESTINO')?.id || null);
+                        setModalReservaAbierto(true);
+                      }
+                    }}
+                  >
+                    {viaje.plazasDisponibles <= 0 ? (
+                      '🚫 Sin plazas disponibles'
+                    ) : viaje.estado === 'INICIADO' || viaje.estado === 'EN_CURSO' ? (
+                      '🚫 Viaje iniciado'
+                    ) : yaEsHoraDeSalida ? (
+                      '🚫 La hora de salida ya ha pasado'
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        ✨ Reservar ahora
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  /* SI YA TIENE UNA RESERVA ACTIVA */
+                  <div className="space-y-3">
+                    {esModificable(viaje.fechaHoraSalida) ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReservaMsg(null);
+                          setAceptaBloqueoPago(false);
+                          const idS = miReserva.paradaSubidaId ? Number(miReserva.paradaSubidaId) : null;
+                          const idB = miReserva.paradaBajadaId ? Number(miReserva.paradaBajadaId) : null;
+                          setCantidadPlazas(miReserva.cantidadPlazas);
+                          setParadaSubidaId(idS);
+                          setParadaBajadaId(idB);
+                          setModalReservaAbierto(true);
+                        }}
+                        className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-sm"
+                      >
+                        🔄 Modificar mi reserva
+                      </button>
+                    ) : (
+                      <div className="text-center p-3 bg-slate-100 rounded-xl text-slate-500 text-sm italic border border-dashed border-slate-300">
+                        La reserva ya no se puede modificar (falta menos de 12h)
+                      </div>
+                    )}
 
-          <button
-            type="button"
-            onClick={() => {
-              setCancelReservaMsg(null);
-              setModalCancelarReservaAbierto(true);
-            }}
-            disabled={cancelandoReserva}
-            className="w-full rounded-lg bg-yellow-500 px-6 py-3 text-base font-bold text-white hover:bg-yellow-600 disabled:opacity-60 transition-all shadow-sm"
-          >
-            {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
-          </button>
-          
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={reportarIncomparecenciaConductor}
-              disabled={reportandoIncomparecencia}
-              className="w-full rounded-lg bg-rose-600 px-6 py-3 text-base font-bold text-white hover:bg-rose-700 disabled:opacity-60 transition-all shadow-sm flex items-center justify-center gap-2"
-            >
-              {reportandoIncomparecencia ? 'Procesando...' : '⚠️ El conductor no se ha presentado'}
-            </button>
-            <p className="mt-1 text-[11px] text-slate-500 text-center">
-              Usa este botón si ha pasado la hora de salida y el conductor no ha acudido.
-            </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelReservaMsg(null);
+                        setModalCancelarReservaAbierto(true);
+                      }}
+                      disabled={cancelandoReserva}
+                      className="w-full rounded-lg bg-yellow-500 px-6 py-3 text-base font-bold text-white hover:bg-yellow-600 disabled:opacity-60 transition-all shadow-sm"
+                    >
+                      {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
+                    </button>
+                    
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={reportarIncomparecenciaConductor}
+                        disabled={reportandoIncomparecencia}
+                        className="w-full rounded-lg bg-rose-600 px-6 py-3 text-base font-bold text-white hover:bg-rose-700 disabled:opacity-60 transition-all shadow-sm flex items-center justify-center gap-2"
+                      >
+                        {reportandoIncomparecencia ? 'Procesando...' : '⚠️ El conductor no se ha presentado'}
+                      </button>
+                      <p className="mt-1 text-[11px] text-slate-500 text-center">
+                        Usa este botón si ha pasado la hora de salida y el conductor no ha acudido.
+                      </p>
 
-            {incomparecenciaMsg && (
-              <div className={`mt-2 p-3 rounded-xl text-xs font-bold border ${
-                incomparecenciaMsg.includes('✅') 
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
-                  : 'bg-red-50 border-red-200 text-red-700'
-              }`}>
-                {incomparecenciaMsg}
-              </div>
+                      {incomparecenciaMsg && (
+                        <div className={`mt-2 p-3 rounded-xl text-xs font-bold border ${
+                          incomparecenciaMsg.includes('✅') 
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}>
+                          {incomparecenciaMsg}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-          </div>
-        </div>
-      )}
-    </>
-  )}
 
 
             {navState.rol === 'conductor' && (
