@@ -676,19 +676,37 @@ const DetalleViaje: React.FC = () => {
     setReservando(true);
 
     try {
-      const resReserva = await fetch(buildApiUrl('/api/reservas/crear'), {
+      const esLote = esViajeRecurrentePadre(viaje);
+      
+      // Definimos el endpoint dependiendo de si reservamos en lote (recurrentes) o individual
+      const endpoint = esLote ? '/api/reservas/crear-lote' : '/api/reservas/crear';
+      
+      // Extraemos todos los IDs de los hijos a reservar si es un lote
+      const viajesRecurrentesIds = esLote && viaje?.viajesRecurrentes 
+        ? viaje.viajesRecurrentes.map(v => v.id) 
+        : [];
+
+      // Creamos el JSON correspondiente ESPEJO EXACTO de tu DTO
+      const payload = esLote ? {
+        viajeId: viaje?.id,                       // ID del padre
+        viajeRecurrenteIds: viajesRecurrentesIds, // Array de IDs de los hijos
+        cantidadPlazas: cantidadPlazas,           // Cambiado de 'plazas' a 'cantidadPlazas'
+        paradaSubidaId: paradaSubidaId,
+        paradaBajadaId: paradaBajadaId
+      } : {
+        viajeId: viaje?.id,                       // ID individual
+        cantidadPlazas: cantidadPlazas,           // Cambiado de 'plazas' a 'cantidadPlazas'
+        paradaSubidaId: paradaSubidaId,
+        paradaBajadaId: paradaBajadaId
+      };
+
+      const resReserva = await fetch(buildApiUrl(endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          viajeId: viaje?.id,
-          plazas: cantidadPlazas,
-          paradaSubidaId: paradaSubidaId,
-          paradaBajadaId: paradaBajadaId,
-          esRecurrente: esViajeRecurrentePadre(viaje)
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!resReserva.ok) {
@@ -699,7 +717,8 @@ const DetalleViaje: React.FC = () => {
       const data = await resReserva.json();
       if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
 
-      setReservaEnProcesoId(data.reservaId);
+      // Guardamos el clientSecret; Stripe pedirá la tarjeta una sola vez para el total
+      setReservaEnProcesoId(data.reservaId || data.loteId); // Ajusta si el backend devuelve un ID de lote
       setClientSecret(data.clientSecret);
       setMostrarStripe(true);
 
@@ -1736,7 +1755,7 @@ const DetalleViaje: React.FC = () => {
                     <div className="pt-2">
                       {miReserva ? (
                         (() => {
-                          const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? viaje.viajesRecurrentes.length : 1;
+                          const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? (viaje.viajesRecurrentes.length + 1) : 1;
                           const precioUnitario = Number(viaje?.precio || 0) * numViajes;
                           const plazasOriginales = miReserva.cantidadPlazas;
                           const diferencia = (cantidadPlazas - plazasOriginales) * precioUnitario;
@@ -1782,7 +1801,7 @@ const DetalleViaje: React.FC = () => {
                       ) : (
                         <div className="space-y-4">
                           {(() => {
-                            const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? viaje.viajesRecurrentes.length : 1;
+                            const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? (viaje.viajesRecurrentes.length + 1) : 1;
                             const totalCalculado = cantidadPlazas * (viaje?.precio || 0) * numViajes;
 
                             return (
@@ -1829,7 +1848,7 @@ const DetalleViaje: React.FC = () => {
               <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex flex-col gap-2">
                 {isLoggedIn && (
                   (() => {
-                    const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? viaje.viajesRecurrentes.length : 1;
+                    const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? (viaje.viajesRecurrentes.length + 1) : 1;
                     const precioTotalCalculado = cantidadPlazas * (viaje?.precio || 0) * numViajes;
                     const precioUnitario = Number(viaje?.precio || 0) * numViajes;
                     const diferencia = (cantidadPlazas - (miReserva?.cantidadPlazas || 0)) * precioUnitario;

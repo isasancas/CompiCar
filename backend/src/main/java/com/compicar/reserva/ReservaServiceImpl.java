@@ -841,4 +841,119 @@ public class ReservaServiceImpl implements ReservaService {
         }
     }
 
+    @Override
+    @Transactional
+    public ReservaCreadaResponse crearReservaLote(String usuarioEmail, Long viajeId, List<Long> viajeRecurrenteIds, 
+                                                  Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
+
+        Persona pasajero = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
+                .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
+        Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
+                .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
+
+        if (paradaSubida.getOrden() >= paradaBajada.getOrden()) {
+            throw new IllegalArgumentException("La parada de subida debe ser anterior a la de bajada.");
+        }
+
+        List<Reserva> reservasCreadas = new ArrayList<>();
+        BigDecimal totalAcumulado = BigDecimal.ZERO;
+        Persona conductor = null;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        StringBuilder detalleFechas = new StringBuilder();
+
+        // --- 1. PROCESAR VIAJE PADRE ---
+        if (viajeId != null) {
+            Viaje viaje = viajeRepository.findById(viajeId)
+                    .orElseThrow(() -> new IllegalArgumentException("Viaje padre no encontrado"));
+            
+            if (viaje.getEstado() != EstadoViaje.PENDIENTE) throw new IllegalArgumentException("El viaje no está disponible.");
+            if (viaje.getFechaHoraSalida() != null && viaje.getFechaHoraSalida().isBefore(LocalDateTime.now())) throw new IllegalArgumentException("El viaje ya ha transcurrido.");
+            if (viaje.getPlazasDisponibles() < plazasSolicitadas) throw new IllegalArgumentException("No hay suficientes plazas en el viaje padre.");
+            if (viaje.getPersona().getId().equals(pasajero.getId())) throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
+            if (reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(pasajero.getId(), viaje.getId(), EstadoReserva.CANCELADA)) {
+                throw new IllegalArgumentException("Ya tienes una reserva activa en el viaje padre.");
+            }
+
+            conductor = viaje.getPersona();
+
+            Reserva reservaPadre = new Reserva(EstadoReserva.PENDIENTE, LocalDateTime.now(), pasajero, paradaSubida, paradaBajada, viaje, plazasSolicitadas);
+            reservaPadre.setSlug("reserva-tmp-" + System.currentTimeMillis());
+            reservaPadre = reservaRepository.saveAndFlush(reservaPadre);
+            reservaPadre.setSlug("reserva-" + reservaPadre.getId());
+            reservaPadre = reservaRepository.saveAndFlush(reservaPadre);
+
+            reservasCreadas.add(reservaPadre);
+            totalAcumulado = totalAcumulado.add(viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas)));
+            detalleFechas.append("\n• ").append(viaje.getFechaHoraSalida().format(formatter)).append(" (Viaje principal)");
+        }
+
+        // --- 2. PROCESAR VIAJES RECURRENTES ---
+        if (viajeRecurrenteIds != null && !viajeRecurrenteIds.isEmpty()) {
+            List<ViajeRecurrente> recurrentes = viajeRecurrenteRepository.findAllById(viajeRecurrenteIds);
+            if (recurrentes.size() != viajeRecurrenteIds.size()) throw new IllegalArgumentException("Alguno de los viajes recurrentes no existe.");
+
+            for (ViajeRecurrente vr : recurrentes) {
+                if (vr.getEstado() != EstadoViaje.PENDIENTE) throw new IllegalArgumentException("El viaje del " + vr.getFechaHoraSalida().format(formatter) + " no está disponible.");
+                if (vr.getFechaHoraSalida() != null && vr.getFechaHoraSalida().isBefore(LocalDateTime.now())) throw new IllegalArgumentException("El viaje del " + vr.getFechaHoraSalida().format(formatter) + " ya ha transcurrido.");
+                if (vr.getPlazasDisponibles() < plazasSolicitadas) throw new IllegalArgumentException("No hay sitio para la fecha " + vr.getFechaHoraSalida().format(formatter));
+                if (vr.getPersona().getId().equals(pasajero.getId())) throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
+                if (reservaRepository.existsByPersonaIdAndViajeRecurrenteIdAndEstadoNot(pasajero.getId(), vr.getId(), EstadoReserva.CANCELADA)) {
+                    throw new IllegalArgumentException("Ya tienes una reserva en la fecha " + vr.getFechaHoraSalida().format(formatter));
+                }
+
+                if (conductor == null) conductor = vr.getPersona();
+
+                Reserva reservaRecurrente = new Reserva(EstadoReserva.PENDIENTE, LocalDateTime.now(), pasajero, paradaSubida, paradaBajada, vr, plazasSolicitadas);
+                reservaRecurrente.setSlug("reserva-rec-tmp-" + System.currentTimeMillis() + "-" + vr.getId());
+                reservaRecurrente = reservaRepository.saveAndFlush(reservaRecurrente);
+                reservaRecurrente.setSlug("reserva-" + reservaRecurrente.getId());
+                reservaRecurrente = reservaRepository.saveAndFlush(reservaRecurrente);
+
+                reservasCreadas.add(reservaRecurrente);
+                totalAcumulado = totalAcumulado.add(vr.getPrecio().multiply(new BigDecimal(plazasSolicitadas)));
+                detalleFechas.append("\n• ").append(vr.getFechaHoraSalida().format(formatter));
+            }
+        }
+
+        // --- 3. FINALIZAR Y CREAR PAGO ÚNICO ---
+        if (reservasCreadas.isEmpty()) {
+            throw new IllegalArgumentException("Debes seleccionar al menos un viaje para reservar.");
+        }
+
+        Reserva reservaPrincipal = reservasCreadas.get(0);
+
+        Pago pago = new Pago();
+        pago.setImporteTotal(totalAcumulado);
+        BigDecimal comision = totalAcumulado.multiply(new BigDecimal("0.10"));
+        pago.setComision(comision);
+        pago.setImporteConductor(totalAcumulado.subtract(comision));
+        pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setFechaCreacion(LocalDateTime.now());
+        pago.setReserva(reservaPrincipal);
+        
+        pago = pagoRepository.saveAndFlush(pago);
+
+        // Asignar el pago único a todas las reservas y guardar
+        for (Reserva r : reservasCreadas) {
+            r.setPago(pago);
+            reservaRepository.save(r);
+        }
+
+        // Enviar 1 sola notificación al conductor
+        String msjNotificación = String.format("El usuario %s ha reservado %d viaje(s):%s\nImporte total: %.2f €",
+            pasajero.getNombre(), reservasCreadas.size(), detalleFechas.toString(), totalAcumulado);
+        notificacionRepository.save(new Notificacion(msjNotificación, conductor, TipoNotificacion.NUEVA_RESERVA));
+
+        // --- 4. LLAMAR A STRIPE ---
+        try {
+            String clientSecret = pagoService.crearIntentoDePago(reservaPrincipal);
+            return new ReservaCreadaResponse(reservaPrincipal.getId(), reservaPrincipal.getSlug(), clientSecret);
+        } catch (StripeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
+        }
+    }
+
 }

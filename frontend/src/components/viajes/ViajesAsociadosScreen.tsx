@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -82,7 +82,7 @@ const ViajesAsociadosScreen: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
   const [modalReservaAbierto, setModalReservaAbierto] = useState(false);
 
-  // Configuración Genérica para la reserva múltiple
+  // Configuración genérica para las reservas
   const [globalPlazas, setGlobalPlazas] = useState<number>(1);
   const [globalSubidaId, setGlobalSubidaId] = useState<number | null>(null);
   const [globalBajadaId, setGlobalBajadaId] = useState<number | null>(null);
@@ -157,8 +157,6 @@ const ViajesAsociadosScreen: React.FC = () => {
     estadoViaje?: string
   ): boolean => {
     if (esConductor) return false;
-
-    // Si el viaje está cancelado, bloqueamos la selección inmediatamente
     if (estadoViaje && estadoViaje.trim().toUpperCase() === 'CANCELADO') return false;
     if (!reservasData) return true;
 
@@ -219,7 +217,6 @@ const ViajesAsociadosScreen: React.FC = () => {
   const precioBaseTotal = instanciasSeleccionadas.reduce((acc, v) => acc + v.precio, 0) + (isPadreSelected && padre ? padre.precio : 0);
   const precioTotal = precioBaseTotal * globalPlazas;
 
-  // Obtener la lista de paradas genéricas del viaje padre o de la primera instancia seleccionada
   const paradasGenericas = [...(padre?.paradas || instanciasSeleccionadas[0]?.paradas || viajes[0]?.paradas || [])].sort((a, b) => a.orden - b.orden);
   const paradasSubida = paradasGenericas.filter(p => p.tipo !== 'DESTINO');
   
@@ -227,7 +224,6 @@ const ViajesAsociadosScreen: React.FC = () => {
   const ordenSubidaActual = paradaSubidaActual ? paradaSubidaActual.orden : -1;
   const paradasBajada = paradasGenericas.filter(p => p.tipo !== 'ORIGEN' && p.orden > ordenSubidaActual);
 
-  // Inicializar/Actualizar paradas genéricas por defecto
   const abrirModalReserva = () => {
     const { subida, bajada } = obtenerParadasPorDefecto(paradasGenericas);
     setGlobalPlazas(1);
@@ -239,72 +235,64 @@ const ViajesAsociadosScreen: React.FC = () => {
     setModalReservaAbierto(true);
   };
 
-  const iniciarProcesoPagoMultiple = async () => {
+  // UNIFICACIÓN DEL PROCESO DE RESERVA Y PAGO
+  const iniciarProcesoPagoLote = async () => {
     setReservaMsg(null);
+
     if (!aceptaBloqueoPago) {
       setReservaMsg('Debes aceptar el aviso de cobro antes de reservar.');
       return;
     }
 
+    if (!globalSubidaId || !globalBajadaId) {
+      setReservaMsg('Selecciona los puntos de subida y bajada.');
+      return;
+    }
+
+    if (selectedIds.length === 0) {
+      setReservaMsg('Selecciona al menos un viaje para reservar.');
+      return;
+    }
+
     setReservando(true);
+
     try {
-      const incluyePadre = selectedIds.includes('padre') && padre && padre.fechaFinRecurrencia;
-      const instanciasSeleccionadasIds = selectedIds.filter(id => id !== 'padre').map(Number);
+      // 1. Separamos el padre de los hijos para encajar con tu DTO
+      const incluyePadre = selectedIds.includes('padre');
+      const idDelPadre = (incluyePadre && padre) ? padre.id : null;
 
-      let clientSecretFinal = null;
+      // 2. Filtramos solo los recurrentes (hijos) y aseguramos que sean numéricos
+      const recurrentesIds = selectedIds
+        .filter(id => id !== 'padre')
+        .map(id => Number(id));
 
-      if (incluyePadre && padre) {
-        const payloadPadre = {
-          viajeId: Number(padre.id),
-          plazas: Number(globalPlazas),
-          paradaSubidaId: globalSubidaId ? Number(globalSubidaId) : null,
-          paradaBajadaId: globalBajadaId ? Number(globalBajadaId) : null,
-        };
+      const resReserva = await fetch(buildApiUrl('/api/reservas/crear-lote'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          viajeId: idDelPadre, 
+          viajeRecurrenteIds: recurrentesIds, 
+          cantidadPlazas: globalPlazas,
+          paradaSubidaId: globalSubidaId,
+          paradaBajadaId: globalBajadaId
+        })
+      });
 
-        const responsePadre = await fetch(buildApiUrl('/api/reservas/crear'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(payloadPadre)
-        });
-
-        if (!responsePadre.ok) {
-          const data = await responsePadre.json().catch(() => null);
-          throw new Error(data?.message || 'No se pudo procesar la reserva del viaje padre');
-        }
-
-        const dataPadre = await responsePadre.json();
-        if (dataPadre.clientSecret) clientSecretFinal = dataPadre.clientSecret;
+      if (!resReserva.ok) {
+        const data = await resReserva.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo crear la reserva en lote');
       }
 
-      if (instanciasSeleccionadasIds.length > 0) {
-        const payloadRecurrentes = {
-          viajeRecurrenteIds: instanciasSeleccionadasIds,
-          plazas: Number(globalPlazas),
-          paradaSubidaId: globalSubidaId ? Number(globalSubidaId) : null,
-          paradaBajadaId: globalBajadaId ? Number(globalBajadaId) : null,
-        };
+      const data = await resReserva.json();
+      
+      // Stripe nos devuelve un único PaymentIntent para cubrir todos los viajes seleccionados
+      if (!data.clientSecret) throw new Error('No se recibió el clientSecret del lote');
 
-        const responseRecurrentes = await fetch(buildApiUrl('/api/reservas/crear-recurrentes'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(payloadRecurrentes)
-        });
-
-        if (!responseRecurrentes.ok) {
-          const data = await responseRecurrentes.json().catch(() => null);
-          throw new Error(data?.message || 'No se pudieron procesar las reservas de las instancias');
-        }
-
-        const dataRecurrentes = await responseRecurrentes.json();
-        if (dataRecurrentes.clientSecret) clientSecretFinal = dataRecurrentes.clientSecret;
-      }
-
-      if (!clientSecretFinal) {
-        throw new Error('No se recibió el clientSecret de la pasarela de pago');
-      }
-
-      setClientSecret(clientSecretFinal);
-      setMostrarStripe(true);
+      setClientSecret(data.clientSecret);
+      setMostrarStripe(true); 
 
     } catch (err) {
       setReservaMsg(`❌ ${err instanceof Error ? err.message : 'Error inesperado'}`);
@@ -536,8 +524,8 @@ const ViajesAsociadosScreen: React.FC = () => {
                         setReservaMsg('✅ ¡Reservas y pagos completados con éxito!');
                         setTimeout(() => {
                           setModalReservaAbierto(false);
-                          navigate('/mis-viajes', { state: { rol: state.rol } });
-                        }, 1500);
+                          setMostrarStripe(false);
+                        }, 1000);
                       }}
                       onError={(message) => {
                         setReservaMsg(`❌ ${message || 'El pago no pudo completarse'}`);
@@ -656,7 +644,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={iniciarProcesoPagoMultiple}
+                  onClick={iniciarProcesoPagoLote}
                   disabled={reservando || !aceptaBloqueoPago}
                   className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-compi hover:opacity-95 shadow-lg shadow-indigo-100 transition disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
