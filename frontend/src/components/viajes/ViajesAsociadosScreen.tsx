@@ -631,7 +631,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                     return (
                       <div key={id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                         <p className="font-bold text-slate-900 text-sm">
-                          {isPadre ? 'Viaje Padre (Patrón)' : formatFecha((itemViaje as any).fechaHoraSalida)}
+                          {isPadre ? 'Viaje Padre' : formatFecha((itemViaje as any).fechaHoraSalida)}
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
