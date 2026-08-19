@@ -23,7 +23,6 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaLoteRequest;
-import com.compicar.reserva.dto.ReservaRecurrenteRequest;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.stripe.exception.StripeException;

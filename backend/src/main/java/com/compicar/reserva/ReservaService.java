@@ -11,7 +11,6 @@ import com.stripe.exception.StripeException;
 
 public interface ReservaService {
     
-    ReservaCreadaResponse crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId);
     Reserva cancelarReserva(String usuarioEmail, Long reservaId);
     Reserva rechazarReservaComoConductor(String usuarioEmail, Long reservaId);
     Reserva anularReservaPorFalloPago(String usuarioEmail, Long reservaId);
@@ -24,14 +23,6 @@ public interface ReservaService {
     Reserva marcarNoPresentadoPorConductor(String usuarioEmail, Long reservaId);
     List<Reserva> obtenerReservasComoConductor(String conductorEmail);
     Reserva reservaPresentado(Long reservaId);
-    ReservaCreadaResponse crearReservasRecurrentes(
-        String usuarioEmail, 
-        List<Long> viajeRecurrenteIds, 
-        Integer plazas, 
-        Long paradaSubidaId, 
-        Long paradaBajadaId
-    );
-
     List<ViajeRecurrenteDTO> obtenerRecurrentesPorViajePadre(Long viajePadreId);
     void cancelarOcurrenciaPorConductor(Long viajeRecurrenteId, String conductorEmail) throws StripeException;
     ReservaCreadaResponse crearReservaLote(String usuarioEmail, Long viajeId, List<Long> viajeRecurrenteIds, 
