@@ -529,7 +529,14 @@ const ViajesAsociadosScreen: React.FC = () => {
                     {(esConductor || tieneReservaActiva) && (
                       <button
                         type="button"
-                        onClick={() => navigate(`/viajes/${instancia.slug}`, { state: { rol: state.rol } })}
+                        onClick={() =>
+                          navigate(`/viajes/${instancia.slug}`, {
+                            state: {
+                              ...state,
+                              esInstanciaRecurrente: true,
+                            },
+                          })
+                        }
                         className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-sm"
                       >
                         {esConductor ? 'Ver detalles' : 'Ver detalle / Gestionar'}

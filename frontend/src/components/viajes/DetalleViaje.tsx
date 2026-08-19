@@ -71,6 +71,12 @@ const DetalleViaje: React.FC = () => {
     backLabel?: string;
     rol?: 'conductor' | 'pasajero';
     esRecurrente?: boolean;
+    esInstanciaRecurrente?: boolean;
+    slugPadre?: string;
+    viajePadre?: any;
+    viajesRecurrentes?: any[];
+    usuarioId?: number;
+    usuarioActual?: any;
   };
 
   const navState = (location.state ?? {}) as DetalleNavState;
@@ -139,22 +145,21 @@ const DetalleViaje: React.FC = () => {
   const esConductor = Boolean(viaje?.conductorId && usuarioIdActual && viaje.conductorId === usuarioIdActual);
   const rolActual: 'conductor' | 'pasajero' = esConductor ? 'conductor' : 'pasajero';
 
-  // Lógica segura de navegación basada en la existencia de fechaFinRecurrencia
-  const backTo = viaje?.fechaFinRecurrencia 
-    ? (navState.backTo || (navState.esRecurrente ? -1 : '/'))
-    : '/';
-  
-  const backLabel = viaje?.fechaFinRecurrencia 
-    ? (navState.backLabel || (navState.esRecurrente ? 'Volver a viajes asociados' : 'Volver al inicio'))
+  const esInstanciaRecurrente = Boolean(navState.esInstanciaRecurrente);
+
+  const backLabel = esInstanciaRecurrente
+    ? 'Volver a viajes asociados'
     : 'Volver al inicio';
 
   const volver = () => {
-    if (!viaje?.fechaFinRecurrencia) {
-      navigate('/');
-    } else if (typeof backTo === 'number') {
-      navigate(backTo);
+    if (esInstanciaRecurrente) {
+      if (navState.slugPadre) {
+        navigate(`/viajes/${navState.slugPadre}/asociados`, { state: navState });
+      } else {
+        navigate(-1);
+      }
     } else {
-      navigate(backTo);
+      navigate('/');
     }
   };
 
