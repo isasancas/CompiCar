@@ -653,6 +653,13 @@ const DetalleViaje: React.FC = () => {
     );
   }
 
+  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
+    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
+    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
+    
+    return Boolean(tieneDias || tieneInstancias);
+  };
+
   const iniciarProcesoPago = async () => {
     setReservaMsg(null);
 
@@ -680,6 +687,7 @@ const DetalleViaje: React.FC = () => {
           plazas: cantidadPlazas,
           paradaSubidaId: paradaSubidaId,
           paradaBajadaId: paradaBajadaId,
+          esRecurrente: esViajeRecurrentePadre(viaje)
         })
       });
 
@@ -845,7 +853,7 @@ const DetalleViaje: React.FC = () => {
     }
   };
 
-// Función para cancelar el viaje en conjunto (usando tu segundo endpoint)
+  // Función para cancelar el viaje en conjunto (usando tu segundo endpoint)
   const confirmarCancelarViajeConjunto = async () => {
     if (!viaje) return;
 
@@ -892,13 +900,6 @@ const DetalleViaje: React.FC = () => {
     const diferenciaMs = salida.getTime() - ahora.getTime();
     const horasRestantes = diferenciaMs / (1000 * 60 * 60);
     return horasRestantes > 12;
-  };
-
-  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
-    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
-    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
-    
-    return Boolean(tieneDias || tieneInstancias);
   };
 
   const handleGuardarCambiosViaje = async () => {
@@ -1213,45 +1214,19 @@ const DetalleViaje: React.FC = () => {
                     type="button"
                     className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
                     disabled={
-                      !viaje.fechaFinRecurrencia && (
-                        viaje.plazasDisponibles <= 0 ||
-                        viaje.estado === 'CANCELADO' ||
-                        viaje.estado === 'INICIADO' ||
-                        viaje.estado === 'EN_CURSO' ||
-                        yaEsHoraDeSalida
-                      )
+                      viaje.plazasDisponibles <= 0 ||
+                      viaje.estado === 'CANCELADO' ||
+                      viaje.estado === 'INICIADO' ||
+                      viaje.estado === 'EN_CURSO' ||
+                      yaEsHoraDeSalida
                     }
                     onClick={() => {
-                      if (viaje.fechaFinRecurrencia) {
-                        navigate(`/viajes/${viaje.slug}/asociados`, {
-                          state: {
-                            rol: navState.rol,
-                            usuarioId: usuarioActual?.id,
-                            viajesRecurrentes: viaje.viajesRecurrentes,
-                            slugPadre: viaje.slug,
-                            esRecurrente: true,
-                            viajePadre: {
-                              id: viaje.id,
-                              slug: viaje.slug,
-                              origen: viaje.paradas.find(p => p.tipo === 'ORIGEN')?.localizacion || 'Desconocido',
-                              destino: viaje.paradas.find(p => p.tipo === 'DESTINO')?.localizacion || 'Desconocido',
-                              precio: viaje.precio,
-                              diasSemana: viaje.diasSemana,
-                              fechaFinRecurrencia: viaje.fechaFinRecurrencia,
-                              paradas: viaje.paradas,
-                              reservas: viaje.reservas,
-                              estado: viaje.estado
-                            }
-                          }
-                        });
-                      } else {
-                        setReservaMsg(null);
-                        setAceptaBloqueoPago(false);
-                        setCantidadPlazas(miReserva?.cantidadPlazas || 1);
-                        setParadaSubidaId(miReserva?.paradaSubidaId || viaje.paradas.find(p => p.tipo === 'ORIGEN')?.id || null);
-                        setParadaBajadaId(miReserva?.paradaBajadaId || viaje.paradas.find(p => p.tipo === 'DESTINO')?.id || null);
-                        setModalReservaAbierto(true);
-                      }
+                      setReservaMsg(null);
+                      setAceptaBloqueoPago(false);
+                      setCantidadPlazas(miReserva?.cantidadPlazas || 1);
+                      setParadaSubidaId(miReserva?.paradaSubidaId || viaje.paradas.find(p => p.tipo === 'ORIGEN')?.id || null);
+                      setParadaBajadaId(miReserva?.paradaBajadaId || viaje.paradas.find(p => p.tipo === 'DESTINO')?.id || null);
+                      setModalReservaAbierto(true);
                     }}
                   >
                     {viaje.plazasDisponibles <= 0 ? (
@@ -1262,7 +1237,7 @@ const DetalleViaje: React.FC = () => {
                       '🚫 La hora de salida ya ha pasado'
                     ) : (
                       <span className="flex items-center justify-center gap-2">
-                        ✨ Reservar ahora
+                        ✨ {esViajeRecurrentePadre(viaje) ? 'Reservar viajes recurrentes' : 'Reservar ahora'}
                       </span>
                     )}
                   </button>
@@ -1568,7 +1543,10 @@ const DetalleViaje: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-900">
                   {reservaMsg?.includes('✅') 
                     ? (miReserva ? 'Actualización completada' : '¡Reserva realizada!') 
-                    : (miReserva ? 'Modificar mi reserva' : 'Reservar viaje')
+                    : (miReserva 
+                        ? 'Modificar mi reserva' 
+                        : (esViajeRecurrentePadre(viaje) ? 'Reservar viajes recurrentes' : 'Reservar viaje')
+                      )
                   }
                 </h2>
                 <button
@@ -1612,7 +1590,11 @@ const DetalleViaje: React.FC = () => {
                       <Elements stripe={stripePromise} options={{ clientSecret }}>
                           <CheckoutForm 
                             clientSecret={clientSecret} 
-                            monto={cantidadPlazas * (viaje?.precio || 0)}
+                            monto={
+                              esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0
+                                ? cantidadPlazas * (viaje?.precio || 0) * viaje.viajesRecurrentes.length
+                                : cantidadPlazas * (viaje?.precio || 0)
+                            }
                             onSuccess={(id) => { 
                                 setMostrarStripe(false);
                                 reservarPlazas(); 
@@ -1625,6 +1607,21 @@ const DetalleViaje: React.FC = () => {
                     </div>
                   ) : (
                   <div className="space-y-6">
+                    {/* Mensaje informativo para viajes recurrentes */}
+                    {esViajeRecurrentePadre(viaje) && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-2 shadow-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-900 text-sm">
+                          <span>🔄</span> Reserva múltiple para viajes recurrentes
+                        </div>
+                        <p className="leading-relaxed">
+                          Esta reserva se aplicará a todos los viajes seleccionados de la serie con el mismo número de plazas y la misma parada de subida y bajada.
+                        </p>
+                        <p className="text-amber-800 italic leading-relaxed pt-1.5 border-t border-amber-200/60">
+                          Si quieres cambiar el número de plazas de un viaje concreto o las paradas, puedes modificar la reserva posteriormente o hacerla de manera individual.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="relative pl-8 py-1">
                       <div className="absolute left-[11px] top-3 bottom-3 w-0.5 border-l-2 border-dashed border-slate-200"></div>
                       
@@ -1647,12 +1644,15 @@ const DetalleViaje: React.FC = () => {
 
                     <div className="grid grid-cols-1 gap-4 py-2 border-y border-slate-100">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de subida</label>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Punto de subida {esViajeRecurrentePadre(viaje) && '(para todos los viajes)'}
+                        </label>
                         <select 
                           value={paradaSubidaId || ''} 
                           onChange={(e) => setParadaSubidaId(Number(e.target.value))}
                           className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
                         >
+                          <option value="" disabled>Selecciona parada de subida</option>
                           {viaje.paradas
                             .sort((a, b) => a.orden - b.orden)
                             .filter(p => p.tipo !== 'DESTINO')
@@ -1663,12 +1663,15 @@ const DetalleViaje: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de bajada</label>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Punto de bajada {esViajeRecurrentePadre(viaje) && '(para todos los viajes)'}
+                        </label>
                         <select 
                           value={paradaBajadaId || ''} 
                           onChange={(e) => setParadaBajadaId(Number(e.target.value))}
                           className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
                         >
+                          <option value="" disabled>Selecciona parada de bajada</option>
                           {viaje.paradas
                             .sort((a, b) => a.orden - b.orden)
                             .filter(p => {
@@ -1683,41 +1686,58 @@ const DetalleViaje: React.FC = () => {
                     </div>
 
                     <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-slate-700">Número de plazas</label>
-                      {(() => {
-                        const misPlazasActuales = miReserva?.cantidadPlazas || 0;
-                        const plazasLibresTotales = (viaje?.plazasDisponibles || 0) + misPlazasActuales;
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Número de plazas {esViajeRecurrentePadre(viaje) && '(para todos los viajes)'}
+                      </label>
+                      {esViajeRecurrentePadre(viaje) ? (
+                        <select
+                          value={cantidadPlazas}
+                          onChange={(e) => setCantidadPlazas(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800"
+                        >
+                          {Array.from({ length: Math.min(viaje.plazasDisponibles || 1, 8) }, (_, i) => i + 1).map((num) => (
+                            <option key={num} value={num}>
+                              {num} {num === 1 ? 'plaza' : 'plazas'}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        (() => {
+                          const misPlazasActuales = miReserva?.cantidadPlazas || 0;
+                          const plazasLibresTotales = (viaje?.plazasDisponibles || 0) + misPlazasActuales;
 
-                        return (
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
-                              disabled={reservando || cantidadPlazas <= 1}
-                              className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
-                            > − </button>
-                            <input
-                              type="number"
-                              readOnly
-                              value={cantidadPlazas}
-                              className="w-16 rounded-lg border border-slate-300 h-10 text-center font-bold bg-slate-50"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setCantidadPlazas(Math.min(plazasLibresTotales, cantidadPlazas + 1))}
-                              disabled={reservando || cantidadPlazas >= plazasLibresTotales}
-                              className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
-                            > + </button>
-                            <span className="text-xs text-slate-500 font-medium">Máximo: {plazasLibresTotales}</span>
-                          </div>
-                        );
-                      })()}
+                          return (
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
+                                disabled={reservando || cantidadPlazas <= 1}
+                                className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                              > − </button>
+                              <input
+                                type="number"
+                                readOnly
+                                value={cantidadPlazas}
+                                className="w-16 rounded-lg border border-slate-300 h-10 text-center font-bold bg-slate-50"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setCantidadPlazas(Math.min(plazasLibresTotales, cantidadPlazas + 1))}
+                                disabled={reservando || cantidadPlazas >= plazasLibresTotales}
+                                className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                              > + </button>
+                              <span className="text-xs text-slate-500 font-medium">Máximo: {plazasLibresTotales}</span>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
 
                     <div className="pt-2">
                       {miReserva ? (
                         (() => {
-                          const precioUnitario = Number(viaje?.precio || 0);
+                          const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? viaje.viajesRecurrentes.length : 1;
+                          const precioUnitario = Number(viaje?.precio || 0) * numViajes;
                           const plazasOriginales = miReserva.cantidadPlazas;
                           const diferencia = (cantidadPlazas - plazasOriginales) * precioUnitario;
 
@@ -1761,23 +1781,34 @@ const DetalleViaje: React.FC = () => {
                         })()
                       ) : (
                         <div className="space-y-4">
-                          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
-                            <div>
-                              <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest leading-none mb-1">Total a pagar ahora</p>
-                              <p className="text-2xl font-black text-indigo-900">{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</p>
-                            </div>
-                          </div>
-                          <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={aceptaBloqueoPago}
-                              onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
-                              className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                            />
-                            <span className="text-xs text-slate-700 leading-snug">
-                              Acepto el cargo de <strong>{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</strong> para confirmar mi plaza en el viaje.
-                            </span>
-                          </label>
+                          {(() => {
+                            const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? viaje.viajesRecurrentes.length : 1;
+                            const totalCalculado = cantidadPlazas * (viaje?.precio || 0) * numViajes;
+
+                            return (
+                              <>
+                                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
+                                  <div>
+                                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest leading-none mb-1">
+                                      Total a pagar ahora {esViajeRecurrentePadre(viaje) && `(${numViajes} viajes)`}
+                                    </p>
+                                    <p className="text-2xl font-black text-indigo-900">{totalCalculado.toFixed(2)}€</p>
+                                  </div>
+                                </div>
+                                <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={aceptaBloqueoPago}
+                                    onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                  />
+                                  <span className="text-xs text-slate-700 leading-snug">
+                                    Acepto el cargo de <strong>{totalCalculado.toFixed(2)}€</strong> para confirmar mi plaza en {esViajeRecurrentePadre(viaje) ? `los ${numViajes} viajes seleccionados` : 'el viaje'}.
+                                  </span>
+                                </label>
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -1798,7 +1829,9 @@ const DetalleViaje: React.FC = () => {
               <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex flex-col gap-2">
                 {isLoggedIn && (
                   (() => {
-                    const precioUnitario = Number(viaje?.precio || 0);
+                    const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? viaje.viajesRecurrentes.length : 1;
+                    const precioTotalCalculado = cantidadPlazas * (viaje?.precio || 0) * numViajes;
+                    const precioUnitario = Number(viaje?.precio || 0) * numViajes;
                     const diferencia = (cantidadPlazas - (miReserva?.cantidadPlazas || 0)) * precioUnitario;
                     
                     const haCambiadoPlazas = miReserva && cantidadPlazas !== miReserva.cantidadPlazas;
@@ -1829,7 +1862,7 @@ const DetalleViaje: React.FC = () => {
                       >
                         {mostrarStripe ? "Esperando pago..." 
                         : (miReserva ? "Guardar Cambios" 
-                        : `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`)
+                        : `Pagar ${precioTotalCalculado.toFixed(2)}€ y Reservar`)
                       }
                       </button>
                     );

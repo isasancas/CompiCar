@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -45,12 +45,6 @@ interface ViajePadreInfo {
   reservas?: Reserva[] | Reserva | null;
 }
 
-interface DetalleReservaConfig {
-  plazas: number;
-  paradaSubidaId: number | null;
-  paradaBajadaId: number | null;
-}
-
 interface Reserva {
   id: number;
   estado: string;
@@ -87,7 +81,11 @@ const ViajesAsociadosScreen: React.FC = () => {
 
   const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
   const [modalReservaAbierto, setModalReservaAbierto] = useState(false);
-  const [configReservas, setConfigReservas] = useState<{ [key: string]: DetalleReservaConfig }>({});
+
+  // Configuración Genérica para la reserva múltiple
+  const [globalPlazas, setGlobalPlazas] = useState<number>(1);
+  const [globalSubidaId, setGlobalSubidaId] = useState<number | null>(null);
+  const [globalBajadaId, setGlobalBajadaId] = useState<number | null>(null);
 
   const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -119,26 +117,20 @@ const ViajesAsociadosScreen: React.FC = () => {
 
   const obtenerParadasPorDefecto = (paradas?: { id: number; localizacion: string; tipo: string; orden: number }[]) => {
     if (!paradas || paradas.length === 0) return { subida: null, bajada: null };
-    const origen = paradas.find(p => p.tipo === 'ORIGEN')?.id || paradas[0]?.id || null;
-    const destino = paradas.find(p => p.tipo === 'DESTINO')?.id || paradas[paradas.length - 1]?.id || null;
+    const ordenadas = [...paradas].sort((a, b) => a.orden - b.orden);
+    const origen = ordenadas.find(p => p.tipo === 'ORIGEN')?.id || ordenadas[0]?.id || null;
+    const destino = ordenadas.find(p => p.tipo === 'DESTINO')?.id || ordenadas[ordenadas.length - 1]?.id || null;
     return { subida: origen, bajada: destino };
   };
 
-// 🛠️ Búsqueda robusta priorizando state.usuarioId / state.usuarioActual, con fallback a localStorage o JWT
   const obtenerUsuarioId = (): number | null => {
-    if (state.usuarioId && !isNaN(Number(state.usuarioId))) {
-      return Number(state.usuarioId);
-    }
-    if (state.usuarioActual?.id && !isNaN(Number(state.usuarioActual.id))) {
-      return Number(state.usuarioActual.id);
-    }
+    if (state.usuarioId && !isNaN(Number(state.usuarioId))) return Number(state.usuarioId);
+    if (state.usuarioActual?.id && !isNaN(Number(state.usuarioActual.id))) return Number(state.usuarioActual.id);
 
     const possibleKeys = ['userId', 'id', 'user_id', 'usuarioId', 'personaId'];
     for (const key of possibleKeys) {
       const val = localStorage.getItem(key);
-      if (val && !isNaN(Number(val))) {
-        return Number(val);
-      }
+      if (val && !isNaN(Number(val))) return Number(val);
     }
 
     try {
@@ -147,20 +139,13 @@ const ViajesAsociadosScreen: React.FC = () => {
         const base64Url = tokenStr.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
+          atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
         );
         const payload = JSON.parse(jsonPayload);
         const tokenUserId = payload.userId || payload.id || payload.sub || payload.personaId || payload.usuarioId;
-        if (tokenUserId && !isNaN(Number(tokenUserId))) {
-          return Number(tokenUserId);
-        }
+        if (tokenUserId && !isNaN(Number(tokenUserId))) return Number(tokenUserId);
       }
-    } catch (e) {
-      // Ignorar error de decodificación
-    }
+    } catch (e) {}
 
     return null;
   };
@@ -169,24 +154,18 @@ const ViajesAsociadosScreen: React.FC = () => {
 
   const esSeleccionableParaCliente = (
     reservasData?: Reserva[] | Reserva | null,
-    estadoViaje?: string // <-- Añadimos el estado del viaje opcionalmente
+    estadoViaje?: string
   ): boolean => {
     if (esConductor) return false;
-    
-    // 🚫 Si el viaje está cancelado, bloqueamos la selección inmediatamente
-    if (estadoViaje && estadoViaje.trim().toUpperCase() === 'CANCELADO') {
-      return false;
-    }
 
-    if (!reservasData) return true; 
+    // Si el viaje está cancelado, bloqueamos la selección inmediatamente
+    if (estadoViaje && estadoViaje.trim().toUpperCase() === 'CANCELADO') return false;
+    if (!reservasData) return true;
 
     const lista = Array.isArray(reservasData) ? reservasData : [reservasData];
     if (lista.length === 0) return true;
 
-    if (!usuarioIdActual) {
-      console.warn('⚠️ No se pudo determinar el ID del usuario actual. Comprueba el state o el token.');
-      return true; 
-    }
+    if (!usuarioIdActual) return true;
 
     const tieneReservaDelUsuarioActiva = lista.some(r => {
       if (!r) return false;
@@ -210,58 +189,26 @@ const ViajesAsociadosScreen: React.FC = () => {
   const handleToggleInstancia = (instancia: ViajeInstancia) => {
     if (selectedIds.includes(instancia.id)) {
       setSelectedIds(selectedIds.filter((item) => item !== instancia.id));
-      setConfigReservas((prev) => {
-        const copy = { ...prev };
-        delete copy[instancia.id];
-        return copy;
-      });
     } else {
       setSelectedIds([...selectedIds, instancia.id]);
-      const { subida, bajada } = obtenerParadasPorDefecto(instancia.paradas);
-      setConfigReservas((prev) => ({
-        ...prev,
-        [instancia.id]: { plazas: 1, paradaSubidaId: subida, paradaBajadaId: bajada },
-      }));
     }
   };
 
   const handleTogglePadreUnico = () => {
     if (selectedIds.includes('padre')) {
       setSelectedIds(selectedIds.filter((item) => item !== 'padre'));
-      setConfigReservas((prev) => {
-        const copy = { ...prev };
-        delete copy['padre'];
-        return copy;
-      });
     } else {
       setSelectedIds([...selectedIds, 'padre']);
-      const { subida, bajada } = obtenerParadasPorDefecto(padre?.paradas);
-      setConfigReservas((prev) => ({
-        ...prev,
-        ['padre']: { plazas: 1, paradaSubidaId: subida, paradaBajadaId: bajada },
-      }));
     }
   };
 
   const handleToggleTodo = () => {
     if (isAllSelected) {
       setSelectedIds([]);
-      setConfigReservas({});
     } else {
       const allIds: (number | string)[] = viajesSeleccionables.map((v) => v.id);
       if (padreSeleccionable) allIds.push('padre');
       setSelectedIds(allIds);
-
-      const nuevaConfig: { [key: string]: DetalleReservaConfig } = {};
-      if (padreSeleccionable && padre) {
-        const { subida, bajada } = obtenerParadasPorDefecto(padre.paradas);
-        nuevaConfig['padre'] = { plazas: 1, paradaSubidaId: subida, paradaBajadaId: bajada };
-      }
-      viajesSeleccionables.forEach((v) => {
-        const { subida, bajada } = obtenerParadasPorDefecto(v.paradas);
-        nuevaConfig[v.id] = { plazas: 1, paradaSubidaId: subida, paradaBajadaId: bajada };
-      });
-      setConfigReservas(nuevaConfig);
     }
   };
 
@@ -269,13 +216,28 @@ const ViajesAsociadosScreen: React.FC = () => {
   const isPadreSelected = selectedIds.includes('padre');
   const totalSeleccionadosCount = instanciasSeleccionadas.length + (isPadreSelected ? 1 : 0);
 
-  const precioInstancias = instanciasSeleccionadas.reduce((acc, v) => {
-    const plazas = configReservas[v.id]?.plazas || 1;
-    return acc + v.precio * plazas;
-  }, 0);
+  const precioBaseTotal = instanciasSeleccionadas.reduce((acc, v) => acc + v.precio, 0) + (isPadreSelected && padre ? padre.precio : 0);
+  const precioTotal = precioBaseTotal * globalPlazas;
 
-  const precioPadre = isPadreSelected && padre ? padre.precio * (configReservas['padre']?.plazas || 1) : 0;
-  const precioTotal = precioInstancias + precioPadre;
+  // Obtener la lista de paradas genéricas del viaje padre o de la primera instancia seleccionada
+  const paradasGenericas = [...(padre?.paradas || instanciasSeleccionadas[0]?.paradas || viajes[0]?.paradas || [])].sort((a, b) => a.orden - b.orden);
+  const paradasSubida = paradasGenericas.filter(p => p.tipo !== 'DESTINO');
+  
+  const paradaSubidaActual = paradasGenericas.find(p => p.id === globalSubidaId);
+  const ordenSubidaActual = paradaSubidaActual ? paradaSubidaActual.orden : -1;
+  const paradasBajada = paradasGenericas.filter(p => p.tipo !== 'ORIGEN' && p.orden > ordenSubidaActual);
+
+  // Inicializar/Actualizar paradas genéricas por defecto
+  const abrirModalReserva = () => {
+    const { subida, bajada } = obtenerParadasPorDefecto(paradasGenericas);
+    setGlobalPlazas(1);
+    setGlobalSubidaId(subida);
+    setGlobalBajadaId(bajada);
+    setReservaMsg(null);
+    setAceptaBloqueoPago(false);
+    setMostrarStripe(false);
+    setModalReservaAbierto(true);
+  };
 
   const iniciarProcesoPagoMultiple = async () => {
     setReservaMsg(null);
@@ -292,21 +254,16 @@ const ViajesAsociadosScreen: React.FC = () => {
       let clientSecretFinal = null;
 
       if (incluyePadre && padre) {
-        const configPadre = configReservas['padre'] || { plazas: 1, paradaSubidaId: null, paradaBajadaId: null };
-        
         const payloadPadre = {
           viajeId: Number(padre.id),
-          plazas: Number(configPadre.plazas),
-          paradaSubidaId: configPadre.paradaSubidaId ? Number(configPadre.paradaSubidaId) : null,
-          paradaBajadaId: configPadre.paradaBajadaId ? Number(configPadre.paradaBajadaId) : null,
+          plazas: Number(globalPlazas),
+          paradaSubidaId: globalSubidaId ? Number(globalSubidaId) : null,
+          paradaBajadaId: globalBajadaId ? Number(globalBajadaId) : null,
         };
 
         const responsePadre = await fetch(buildApiUrl('/api/reservas/crear'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(payloadPadre)
         });
 
@@ -316,28 +273,20 @@ const ViajesAsociadosScreen: React.FC = () => {
         }
 
         const dataPadre = await responsePadre.json();
-        if (dataPadre.clientSecret) {
-          clientSecretFinal = dataPadre.clientSecret;
-        }
+        if (dataPadre.clientSecret) clientSecretFinal = dataPadre.clientSecret;
       }
 
       if (instanciasSeleccionadasIds.length > 0) {
-        const primerIdHijo = instanciasSeleccionadasIds[0];
-        const configHijo = configReservas[primerIdHijo] || { plazas: 1, paradaSubidaId: null, paradaBajadaId: null };
-
         const payloadRecurrentes = {
           viajeRecurrenteIds: instanciasSeleccionadasIds,
-          plazas: Number(configHijo.plazas),
-          paradaSubidaId: configHijo.paradaSubidaId ? Number(configHijo.paradaSubidaId) : null,
-          paradaBajadaId: configHijo.paradaBajadaId ? Number(configHijo.paradaBajadaId) : null,
+          plazas: Number(globalPlazas),
+          paradaSubidaId: globalSubidaId ? Number(globalSubidaId) : null,
+          paradaBajadaId: globalBajadaId ? Number(globalBajadaId) : null,
         };
 
         const responseRecurrentes = await fetch(buildApiUrl('/api/reservas/crear-recurrentes'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(payloadRecurrentes)
         });
 
@@ -347,9 +296,7 @@ const ViajesAsociadosScreen: React.FC = () => {
         }
 
         const dataRecurrentes = await responseRecurrentes.json();
-        if (dataRecurrentes.clientSecret) {
-          clientSecretFinal = dataRecurrentes.clientSecret;
-        }
+        if (dataRecurrentes.clientSecret) clientSecretFinal = dataRecurrentes.clientSecret;
       }
 
       if (!clientSecretFinal) {
@@ -364,16 +311,6 @@ const ViajesAsociadosScreen: React.FC = () => {
     } finally {
       setReservando(false);
     }
-  };
-
-  const actualizarConfigItem = (id: string | number, campo: keyof DetalleReservaConfig, valor: any) => {
-    setConfigReservas((prev) => ({
-      ...prev,
-      [id]: {
-        ...(prev[id] || { plazas: 1, paradaSubidaId: null, paradaBajadaId: null }),
-        [campo]: valor,
-      },
-    }));
   };
 
   return (
@@ -558,16 +495,11 @@ const ViajesAsociadosScreen: React.FC = () => {
               <p className="text-xs text-slate-500">
                 Seleccionados: <strong className="text-slate-900">{totalSeleccionadosCount}</strong>
               </p>
-              <p className="text-lg font-bold text-slate-900">Total: {precioTotal.toFixed(2)}€</p>
+              <p className="text-lg font-bold text-slate-900">Total base: {precioBaseTotal.toFixed(2)}€</p>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setReservaMsg(null);
-                setAceptaBloqueoPago(false);
-                setMostrarStripe(false);
-                setModalReservaAbierto(true);
-              }}
+              onClick={abrirModalReserva}
               className="rounded-2xl bg-gradient-compi px-6 py-3 text-sm font-bold text-white hover:opacity-95 transition shadow-md"
             >
               Configurar y Pagar ({totalSeleccionadosCount})
@@ -616,65 +548,74 @@ const ViajesAsociadosScreen: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <p className="text-sm text-slate-600">
-                    Revisa las plazas y paradas para cada uno de los viajes seleccionados antes de proceder al cargo en tarjeta.
-                  </p>
+                  {/* MENSAJE INFORMATIVO DE CONFIGURACIÓN ÚNICA */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-2 shadow-xs">
+                    <p className="flex items-center gap-1.5 font-bold text-amber-900 text-sm">
+                      <span>🔄</span> Reserva múltiple para viajes recurrentes
+                    </p>
+                    <p className="leading-relaxed">
+                      Esta reserva se aplicará a todos los viajes seleccionados de la serie con el mismo número de plazas y la misma parada de subida y bajada.
+                    </p>
+                    <p className="text-amber-800 italic leading-relaxed pt-1.5 border-t border-amber-200/60">
+                      Si quieres cambiar el número de plazas de un viaje concreto o las paradas, puedes modificar la reserva posteriormente o hacerla de manera individual.
+                    </p>
+                  </div>
 
-                  {selectedIds.map((id) => {
-                    const isPadre = id === 'padre';
-                    const itemViaje = isPadre ? padre : viajes.find(v => v.id === id);
-                    if (!itemViaje) return null;
-
-                    const configItem = configReservas[id] || { plazas: 1, paradaSubidaId: null, paradaBajadaId: null };
-                    const paradasDisponibles = itemViaje.paradas || [];
-
-                    return (
-                      <div key={id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                        <p className="font-bold text-slate-900 text-sm">
-                          {isPadre ? 'Viaje Padre' : formatFecha((itemViaje as any).fechaHoraSalida)}
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Plazas</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={configItem.plazas}
-                              onChange={(e) => actualizarConfigItem(id, 'plazas', parseInt(e.target.value) || 1)}
-                              className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Subida</label>
-                            <select
-                              value={configItem.paradaSubidaId || ''}
-                              onChange={(e) => actualizarConfigItem(id, 'paradaSubidaId', Number(e.target.value))}
-                              className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white"
-                            >
-                              {paradasDisponibles.map(p => (
-                                <option key={p.id} value={p.id}>{p.localizacion} ({p.tipo})</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Bajada</label>
-                            <select
-                              value={configItem.paradaBajadaId || ''}
-                              onChange={(e) => actualizarConfigItem(id, 'paradaBajadaId', Number(e.target.value))}
-                              className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white"
-                            >
-                              {paradasDisponibles.map(p => (
-                                <option key={p.id} value={p.id}>{p.localizacion} ({p.tipo})</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
+                  {/* DESPLEGABLES GENÉRICOS */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Plazas por viaje</label>
+                        <select
+                          value={globalPlazas}
+                          onChange={(e) => setGlobalPlazas(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white font-medium focus:ring-2 focus:ring-slate-900"
+                        >
+                          {[1, 2, 3, 4].map((num) => (
+                            <option key={num} value={num}>
+                              {num} {num === 1 ? 'plaza' : 'plazas'}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    );
-                  })}
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Subida</label>
+                        <select
+                          value={globalSubidaId || ''}
+                          onChange={(e) => {
+                            const nuevaSubidaId = Number(e.target.value);
+                            setGlobalSubidaId(nuevaSubidaId);
+                            const nuevaSubidaObj = paradasGenericas.find(p => p.id === nuevaSubidaId);
+                            if (nuevaSubidaObj) {
+                              const bajadasValidas = paradasGenericas.filter(p => p.tipo !== 'ORIGEN' && p.orden > nuevaSubidaObj.orden);
+                              if (bajadasValidas.length > 0 && !bajadasValidas.some(p => p.id === globalBajadaId)) {
+                                setGlobalBajadaId(bajadasValidas[0].id);
+                              }
+                            }
+                          }}
+                          className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white font-medium focus:ring-2 focus:ring-slate-900"
+                        >
+                          {paradasSubida.map(p => (
+                            <option key={p.id} value={p.id}>{p.localizacion}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Bajada</label>
+                        <select
+                          value={globalBajadaId || ''}
+                          onChange={(e) => setGlobalBajadaId(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white font-medium focus:ring-2 focus:ring-slate-900"
+                        >
+                          {paradasBajada.map(p => (
+                            <option key={p.id} value={p.id}>{p.localizacion}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
                     <div>
@@ -691,7 +632,7 @@ const ViajesAsociadosScreen: React.FC = () => {
                       className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
                     />
                     <span className="text-xs text-slate-700 leading-snug">
-                      Acepto el cargo total de <strong>{precioTotal.toFixed(2)}€</strong> para confirmar las plazas en los viajes seleccionados.
+                      Acepto el cargo total de <strong>{precioTotal.toFixed(2)}€</strong> para confirmar las plazas en los {totalSeleccionadosCount} viajes seleccionados.
                     </span>
                   </label>
 
