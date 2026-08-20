@@ -1,5 +1,6 @@
 package com.compicar.persona;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,6 +81,12 @@ public class PersonaController {
         Map<String, Object> respuesta = personaService.retirarFondos(email);
         
         return ResponseEntity.ok(respuesta);
+    }
+
+    @GetMapping("/top-conductores")
+    public ResponseEntity<List<PerfilPersonaDTO>> obtenerTopConductores() {
+        List<PerfilPersonaDTO> topConductores = personaService.obtenerTopConductores();
+        return ResponseEntity.ok(topConductores);
     }
     
 }

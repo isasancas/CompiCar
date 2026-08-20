@@ -33,6 +33,7 @@ interface Viaje {
   precio: number;
   conductorNombre?: string;
   conductorSlug?: string;
+  conductorId?: number; // Añadido para identificar al conductor
   vehiculo: {
     marca: string;
     modelo: string;
@@ -40,6 +41,10 @@ interface Viaje {
   };
   paradas: Parada[];
   reservas?: Reserva[];
+  checkin?: string; // Añadido opcionalmente por si el viaje contiene el código de check-in
+  diasSemana?: string[]; // Para viajes recurrentes
+  viajesRecurrentes?: Viaje[]; // Para viajes recurrentes
+  fechaFinRecurrencia?: string; // Para viajes recurrentes
 }
 
 interface Reserva {
@@ -59,6 +64,23 @@ interface Reserva {
 const DetalleViaje: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  type DetalleNavState = {
+    backTo?: string;
+    backLabel?: string;
+    rol?: 'conductor' | 'pasajero';
+    esRecurrente?: boolean;
+    esInstanciaRecurrente?: boolean;
+    slugPadre?: string;
+    viajePadre?: any;
+    viajesRecurrentes?: any[];
+    usuarioId?: number;
+    usuarioActual?: any;
+  };
+
+  const navState = (location.state ?? {}) as DetalleNavState;
+
   const [viaje, setViaje] = useState<Viaje | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,30 +111,53 @@ const DetalleViaje: React.FC = () => {
   const [stripePromise] = useState(() => loadStripe('pk_test_51TSKGgAXE3CISlOUTVA8Rt2KEaJ4iJ1GsWXmfrLVY5DzxkgwGRt1YL5S3NnI3igffl3mpFd24TYBweb7baOCMfIh002314JX8u'));
   const [iniciando, setIniciando] = useState(false);
   const [iniciarMsg, setIniciarMsg] = useState<string | null>(null);
-  const [modalCheckinAbierto, setModalCheckinAbierto] = useState(false);
-  const [codigoCheckin, setCodigoCheckin] = useState('');
-  const [verificandoCheckin, setVerificandoCheckin] = useState(false);
-  const [checkinMsg, setCheckinMsg] = useState<string | null>(null);
+  
+  // Nuevos estados para el flujo de check-in de pasajeros y global
+  const [estadosPasajeros, setEstadosPasajeros] = useState<Record<number, 'PRESENTE' | 'NO_PRESENTADO'>>({});
+  const [modalCheckinGlobalAbierto, setModalCheckinGlobalAbierto] = useState(false);
+  const [codigoCheckinGlobal, setCodigoCheckinGlobal] = useState('');
+  const [verificandoCheckinGlobal, setVerificandoCheckinGlobal] = useState(false);
+  const [checkinGlobalMsg, setCheckinGlobalMsg] = useState<string | null>(null);
+
+  // Estados añadidos específicamente para el pop-up individual de presente con código de check-in
+  const [modalPresenteAbierto, setModalPresenteAbierto] = useState(false);
+  const [reservaSeleccionadaParaPresente, setReservaSeleccionadaParaPresente] = useState<number | null>(null);
+  const [codigoCheckinIndividual, setCodigoCheckinIndividual] = useState('');
+  const [errorCheckinIndividual, setErrorCheckinIndividual] = useState<string | null>(null);
+
   const [finalizando, setFinalizando] = useState(false);
   const [finalizarMsg, setFinalizarMsg] = useState<string | null>(null);
   const [modalCancelarReservaAbierto, setModalCancelarReservaAbierto] = useState(false);
   const [modalCancelarViajeAbierto, setModalCancelarViajeAbierto] = useState(false);
+  
+  // Nuevo estado para el modal de cancelación de viaje recurrente (padre)
+  const [modalCancelarViajeRecurrenteAbierto, setModalCancelarViajeRecurrenteAbierto] = useState(false);
+
+  const [reportandoIncomparecencia, setReportandoIncomparecencia] = useState(false);
+  const [incomparecenciaMsg, setIncomparecenciaMsg] = useState<string | null>(null);
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
-  type DetalleNavState = {
-    backTo?: string;
-    backLabel?: string;
-    rol?: 'conductor' | 'pasajero';
+  const usuarioActual = JSON.parse(localStorage.getItem('perfil') || '{}');
+  const usuarioIdActual = usuarioActual.id;
+
+  const esInstanciaRecurrente = Boolean(navState.esInstanciaRecurrente);
+
+  const backLabel = esInstanciaRecurrente
+    ? 'Volver a viajes asociados'
+    : 'Volver al inicio';
+
+  const volver = () => {
+    if (esInstanciaRecurrente) {
+      if (navState.slugPadre) {
+        navigate(`/viajes/${navState.slugPadre}/asociados`, { state: navState });
+      } else {
+        navigate(-1);
+      }
+    } else {
+      navigate('/');
+    }
   };
-
-  const location = useLocation();
-  const navState = (location.state ?? {}) as DetalleNavState;
-
-  const backTo = navState.backTo || '/';
-  const backLabel = navState.backLabel || 'Volver al inicio';
-
-  const volver = () => navigate(backTo);
 
   const fetchViaje = async () => {
     if (!slug) {
@@ -304,17 +349,161 @@ const DetalleViaje: React.FC = () => {
     }
   };
 
-  const confirmarCheckin = async () => {
+  // Función para manejar el botón PRESENTE de un pasajero llamando al endpoint
+  const marcarPresentePasajero = async (reservaId: number) => {
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/reservas/presentado?reservaId=${reservaId}`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo marcar como presente');
+      }
+
+      setEstadosPasajeros(prev => ({ ...prev, [reservaId]: 'PRESENTE' }));
+      await fetchViaje();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al marcar presente';
+      console.error(msg);
+    }
+  };
+
+  const reportarIncomparecenciaConductor = async () => {
     if (!viaje) return;
 
-    const checkinNormalizado = codigoCheckin.trim();
+    setReportandoIncomparecencia(true);
+    setIncomparecenciaMsg(null);
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/cancelarIncompareceConductor`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.message || 'No se pudo reportar la incomparecencia';
+        throw new Error(msg);
+      }
+
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setIncomparecenciaMsg('✅ Incomparecencia reportada correctamente. El viaje ha sido cancelado.');
+      
+      setTimeout(async () => {
+        await fetchViaje();
+        await fetchMiReserva();
+      }, 1500);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado';
+      setIncomparecenciaMsg(`❌ ${msg}`);
+    } finally {
+      setReportandoIncomparecencia(false);
+    }
+  };
+
+  const handleAceptarCheckinIndividual = async () => {
+    if (!reservaSeleccionadaParaPresente || !viaje) return;
+
+    const checkinViaje = viaje.checkin || '';
+    const codigoIngresadoLimpiado = codigoCheckinIndividual.trim().toUpperCase();
+    const checkinViajeLimpiado = String(checkinViaje).trim().toUpperCase();
+
+    if (codigoIngresadoLimpiado !== checkinViajeLimpiado) {
+      setErrorCheckinIndividual('❌ El código introducido no coincide con el check-in del viaje.');
+      return;
+    }
+    setErrorCheckinIndividual(null);
+    try {
+      await marcarPresentePasajero(reservaSeleccionadaParaPresente);
+      setModalPresenteAbierto(false);
+      setCodigoCheckinIndividual('');
+      setReservaSeleccionadaParaPresente(null);
+    } catch {
+      setErrorCheckinIndividual('❌ Error al procesar la solicitud.');
+    }
+  };
+
+  const marcarNoPresentadoPasajero = async (reservaId: number) => {
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/reservas/noPresentado?reservaId=${reservaId}`),
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || 'No se pudo marcar como no presentado');
+      }
+
+      setEstadosPasajeros(prev => ({ ...prev, [reservaId]: 'NO_PRESENTADO' }));
+
+      if (viaje && viaje.reservas && viaje.reservas.length === 1) {
+        try {
+          const cursoResponse = await fetch(
+            buildApiUrl(`/api/viajes/${viaje.slug}/en-curso`),
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          );
+
+          if (!cursoResponse.ok) {
+            const data = await cursoResponse.json().catch(() => null);
+            throw new Error(data?.message || 'No se pudo poner el viaje en curso automáticamente');
+          }
+
+          const viajeActualizado = await cursoResponse.json();
+          setViaje(viajeActualizado);
+          setIniciarMsg('✅ Único pasajero no presentado. Viaje pasado a EN_CURSO automáticamente.');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Error al poner en curso';
+          setIniciarMsg(`❌ ${msg}`);
+        }
+      } else {
+        await fetchViaje();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al marcar no presentado';
+      console.error(msg);
+    }
+  };
+
+  const confirmarCheckinGlobal = async () => {
+    if (!viaje) return;
+
+    const checkinNormalizado = codigoCheckinGlobal.trim();
     if (!checkinNormalizado) {
-      setCheckinMsg('❌ Debes introducir el código de check-in');
+      setCheckinGlobalMsg('❌ Debes introducir el código de check-in');
       return;
     }
 
-    setVerificandoCheckin(true);
-    setCheckinMsg(null);
+    setVerificandoCheckinGlobal(true);
+    setCheckinGlobalMsg(null);
 
     try {
       const response = await fetch(
@@ -336,15 +525,15 @@ const DetalleViaje: React.FC = () => {
 
       const viajeActualizado = await response.json();
       setViaje(viajeActualizado);
-      setCodigoCheckin('');
-      setModalCheckinAbierto(false);
-      setCheckinMsg(null);
+      setCodigoCheckinGlobal('');
+      setModalCheckinGlobalAbierto(false);
+      setCheckinGlobalMsg(null);
       setIniciarMsg('✅ Check-in validado correctamente. El viaje ha pasado a EN_CURSO.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al validar el check-in';
-      setCheckinMsg(`❌ ${msg}`);
+      setCheckinGlobalMsg(`❌ ${msg}`);
     } finally {
-      setVerificandoCheckin(false);
+      setVerificandoCheckinGlobal(false);
     }
   };
 
@@ -435,16 +624,6 @@ const DetalleViaje: React.FC = () => {
     return { origen, destino, paradasIntermedias };
   };
 
-  useEffect(() => {
-    if (cancelReservaMsg || errorEdicion || cancelMsg) {
-      console.debug('Logs de estado internos:', { 
-        cancelReservaMsg, 
-        errorEdicion, 
-        cancelMsg 
-      });
-    }
-  }, [cancelReservaMsg, errorEdicion, cancelMsg]);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -470,6 +649,13 @@ const DetalleViaje: React.FC = () => {
     );
   }
 
+  const esViajeRecurrentePadre = (viaje: Viaje): boolean => {
+    const tieneDias = viaje.diasSemana && viaje.diasSemana.length > 0;
+    const tieneInstancias = viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0;
+    
+    return Boolean(tieneDias || tieneInstancias);
+  };
+
   const iniciarProcesoPago = async () => {
     setReservaMsg(null);
 
@@ -486,18 +672,37 @@ const DetalleViaje: React.FC = () => {
     setReservando(true);
 
     try {
-      const resReserva = await fetch(buildApiUrl('/api/reservas/crear'), {
+      const esLote = esViajeRecurrentePadre(viaje);
+      
+      // Definimos el endpoint dependiendo de si reservamos en lote (recurrentes) o individual
+      const endpoint = esLote ? '/api/reservas/crear-lote' : '/api/reservas/crear';
+      
+      // Extraemos todos los IDs de los hijos a reservar si es un lote
+      const viajesRecurrentesIds = esLote && viaje?.viajesRecurrentes 
+        ? viaje.viajesRecurrentes.map(v => v.id) 
+        : [];
+
+      // Creamos el JSON correspondiente ESPEJO EXACTO de tu DTO
+      const payload = esLote ? {
+        viajeId: viaje?.id,                       // ID del padre
+        viajeRecurrenteIds: viajesRecurrentesIds, // Array de IDs de los hijos
+        cantidadPlazas: cantidadPlazas,           // Cambiado de 'plazas' a 'cantidadPlazas'
+        paradaSubidaId: paradaSubidaId,
+        paradaBajadaId: paradaBajadaId
+      } : {
+        viajeId: viaje?.id,                       // ID individual
+        cantidadPlazas: cantidadPlazas,           // Cambiado de 'plazas' a 'cantidadPlazas'
+        paradaSubidaId: paradaSubidaId,
+        paradaBajadaId: paradaBajadaId
+      };
+
+      const resReserva = await fetch(buildApiUrl(endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          viajeId: viaje?.id,
-          plazas: cantidadPlazas,
-          paradaSubidaId: paradaSubidaId,
-          paradaBajadaId: paradaBajadaId,
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!resReserva.ok) {
@@ -506,10 +711,10 @@ const DetalleViaje: React.FC = () => {
       }
 
       const data = await resReserva.json();
-      console.debug('Respuesta creación reserva:', data);
       if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
 
-      setReservaEnProcesoId(data.reservaId);
+      // Guardamos el clientSecret; Stripe pedirá la tarjeta una sola vez para el total
+      setReservaEnProcesoId(data.reservaId || data.loteId); // Ajusta si el backend devuelve un ID de lote
       setClientSecret(data.clientSecret);
       setMostrarStripe(true);
 
@@ -621,6 +826,7 @@ const DetalleViaje: React.FC = () => {
     }
   };
 
+  // Función para cancelar un viaje individual (o solo el padre si se prefiere)
   const confirmarCancelarViaje = async () => {
     if (!viaje) return;
 
@@ -650,11 +856,53 @@ const DetalleViaje: React.FC = () => {
       setCancelMsg('✅ Viaje cancelado correctamente.');
       setTimeout(() => {
         setModalCancelarViajeAbierto(false);
+        setModalCancelarViajeRecurrenteAbierto(false); // Cierra también el recurrente si estuviera abierto
         setCancelMsg(null);
       }, 1500);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al cancelar viaje';
+      setCancelMsg(`❌ ${msg}`);
+    } finally {
+      setCancelando(false);
+    }
+  };
+
+  // Función para cancelar el viaje en conjunto (usando tu segundo endpoint)
+  const confirmarCancelarViajeConjunto = async () => {
+    if (!viaje) return;
+
+    setCancelando(true);
+    setCancelMsg(null);
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/api/viajes/${viaje.slug}/cancelar-conjunto`),
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.error || data?.message || 'No se pudo cancelar el viaje en conjunto';
+        throw new Error(msg);
+      }
+
+      const viajeActualizado = await response.json();
+      setViaje(viajeActualizado);
+      setCancelMsg('✅ Viajes cancelados en conjunto correctamente.');
+      setTimeout(() => {
+        setModalCancelarViajeRecurrenteAbierto(false);
+        setCancelMsg(null);
+      }, 1500);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al cancelar el conjunto de viajes';
       setCancelMsg(`❌ ${msg}`);
     } finally {
       setCancelando(false);
@@ -786,31 +1034,76 @@ const DetalleViaje: React.FC = () => {
             <div className="mb-6 border-t border-slate-100 pt-6">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <span className="bg-blue-100 text-blue-600 p-1 rounded-md">👤</span>
-                Pasajeros confirmados
+                Pasajeros
               </h3>
               <div className="space-y-3">
-                {viaje.reservas.map((res) => (
-                  <div key={res.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
-                        {res.nombrePasajero.charAt(0)}
+                {viaje.reservas.map((res) => {
+                  const paradaSubida = viaje.paradas.find(p => p.id === res.paradaSubidaId);
+                  const estadoActualPasajero = estadosPasajeros[res.id];
+
+                  return (
+                    <div key={res.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
+                          {res.nombrePasajero.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-800">{res.nombrePasajero}</p>
+                          <p className="text-xs text-slate-500">
+                            {res.cantidadPlazas} plaza(s) • {res.estado}
+                          </p>
+                          <p className="text-xs font-medium text-indigo-600 mt-0.5">
+                            📍 Se sube en: {paradaSubida ? paradaSubida.localizacion : 'Parada no especificada'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-slate-800">{res.nombrePasajero}</p>
-                        <p className="text-xs text-slate-500">{res.cantidadPlazas} plaza(s) • {res.estado}</p>
+
+                      <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                        {viaje.estado === 'INICIADO' && (
+                          <div className="flex items-center gap-2 mr-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReservaSeleccionadaParaPresente(res.id);
+                                setCodigoCheckinIndividual('');
+                                setErrorCheckinIndividual(null);
+                                setModalPresenteAbierto(true);
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                estadoActualPasajero === 'PRESENTE'
+                                  ? 'bg-emerald-600 text-white shadow-sm'
+                                  : 'bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50'
+                              }`}
+                            >
+                              Presente
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => marcarNoPresentadoPasajero(res.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                estadoActualPasajero === 'NO_PRESENTADO'
+                                  ? 'bg-rose-600 text-white shadow-sm'
+                                  : 'bg-white border border-rose-600 text-rose-700 hover:bg-rose-50'
+                              }`}
+                            >
+                              No presentado
+                            </button>
+                          </div>
+                        )}
+
+                        {res.pasajeroSlug && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)}
+                            className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+                          >
+                            Ver perfil público
+                          </button>
+                        )}
                       </div>
                     </div>
-                    {res.pasajeroSlug && (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/usuarios/${res.pasajeroSlug}/perfil`)}
-                        className="rounded-full border border-blue-600 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-                      >
-                        Ver perfil público
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -846,40 +1139,102 @@ const DetalleViaje: React.FC = () => {
           )}
 
           {/* Información del viaje */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Fecha y Hora</p>
-              <p className="text-sm font-semibold text-slate-900">{formatFecha(viaje.fechaHoraSalida)}</p>
-            </div>
+            <div className="mb-6 space-y-4">
+              {esViajeRecurrentePadre(viaje) ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-xs">
+                  <h4 className="text-amber-900 font-semibold mb-3 flex items-center gap-2 text-base">
+                    <span>🔄</span> Configuración de Viaje Recurrente
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm text-slate-700">
+                    <p>
+                      <strong>Días activos:</strong> {viaje.diasSemana?.join(', ')}
+                    </p>
+                    {viaje.fechaFinRecurrencia && (
+                      <p>
+                        <strong>Válido hasta:</strong> {formatFecha(viaje.fechaFinRecurrencia)}
+                      </p>
+                    )}
+                  </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Plazas Disponibles</p>
-              <p className="text-sm font-semibold text-slate-900">{viaje.plazasDisponibles}</p>
-            </div>
+                  <div className="mt-4 pt-3 border-t border-amber-200/80 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/viajes/${viaje.slug}/asociados`, {
+                        state: {
+                          rol: navState.rol,
+                          viajesRecurrentes: viaje.viajesRecurrentes,
+                          usuarioActual: usuarioActual,       // <-- Añadido aquí
+                          usuarioId: usuarioIdActual,
+                          slugPadre: viaje.slug,
+                          esRecurrente: true,
+                          viajePadre: {
+                            id: viaje.id,
+                            slug: viaje.slug,
+                            origen: viaje.paradas.find(p => p.tipo === 'ORIGEN')?.localizacion || 'Desconocido',
+                            destino: viaje.paradas.find(p => p.tipo === 'DESTINO')?.localizacion || 'Desconocido',
+                            precio: viaje.precio,
+                            diasSemana: viaje.diasSemana,
+                            fechaFinRecurrencia: viaje.fechaFinRecurrencia,
+                            paradas: viaje.paradas,
+                            reservas: viaje.reservas
+                          }
+                        }
+                      })}
+                      className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-700 transition-all flex items-center gap-2"
+                    >
+                      <span>🔍 Ver viajes asociados ({viaje.viajesRecurrentes?.length || 0})</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-sm text-slate-700">
+                    <strong className="text-slate-900">Fecha y hora de salida:</strong> {formatFecha(viaje.fechaHoraSalida)}
+                  </p>
+                </div>
+              )}
 
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Precio</p>
-              <p className="text-sm font-semibold text-slate-900">{viaje.precio}€</p>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Fecha y hora de salida</p>
+                  <p className="text-base font-bold text-slate-900">{formatFecha(viaje.fechaHoraSalida)}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Plazas Disponibles</p>
+                  <p className="text-base font-bold text-slate-900">{viaje.plazasDisponibles}</p>
+                </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-medium text-slate-600 mb-1">Estado</p>
-              <p className="text-sm font-semibold text-slate-900">{viaje.estado}</p>
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Precio por plaza</p>
+                  <p className="text-base font-bold text-slate-900">{viaje.precio}€</p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-xs">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Estado actual</p>
+                  <p className="text-base font-bold text-slate-900">{viaje.estado}</p>
+                </div>
+              </div>
             </div>
-          </div>
 
           {/* SECCIÓN DE BOTONES DINÁMICOS */}
           <div className="space-y-3">
-            
-            {/* CASO: USUARIO ES EL PASAJERO */}
             {navState.rol !== 'conductor' && (
               <>
-                {/* Si NO tiene reserva activa: Botón Reservar */}
-                {(!miReserva || miReserva.estado === 'CANCELADA') ? (
+                {viaje.estado === 'FINALIZADO' ? (
+                  <div className="text-center p-4 bg-slate-100 rounded-xl text-slate-600 text-sm italic border border-slate-200">
+                    Este viaje ha finalizado. No hay acciones disponibles.
+                  </div>
+                ) : (!miReserva || miReserva.estado === 'CANCELADA') ? (
                   <button
                     type="button"
                     className="w-full mt-4 rounded-xl bg-gradient-compi px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-indigo-100 hover:opacity-95 transition-all active:scale-[0.98] disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed"
-                    disabled={viaje.plazasDisponibles <= 0 || viaje.estado === 'CANCELADO' || viaje.estado === 'FINALIZADO'}
+                    disabled={
+                      viaje.plazasDisponibles <= 0 ||
+                      viaje.estado === 'CANCELADO' ||
+                      viaje.estado === 'INICIADO' ||
+                      viaje.estado === 'EN_CURSO' ||
+                      yaEsHoraDeSalida
+                    }
                     onClick={() => {
                       setReservaMsg(null);
                       setAceptaBloqueoPago(false);
@@ -889,16 +1244,20 @@ const DetalleViaje: React.FC = () => {
                       setModalReservaAbierto(true);
                     }}
                   >
-                    {viaje.plazasDisponibles > 0 ? (
-                      <span className="flex items-center justify-center gap-2">
-                        ✨ Reservar ahora
-                      </span>
-                    ) : (
+                    {viaje.plazasDisponibles <= 0 ? (
                       '🚫 Sin plazas disponibles'
+                    ) : viaje.estado === 'INICIADO' || viaje.estado === 'EN_CURSO' ? (
+                      '🚫 Viaje iniciado'
+                    ) : yaEsHoraDeSalida ? (
+                      '🚫 La hora de salida ya ha pasado'
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        ✨ {esViajeRecurrentePadre(viaje) ? 'Reservar viajes recurrentes' : 'Reservar ahora'}
+                      </span>
                     )}
                   </button>
                 ) : (
-                  /* Si TIENE reserva: Botones Modificar y Cancelar */
+                  /* SI YA TIENE UNA RESERVA ACTIVA */
                   <div className="space-y-3">
                     {esModificable(viaje.fechaHoraSalida) ? (
                       <button
@@ -935,16 +1294,37 @@ const DetalleViaje: React.FC = () => {
                       {cancelandoReserva ? 'Cancelando...' : 'Cancelar mi reserva'}
                     </button>
                     
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={reportarIncomparecenciaConductor}
+                        disabled={reportandoIncomparecencia}
+                        className="w-full rounded-lg bg-rose-600 px-6 py-3 text-base font-bold text-white hover:bg-rose-700 disabled:opacity-60 transition-all shadow-sm flex items-center justify-center gap-2"
+                      >
+                        {reportandoIncomparecencia ? 'Procesando...' : '⚠️ El conductor no se ha presentado'}
+                      </button>
+                      <p className="mt-1 text-[11px] text-slate-500 text-center">
+                        Usa este botón si ha pasado la hora de salida y el conductor no ha acudido.
+                      </p>
+
+                      {incomparecenciaMsg && (
+                        <div className={`mt-2 p-3 rounded-xl text-xs font-bold border ${
+                          incomparecenciaMsg.includes('✅') 
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                            : 'bg-red-50 border-red-200 text-red-700'
+                        }`}>
+                          {incomparecenciaMsg}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </>
             )}
 
-            {/* CASO: USUARIO ES EL CONDUCTOR */}
+
             {navState.rol === 'conductor' && (
               <div className="space-y-3">
-
-                {/* BOTÓN INICIAR VIAJE */}
                 {viaje.estado !== 'CANCELADO' && viaje.estado !== 'FINALIZADO' && viaje.estado !== 'INICIADO' && viaje.estado !== 'EN_CURSO' && (
                   <div>
                     <button
@@ -972,24 +1352,88 @@ const DetalleViaje: React.FC = () => {
 
                 {viaje.estado === 'INICIADO' && (
                   <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCheckinMsg(null);
-                        setCodigoCheckin('');
-                        setModalCheckinAbierto(true);
-                      }}
-                      className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
-                    >
-                      📲 Realizar check-in
-                    </button>
+                    {(() => {
+                      const todosRevisados = Boolean(
+                        viaje?.reservas &&
+                        viaje.reservas.length > 0 &&
+                        viaje.reservas.every(r => estadosPasajeros[r.id] !== undefined || r.estado === 'PRESENTE' || r.estado === 'NO_PRESENTADO')
+                      );
+
+                      if (!todosRevisados) {
+                        return (
+                          <div className="text-center p-3 bg-amber-50 rounded-xl text-amber-700 text-xs font-medium border border-amber-200">
+                            ⚠️ Debes revisar el estado (presente o no presentado) de todos los pasajeros antes de continuar.
+                          </div>
+                        );
+                      }
+
+                      const hayPasajeroPresente = viaje.reservas?.some(res => 
+                        estadosPasajeros[res.id] === 'PRESENTE' || res.estado === 'PRESENTE'
+                      );
+
+                      if (hayPasajeroPresente) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCheckinGlobalMsg(null);
+                              setCodigoCheckinGlobal('');
+                              setModalCheckinGlobalAbierto(true);
+                            }}
+                            className="w-full rounded-lg bg-blue-600 px-6 py-3 text-base font-bold text-white hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
+                          >
+                            📲 Realizar check-in global
+                          </button>
+                        );
+                      } else {
+                        return (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setIniciando(true);
+                              setIniciarMsg(null);
+                              try {
+                                const response = await fetch(
+                                  buildApiUrl(`/api/viajes/${viaje.slug}/en-curso`),
+                                  {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${token}`
+                                    }
+                                  }
+                                );
+
+                                if (!response.ok) {
+                                  const data = await response.json().catch(() => null);
+                                  throw new Error(data?.message || 'No se pudo poner el viaje en curso');
+                                }
+
+                                const viajeActualizado = await response.json();
+                                setViaje(viajeActualizado);
+                                setIniciarMsg('✅ El viaje ha pasado a EN_CURSO automáticamente.');
+                              } catch (err) {
+                                const msg = err instanceof Error ? err.message : 'Error al poner en curso';
+                                setIniciarMsg(`❌ ${msg}`);
+                              } finally {
+                                setIniciando(false);
+                              }
+                            }}
+                            disabled={iniciando}
+                            className="w-full rounded-lg bg-indigo-600 px-6 py-3 text-base font-bold text-white hover:bg-indigo-700 transition-all shadow-md flex items-center justify-center gap-2 disabled:bg-slate-300"
+                          >
+                            {iniciando ? 'Procesando...' : '⚡ Poner viaje en curso automáticamente'}
+                          </button>
+                        );
+                      }
+                    })()}
+
                     <p className="text-xs text-slate-500 text-center">
-                      El viaje ya está iniciado. Ahora puedes validar el código para pasar a EN_CURSO.
+                      El viaje ya está iniciado. Gestiona la presencia de los pasajeros para habilitar la opción correspondiente.
                     </p>
                   </div>
                 )}
 
-                {/* BOTÓN FINALIZAR VIAJE (UNA VEZ EN CURSO) */}
                 {viaje.estado === 'EN_CURSO' && (
                   <div>
                     <button
@@ -1032,8 +1476,12 @@ const DetalleViaje: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setCancelMsg(null);
-                      setModalCancelarViajeAbierto(true);
+                      if (viaje.fechaFinRecurrencia) {
+                        setModalCancelarViajeRecurrenteAbierto(true);
+                      } else {
+                        setCancelMsg(null);
+                        setModalCancelarViajeAbierto(true);
+                      }
                     }}
                     disabled={cancelando}
                     className="w-full rounded-lg bg-red-600 px-6 py-3 text-base font-bold text-white hover:bg-red-700 disabled:opacity-60 transition-all shadow-sm"
@@ -1062,7 +1510,6 @@ const DetalleViaje: React.FC = () => {
                 attribution='&copy; OpenStreetMap contributors'
               />
 
-              {/* Mostrar marcadores de paradas */}
               {paradasConCoordenadas.map((parada) => {
                 if (!parada.lat || !parada.lng) return null;
 
@@ -1087,7 +1534,6 @@ const DetalleViaje: React.FC = () => {
                 );
               })}
 
-              {/* Línea de ruta */}
               {routeLine.length > 1 && (
                 <Polyline positions={routeLine} color="blue" weight={3} opacity={0.7} />
               )}
@@ -1108,13 +1554,14 @@ const DetalleViaje: React.FC = () => {
         {modalReservaAbierto && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 flex flex-col max-h-[90vh]">
-              
-              {/* Header Modal (Fijo) */}
               <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-white rounded-t-2xl">
                 <h2 className="text-xl font-bold text-slate-900">
                   {reservaMsg?.includes('✅') 
                     ? (miReserva ? 'Actualización completada' : '¡Reserva realizada!') 
-                    : (miReserva ? 'Modificar mi reserva' : 'Reservar viaje')
+                    : (miReserva 
+                        ? 'Modificar mi reserva' 
+                        : (esViajeRecurrentePadre(viaje) ? 'Reservar viajes recurrentes' : 'Reservar viaje')
+                      )
                   }
                 </h2>
                 <button
@@ -1126,7 +1573,6 @@ const DetalleViaje: React.FC = () => {
                 </button>
               </div>
 
-              {/* Body Modal (CON SCROLL) */}
               <div className="px-6 py-4 overflow-y-auto flex-1 space-y-6 custom-scrollbar">
                 {!isLoggedIn ? (
                   <div className="space-y-4">
@@ -1159,9 +1605,12 @@ const DetalleViaje: React.FC = () => {
                       <Elements stripe={stripePromise} options={{ clientSecret }}>
                           <CheckoutForm 
                             clientSecret={clientSecret} 
-                            monto={cantidadPlazas * (viaje?.precio || 0)}
-                            onSuccess={(id) => { 
-                                console.log("Pago autorizado con ID:", id);
+                            monto={
+                              esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0
+                                ? cantidadPlazas * (viaje?.precio || 0) * viaje.viajesRecurrentes.length
+                                : cantidadPlazas * (viaje?.precio || 0)
+                            }
+                            onSuccess={(_id) => { 
                                 setMostrarStripe(false);
                                 reservarPlazas(); 
                             }}
@@ -1173,8 +1622,21 @@ const DetalleViaje: React.FC = () => {
                     </div>
                   ) : (
                   <div className="space-y-6">
-                    
-                    {/* Resumen de ruta visual */}
+                    {/* Mensaje informativo para viajes recurrentes */}
+                    {esViajeRecurrentePadre(viaje) && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-2 shadow-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-900 text-sm">
+                          <span>🔄</span> Reserva múltiple para viajes recurrentes
+                        </div>
+                        <p className="leading-relaxed">
+                          Esta reserva se aplicará a todos los viajes seleccionados de la serie con el mismo número de plazas y la misma parada de subida y bajada.
+                        </p>
+                        <p className="text-amber-800 italic leading-relaxed pt-1.5 border-t border-amber-200/60">
+                          Si quieres cambiar el número de plazas de un viaje concreto o las paradas, puedes modificar la reserva posteriormente o hacerla de manera individual.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="relative pl-8 py-1">
                       <div className="absolute left-[11px] top-3 bottom-3 w-0.5 border-l-2 border-dashed border-slate-200"></div>
                       
@@ -1195,15 +1657,17 @@ const DetalleViaje: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Selectores de Paradas */}
                     <div className="grid grid-cols-1 gap-4 py-2 border-y border-slate-100">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de subida</label>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Punto de subida {esViajeRecurrentePadre(viaje) && '(para todos los viajes)'}
+                        </label>
                         <select 
                           value={paradaSubidaId || ''} 
                           onChange={(e) => setParadaSubidaId(Number(e.target.value))}
                           className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
                         >
+                          <option value="" disabled>Selecciona parada de subida</option>
                           {viaje.paradas
                             .sort((a, b) => a.orden - b.orden)
                             .filter(p => p.tipo !== 'DESTINO')
@@ -1214,12 +1678,15 @@ const DetalleViaje: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1">Punto de bajada</label>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Punto de bajada {esViajeRecurrentePadre(viaje) && '(para todos los viajes)'}
+                        </label>
                         <select 
                           value={paradaBajadaId || ''} 
                           onChange={(e) => setParadaBajadaId(Number(e.target.value))}
                           className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
                         >
+                          <option value="" disabled>Selecciona parada de bajada</option>
                           {viaje.paradas
                             .sort((a, b) => a.orden - b.orden)
                             .filter(p => {
@@ -1233,44 +1700,59 @@ const DetalleViaje: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Selector de plazas */}
                     <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-slate-700">Número de plazas</label>
-                      {(() => {
-                        const misPlazasActuales = miReserva?.cantidadPlazas || 0;
-                        const plazasLibresTotales = (viaje?.plazasDisponibles || 0) + misPlazasActuales;
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Número de plazas {esViajeRecurrentePadre(viaje) && '(para todos los viajes)'}
+                      </label>
+                      {esViajeRecurrentePadre(viaje) ? (
+                        <select
+                          value={cantidadPlazas}
+                          onChange={(e) => setCantidadPlazas(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800"
+                        >
+                          {Array.from({ length: Math.min(viaje.plazasDisponibles || 1, 8) }, (_, i) => i + 1).map((num) => (
+                            <option key={num} value={num}>
+                              {num} {num === 1 ? 'plaza' : 'plazas'}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        (() => {
+                          const misPlazasActuales = miReserva?.cantidadPlazas || 0;
+                          const plazasLibresTotales = (viaje?.plazasDisponibles || 0) + misPlazasActuales;
 
-                        return (
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
-                              disabled={reservando || cantidadPlazas <= 1}
-                              className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
-                            > − </button>
-                            <input
-                              type="number"
-                              readOnly
-                              value={cantidadPlazas}
-                              className="w-16 rounded-lg border border-slate-300 h-10 text-center font-bold bg-slate-50"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setCantidadPlazas(Math.min(plazasLibresTotales, cantidadPlazas + 1))}
-                              disabled={reservando || cantidadPlazas >= plazasLibresTotales}
-                              className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
-                            > + </button>
-                            <span className="text-xs text-slate-500 font-medium">Máximo: {plazasLibresTotales}</span>
-                          </div>
-                        );
-                      })()}
+                          return (
+                            <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setCantidadPlazas(Math.max(1, cantidadPlazas - 1))}
+                                disabled={reservando || cantidadPlazas <= 1}
+                                className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                              > − </button>
+                              <input
+                                type="number"
+                                readOnly
+                                value={cantidadPlazas}
+                                className="w-16 rounded-lg border border-slate-300 h-10 text-center font-bold bg-slate-50"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setCantidadPlazas(Math.min(plazasLibresTotales, cantidadPlazas + 1))}
+                                disabled={reservando || cantidadPlazas >= plazasLibresTotales}
+                                className="rounded-lg border border-slate-300 w-10 h-10 flex items-center justify-center font-bold disabled:opacity-50 hover:bg-slate-50 transition-colors"
+                              > + </button>
+                              <span className="text-xs text-slate-500 font-medium">Máximo: {plazasLibresTotales}</span>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
 
-                    {/* SECCIÓN DE PAGO Y CONCILIACIÓN */}
                     <div className="pt-2">
                       {miReserva ? (
                         (() => {
-                          const precioUnitario = Number(viaje?.precio || 0);
+                          const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? (viaje.viajesRecurrentes.length + 1) : 1;
+                          const precioUnitario = Number(viaje?.precio || 0) * numViajes;
                           const plazasOriginales = miReserva.cantidadPlazas;
                           const diferencia = (cantidadPlazas - plazasOriginales) * precioUnitario;
 
@@ -1314,28 +1796,38 @@ const DetalleViaje: React.FC = () => {
                         })()
                       ) : (
                         <div className="space-y-4">
-                          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
-                            <div>
-                              <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest leading-none mb-1">Total a pagar ahora</p>
-                              <p className="text-2xl font-black text-indigo-900">{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</p>
-                            </div>
-                          </div>
-                          <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={aceptaBloqueoPago}
-                              onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
-                              className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                            />
-                            <span className="text-xs text-slate-700 leading-snug">
-                              Acepto el cargo de <strong>{(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€</strong> para confirmar mi plaza en el viaje.
-                            </span>
-                          </label>
+                          {(() => {
+                            const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? (viaje.viajesRecurrentes.length + 1) : 1;
+                            const totalCalculado = cantidadPlazas * (viaje?.precio || 0) * numViajes;
+
+                            return (
+                              <>
+                                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
+                                  <div>
+                                    <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest leading-none mb-1">
+                                      Total a pagar ahora {esViajeRecurrentePadre(viaje) && `(${numViajes} viajes)`}
+                                    </p>
+                                    <p className="text-2xl font-black text-indigo-900">{totalCalculado.toFixed(2)}€</p>
+                                  </div>
+                                </div>
+                                <label className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={aceptaBloqueoPago}
+                                    onChange={(e) => setAceptaBloqueoPago(e.target.checked)}
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                  />
+                                  <span className="text-xs text-slate-700 leading-snug">
+                                    Acepto el cargo de <strong>{totalCalculado.toFixed(2)}€</strong> para confirmar mi plaza en {esViajeRecurrentePadre(viaje) ? `los ${numViajes} viajes seleccionados` : 'el viaje'}.
+                                  </span>
+                                </label>
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
 
-                    {/* Mensaje de error/éxito */}
                     {reservaMsg && (
                       <div className={`p-3 rounded-xl text-xs font-bold border animate-in fade-in slide-in-from-top-2 ${
                         reservaMsg.includes('✅') || reservaMsg.toLowerCase().includes('éxito') 
@@ -1349,11 +1841,12 @@ const DetalleViaje: React.FC = () => {
                 )}
               </div>
 
-              {/* Footer Modal (Fijo abajo) */}
               <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex flex-col gap-2">
                 {isLoggedIn && (
                   (() => {
-                    const precioUnitario = Number(viaje?.precio || 0);
+                    const numViajes = (esViajeRecurrentePadre(viaje) && viaje.viajesRecurrentes && viaje.viajesRecurrentes.length > 0) ? (viaje.viajesRecurrentes.length + 1) : 1;
+                    const precioTotalCalculado = cantidadPlazas * (viaje?.precio || 0) * numViajes;
+                    const precioUnitario = Number(viaje?.precio || 0) * numViajes;
                     const diferencia = (cantidadPlazas - (miReserva?.cantidadPlazas || 0)) * precioUnitario;
                     
                     const haCambiadoPlazas = miReserva && cantidadPlazas !== miReserva.cantidadPlazas;
@@ -1384,7 +1877,7 @@ const DetalleViaje: React.FC = () => {
                       >
                         {mostrarStripe ? "Esperando pago..." 
                         : (miReserva ? "Guardar Cambios" 
-                        : `Pagar ${(cantidadPlazas * (viaje?.precio || 0)).toFixed(2)}€ y Reservar`)
+                        : `Pagar ${precioTotalCalculado.toFixed(2)}€ y Reservar`)
                       }
                       </button>
                     );
@@ -1408,7 +1901,6 @@ const DetalleViaje: React.FC = () => {
       {modalEditarViajeAbierto && viaje && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200">
-            
             <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center z-10">
               <h2 className="text-xl font-bold text-slate-900">Editar mi viaje</h2>
               <button onClick={() => setModalEditarViajeAbierto(false)} className="text-slate-400 hover:text-slate-900 text-2xl">✕</button>
@@ -1488,8 +1980,74 @@ const DetalleViaje: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Checkin */}
-      {modalCheckinAbierto && viaje && (
+      {/* MODAL: POP-UP DE VERIFICACIÓN DE CÓDIGO DE CHECK-IN PARA EL BOTÓN PRESENTE */}
+      {modalPresenteAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Verificar Check-in de Pasajero</h3>
+                <p className="text-xs text-slate-500">Introduce el código para confirmar la presencia.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setModalPresenteAbierto(false);
+                  setCodigoCheckinIndividual('');
+                  setErrorCheckinIndividual(null);
+                }}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Código del viaje
+                </label>
+                <input
+                  type="text"
+                  value={codigoCheckinIndividual}
+                  onChange={(e) => setCodigoCheckinIndividual(e.target.value)}
+                  placeholder="Introduce el código"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 uppercase tracking-[0.2em]"
+                  autoComplete="off"
+                />
+              </div>
+
+              {errorCheckinIndividual && (
+                <div className="p-3 rounded-xl text-xs font-bold border bg-red-50 border-red-200 text-red-700">
+                  {errorCheckinIndividual}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => {
+                    setModalPresenteAbierto(false);
+                    setCodigoCheckinIndividual('');
+                    setErrorCheckinIndividual(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAceptarCheckinIndividual}
+                  className="rounded-lg bg-emerald-600 px-6 py-2 text-sm font-bold text-white hover:bg-emerald-700 transition-all"
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Checkin Global */}
+      {modalCheckinGlobalAbierto && viaje && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -1499,8 +2057,8 @@ const DetalleViaje: React.FC = () => {
               </div>
               <button
                 onClick={() => {
-                  setModalCheckinAbierto(false);
-                  setCheckinMsg(null);
+                  setModalCheckinGlobalAbierto(false);
+                  setCheckinGlobalMsg(null);
                 }}
                 className="text-slate-400 hover:text-slate-900 text-2xl"
               >
@@ -1515,25 +2073,25 @@ const DetalleViaje: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={codigoCheckin}
-                  onChange={(e) => setCodigoCheckin(e.target.value)}
+                  value={codigoCheckinGlobal}
+                  onChange={(e) => setCodigoCheckinGlobal(e.target.value)}
                   placeholder="Introduce el código"
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 uppercase tracking-[0.2em]"
                   autoComplete="off"
                 />
               </div>
 
-              {checkinMsg && (
-                <div className={`p-3 rounded-xl text-xs font-bold border ${checkinMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                  {checkinMsg}
+              {checkinGlobalMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${checkinGlobalMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {checkinGlobalMsg}
                 </div>
               )}
 
               <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <button
                   onClick={() => {
-                    setModalCheckinAbierto(false);
-                    setCheckinMsg(null);
+                    setModalCheckinGlobalAbierto(false);
+                    setCheckinGlobalMsg(null);
                   }}
                   className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900"
                 >
@@ -1541,11 +2099,11 @@ const DetalleViaje: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={confirmarCheckin}
-                  disabled={verificandoCheckin}
+                  onClick={confirmarCheckinGlobal}
+                  disabled={verificandoCheckinGlobal}
                   className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-all disabled:bg-slate-300"
                 >
-                  {verificandoCheckin ? 'Verificando...' : 'Confirmar check-in'}
+                  {verificandoCheckinGlobal ? 'Verificando...' : 'Confirmar check-in'}
                 </button>
               </div>
             </div>
@@ -1668,6 +2226,89 @@ const DetalleViaje: React.FC = () => {
                   className="rounded-lg bg-red-600 px-6 py-2 text-sm font-bold text-white hover:bg-red-700 transition-all disabled:bg-slate-300"
                 >
                   {cancelando ? 'Procesando...' : 'Sí, cancelar viaje'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CANCELAR VIAJE RECURRENTE (PADRE) */}
+      {modalCancelarViajeRecurrenteAbierto && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cancelar viaje recurrente</h3>
+                <p className="text-xs text-slate-500">Este viaje pertenece a una serie periódica</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalCancelarViajeRecurrenteAbierto(false)}
+                className="text-slate-400 hover:text-slate-900 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-600">
+                ¿Cómo deseas proceder con la cancelación de este viaje?
+              </p>
+
+              {cancelMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold border ${
+                  cancelMsg.includes('✅') 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {cancelMsg}
+                </div>
+              )}
+
+              <div className="space-y-3 pt-1">
+                {/* Opción 1: Solo este viaje */}
+                <button
+                  type="button"
+                  onClick={confirmarCancelarViaje}
+                  disabled={cancelando}
+                  className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all text-left group disabled:opacity-50 flex items-start gap-3 shadow-xs"
+                >
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm group-hover:text-slate-900">
+                      Cancelar solo este viaje
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Se anulará únicamente esta fecha. El resto de salidas programadas se mantendrán activas.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opción 2: Toda la serie */}
+                <button
+                  type="button"
+                  onClick={confirmarCancelarViajeConjunto}
+                  disabled={cancelando}
+                  className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all text-left group disabled:opacity-50 flex items-start gap-3 shadow-xs"
+                >
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm group-hover:text-slate-900">
+                      Cancelar toda la serie
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Se anularán este viaje y todas sus repeticiones futuras asociadas.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalCancelarViajeRecurrenteAbierto(false)}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  Volver
                 </button>
               </div>
             </div>

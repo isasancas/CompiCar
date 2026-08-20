@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.compicar.persona.Persona;
+
 @Repository
 public interface ViajeRepository extends JpaRepository<Viaje, Long> {
 
@@ -20,7 +22,7 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
 
     List<Viaje> findByPersonaId(Long personaId);
 
-    @Query("SELECT r.viaje FROM Reserva r WHERE r.persona.id = :personaId")
+    @Query("SELECT r.viaje FROM Reserva r WHERE r.persona.id = :personaId AND r.estado != 'CANCELADA'")
     List<Viaje> findViajesParticipadosByPersonaId(@Param("personaId") Long personaId);
 
     Optional<Viaje> findBySlug(String slug);
@@ -55,5 +57,16 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
         @Param("estados") Set<EstadoViaje> estados,
         @Param("inicio") LocalDateTime inicio,
         @Param("fin") LocalDateTime fin
+    );
+
+    // Próximo viaje simple como conductor
+    @Query("SELECT v FROM Viaje v WHERE v.persona = :persona " +
+           "AND v.fechaHoraSalida >= :fechaHora " +
+           "AND v.estado != :estadoCancelado " +
+           "ORDER BY v.fechaHoraSalida ASC LIMIT 1")
+    Optional<Viaje> findProximoViajeConductor(
+        @Param("persona") Persona persona,
+        @Param("fechaHora") LocalDateTime fechaHora,
+        @Param("estadoCancelado") EstadoViaje estadoCancelado
     );
 }

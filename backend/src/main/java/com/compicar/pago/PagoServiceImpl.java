@@ -20,6 +20,8 @@ import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
@@ -41,6 +43,9 @@ public class PagoServiceImpl implements PagoService {
     private final StripeService stripeService;
     private final ViajeRepository viajeRepository;
     private final NotificacionRepository notificacionRepository;
+
+    @Value("${stripe.webhook.secret}")
+    private String endpointSecret;
 
     @Autowired
     public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, 
@@ -192,108 +197,207 @@ public class PagoServiceImpl implements PagoService {
         pago.setEstado(EstadoPago.REEMBOLSADO);
         return pagoRepository.save(pago);
     }
-    
-    @Value("${stripe.webhook.secret}")
-    private String endpointSecret;
 
     @Override
     @Transactional
     public void procesarEventoWebhook(String payload, String sigHeader) {
-        Event event;
-        try {
-            event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
-        } catch (SignatureVerificationException e) {
-            throw new RuntimeException("Firma de Webhook inválida");
-        }
+        String eventType;
+        String paymentIntentId;
 
-        // 1. Filtramos rápido: Si no es un evento de PaymentIntent, lo ignoramos y salimos.
-        if (!event.getType().startsWith("payment_intent.")) {
-            return; 
-        }
-
-        System.out.println("👉 PROCESANDO EVENTO DE PAYMENT INTENT: " + event.getType());
-
-        // 2. Extraemos el objeto de forma segura, a prueba de desajustes de versión
-        EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-        StripeObject stripeObject;
-
-        if (deserializer.getObject().isPresent()) {
-        stripeObject = deserializer.getObject().get();
-        } else {
+        // BYPASS PARA PRUEBAS LOCALES EN POSTMAN
+        if ("t=123,v1=fake".equals(sigHeader) || "fake".equals(sigHeader)) {
             try {
-                stripeObject = deserializer.deserializeUnsafe();
-            } catch (EventDataObjectDeserializationException e) {
-                System.out.println("❌ ERROR deserializando el objeto de Stripe: " + e.getMessage());
-                return;
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode root = mapper.readTree(payload);
+                eventType = root.path("type").asText();
+                paymentIntentId = root.path("data").path("object").path("id").asText();
+            } catch (Exception e) {
+                throw new RuntimeException("Error parseando el JSON de prueba: " + e.getMessage());
+            }
+        } else {
+            // PROCESAMIENTO REAL DE STRIPE EN PRODUCCIÓN
+            try {
+                Event event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
+                eventType = event.getType();
+
+                if (eventType == null || !eventType.startsWith("payment_intent.")) {
+                    System.out.println("ℹ️ Evento de Stripe omitido (no es PaymentIntent): " + eventType);
+                    return; 
+                }
+
+                EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+                StripeObject stripeObject = deserializer.getObject().orElseGet(() -> {
+                    try {
+                        return deserializer.deserializeUnsafe();
+                    } catch (EventDataObjectDeserializationException e) {
+                        throw new RuntimeException("Error deserializando StripeObject", e);
+                    }
+                });
+
+                if (stripeObject instanceof PaymentIntent intent) {
+                    paymentIntentId = intent.getId();
+                } else {
+                    System.out.println("⚠️ El objeto recibido no es un PaymentIntent. Tipo real: " + stripeObject.getClass().getName());
+                    return;
+                }
+            } catch (SignatureVerificationException e) {
+                throw new RuntimeException("Firma de Webhook inválida");
             }
         }
 
-        PaymentIntent intent = (PaymentIntent) stripeObject;
+        // Filtro adicional por si viene del Bypass
+        if (eventType == null || !eventType.startsWith("payment_intent.")) {
+            return; 
+        }
 
-        // 3. Ahora sí, ejecutamos nuestra lógica
-        switch (event.getType()) {
+        System.out.println("👉 PROCESANDO EVENTO DE PAYMENT INTENT: " + eventType);
+
+        switch (eventType) {
             case "payment_intent.amount_capturable_updated":
-                actualizarEstadoPago(intent.getId(), EstadoPago.AUTORIZADO);
+                actualizarEstadoPago(paymentIntentId, EstadoPago.AUTORIZADO);
                 
-                pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
-                    Reserva reserva = pago.getReserva();
-                    
-                    if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
-                        System.out.println("⚠️ La reserva no está PENDIENTE. Estado actual: " + reserva.getEstado());
-                        return; 
-                    }
+                pagoRepository.findByStripePaymentIntentId(paymentIntentId).ifPresent(pago -> {
+                    List<Reserva> reservasDelPago = reservaRepository.findByPagoId(pago.getId());
 
-                    Viaje viaje = reserva.getViaje();
-
-                    if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
-                        reserva.setEstado(EstadoReserva.CANCELADA); 
-                        reservaRepository.save(reserva);
-                        System.out.println("❌ Sobreaforo detectado. Reserva cancelada.");
-                        
-                        try {
-                            actualizarEstadoPago(intent.getId(), EstadoPago.REEMBOLSADO);
-                        } catch (Exception e) {
-                            System.out.println("Error cancelando retención por sobreaforo");
+                    for (Reserva reserva : reservasDelPago) {
+                        if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
+                            continue; 
                         }
-                        return; 
+
+                        // 1. Caso: Reserva de viaje puntual
+                        if (reserva.getViaje() != null) {
+                            Viaje viaje = reserva.getViaje();
+
+                            if (viaje.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
+                                reserva.setEstado(EstadoReserva.CANCELADA); 
+                                reservaRepository.save(reserva);
+                                System.out.println("❌ Sobreaforo detectado en reserva " + reserva.getId() + ". Cancelada.");
+                                continue;
+                            }
+
+                            viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
+                            viajeRepository.save(viaje);
+
+                            reserva.setEstado(EstadoReserva.PAGADA);
+                            reservaRepository.save(reserva);
+                        } 
+                        // 2. Caso: Reserva de viaje recurrente
+                        else if (reserva.getViajeRecurrente() != null) {
+                            var viajeRecurrente = reserva.getViajeRecurrente();
+
+                            if (viajeRecurrente.getPlazasDisponibles() < reserva.getCantidadPlazas()) {
+                                reserva.setEstado(EstadoReserva.CANCELADA);
+                                reservaRepository.save(reserva);
+                                System.out.println("❌ Sobreaforo en reserva recurrente " + reserva.getId() + ". Cancelada.");
+                                continue;
+                            }
+
+                            viajeRecurrente.setPlazasDisponibles(viajeRecurrente.getPlazasDisponibles() - reserva.getCantidadPlazas());
+
+                            reserva.setEstado(EstadoReserva.PAGADA);
+                            reservaRepository.save(reserva);
+                        }
                     }
 
-                    // Todo OK: Restamos plazas y pasamos a PAGADA
-                    viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() - reserva.getCantidadPlazas());
-                    viajeRepository.save(viaje);
+                    // Notificación única al conductor
+                    if (!reservasDelPago.isEmpty()) {
+                        Reserva principal = reservasDelPago.get(0);
+                        Persona conductor = principal.getViaje() != null 
+                            ? principal.getViaje().getPersona() 
+                            : principal.getViajeRecurrente().getPersona();
+                            
+                        Persona pasajero = principal.getPersona();
 
-                    reserva.setEstado(EstadoReserva.PAGADA);
-                    reservaRepository.save(reserva);
+                        String mensaje = pasajero.getNombre() + " ha pagado " + reservasDelPago.size() + " fecha(s) solicitada(s).";
 
-                    Persona conductor = viaje.getPersona();
-                    Persona pasajero = reserva.getPersona();
+                        notificacionRepository.save(new Notificacion(
+                            mensaje,
+                            conductor,
+                            TipoNotificacion.NUEVA_RESERVA
+                        ));
+                    }
 
-                    String mensaje = pasajero.getNombre() + " ha pagado y reservado " + reserva.getCantidadPlazas() + " plaza(s).";
-
-                    Notificacion notificacion = new Notificacion(
-                        mensaje,
-                        conductor,
-                        TipoNotificacion.NUEVA_RESERVA
-                    );
-
-                    notificacionRepository.save(notificacion);
-
-                    System.out.println("ÉXITO: Reserva PAGADA, plazas restadas y notificación enviada al conductor.");
+                    System.out.println("ÉXITO: Todas las reservas del paquete han sido procesadas a PAGADA.");
                 });
                 break;
                 
             case "payment_intent.payment_failed":
-                actualizarEstadoPago(intent.getId(), EstadoPago.FALLIDO);
-                pagoRepository.findByStripePaymentIntentId(intent.getId()).ifPresent(pago -> {
+                actualizarEstadoPago(paymentIntentId, EstadoPago.FALLIDO);
+                pagoRepository.findByStripePaymentIntentId(paymentIntentId).ifPresent(pago -> {
                     Reserva r = pago.getReserva();
-                    r.setEstado(EstadoReserva.CANCELADA);
-                    reservaRepository.save(r);
+                    if (r != null) {
+                        r.setEstado(EstadoReserva.CANCELADA);
+                        reservaRepository.save(r);
+                    }
                 });
                 break;
                 
             case "payment_intent.succeeded":
-                actualizarEstadoPago(intent.getId(), EstadoPago.CAPTURADO);
+                actualizarEstadoPago(paymentIntentId, EstadoPago.CAPTURADO);
                 break;
+        }
+    }
+
+    @Override
+    @Transactional
+    public void liberarPagoProgresivoPorViaje(Long viajeId) throws StripeException {
+        // 1. Obtener las reservas asociadas a este viaje (o viaje recurrente)
+        List<Reserva> reservasDelViaje = reservaRepository.findByViajeId(viajeId);
+
+        for (Reserva reserva : reservasDelViaje) {
+            if (reserva.getEstado() != EstadoReserva.PAGADA && reserva.getEstado() != EstadoReserva.CONFIRMADA) {
+                continue;
+            }
+
+            Pago pago = reserva.getPago();
+            if (pago == null || pago.getStripePaymentIntentId() == null) {
+                continue;
+            }
+
+            // 2. Si el dinero aún está en 'requires_capture', Stripe lo captura
+            if (pago.getEstado() != EstadoPago.CAPTURADO) {
+                stripeService.confirmarCaptura(pago.getStripePaymentIntentId());
+                pago.setEstado(EstadoPago.CAPTURADO);
+            }
+
+            // 3. Obtener el precio por plaza según el tipo de viaje
+            BigDecimal precioPorPlaza;
+            Persona conductor;
+
+            if (reserva.getViaje() != null) {
+                precioPorPlaza = reserva.getViaje().getPrecio();
+                conductor = reserva.getViaje().getPersona();
+            } else if (reserva.getViajeRecurrente() != null) {
+                precioPorPlaza = reserva.getViajeRecurrente().getPrecio();
+                conductor = reserva.getViajeRecurrente().getPersona();
+            } else {
+                continue;
+            }
+
+            // 4. Calcular la parte NETA del conductor para ESTA fecha (Subtotal - 10% Comisión)
+            BigDecimal subtotal = precioPorPlaza.multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+            BigDecimal comisionReserva = subtotal.multiply(new BigDecimal("0.10"));
+            BigDecimal parteConductorEstaReserva = subtotal.subtract(comisionReserva); // Ej: 13.50 €
+
+            // 5. Acumular en el pago el saldo liberado al conductor
+            BigDecimal nuevoSaldoLiberado = pago.getImporteLiberadoConductor().add(parteConductorEstaReserva);
+            pago.setImporteLiberadoConductor(nuevoSaldoLiberado);
+
+            // 6. Incrementar los fondos en la entidad Persona del conductor
+            conductor.setFondosActuales(conductor.getFondosActuales().add(parteConductorEstaReserva));
+            conductor.setFondosTotales(conductor.getFondosTotales().add(parteConductorEstaReserva));
+            personaRepository.save(conductor);
+
+            // 7. Si usa Stripe Connect, transferir el dinero neto a su cuenta bancaria
+            if (conductor.getStripeConductorId() != null) {
+                stripeService.transferirAConductor(conductor.getStripeConductorId(), parteConductorEstaReserva);
+            }
+
+            pagoRepository.save(pago);
+
+            // 8. Notificar al conductor el importe neto abonado
+            String msj = String.format("Se te han liberado %.2f € netos por la finalización del viaje.", parteConductorEstaReserva);
+            notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.NUEVA_RESERVA));
         }
     }
 

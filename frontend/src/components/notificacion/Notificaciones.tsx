@@ -54,6 +54,17 @@ const Notificaciones: React.FC = () => {
     }
   };
 
+  const formatFecha = (fecha: string) => {
+    if (!fecha) return '';
+    return new Date(fecha).toLocaleString('es-ES', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   // Filtrar notificaciones con menos de 7 días de antigüedad
   const UNA_SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
   const limiteUnaSemana = new Date(Date.now() - UNA_SEMANA_MS);
@@ -80,35 +91,50 @@ const Notificaciones: React.FC = () => {
                 <p className="text-sm text-slate-400 italic">No hay solicitudes pendientes.</p>
               ) : (
                 <div className="space-y-4">
-                  {reservas.map((reserva) => (
-                    <div key={reserva.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-lg text-slate-900">{reserva.persona.nombre} quiere viajar contigo</p>
-                            <button onClick={() => navigate(`/usuarios/${reserva.persona.slug}/perfil`)} className="text-xs font-bold text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded">Ver perfil</button>
-                          </div>
-                          <p className="text-sm text-slate-600 italic">Reserva para {reserva.cantidadPlazas} plazas</p>
-                        </div>
-                        <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-black">SOLICITUD</span>
-                      </div>
+                  {reservas.map((reserva) => {
+                    // Comprobamos todas las posibles rutas donde el backend podría enviar la fecha del viaje
+                    const fechaViaje = 
+                      reserva.viaje?.fechaHoraSalida || 
+                      reserva.viajeRecurrente?.fechaHoraSalida || 
+                      reserva.fechaHoraSalida;
 
-                      <div className="flex gap-3">
-                        <button 
-                          onClick={() => gestionarReserva(reserva.id, 'confirmar')} 
-                          className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 active:scale-95 transition-all shadow-sm shadow-emerald-200"
-                        >
-                          Aceptar
-                        </button>
-                        <button 
-                          onClick={() => gestionarReserva(reserva.id, 'rechazar')} 
-                          className="flex-1 bg-white border-2 border-red-100 text-red-600 py-2.5 rounded-xl font-bold hover:bg-red-50 hover:border-red-200 active:scale-95 transition-all"
-                        >
-                          Rechazar
-                        </button>                      
+                    return (
+                      <div key={reserva.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-lg text-slate-900">{reserva.persona.nombre} quiere viajar contigo</p>
+                              <button onClick={() => navigate(`/usuarios/${reserva.persona.slug}/perfil`)} className="text-xs font-bold text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded">Ver perfil</button>
+                            </div>
+                            <p className="text-sm text-slate-600 italic">Reserva para {reserva.cantidadPlazas} plazas</p>
+                            
+                            {/* Fecha del viaje correspondiente (ya sea normal o recurrente) */}
+                            {fechaViaje && (
+                              <p className="text-xs font-semibold text-green-700 mt-1.5 flex items-center gap-1">
+                                📅 Fecha del viaje: {formatFecha(fechaViaje)}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-black">SOLICITUD</span>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={() => gestionarReserva(reserva.id, 'confirmar')} 
+                            className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 active:scale-95 transition-all shadow-sm shadow-emerald-200"
+                          >
+                            Aceptar
+                          </button>
+                          <button 
+                            onClick={() => gestionarReserva(reserva.id, 'rechazar')} 
+                            className="flex-1 bg-white border-2 border-red-100 text-red-600 py-2.5 rounded-xl font-bold hover:bg-red-50 hover:border-red-200 active:scale-95 transition-all"
+                          >
+                            Rechazar
+                          </button>                      
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>

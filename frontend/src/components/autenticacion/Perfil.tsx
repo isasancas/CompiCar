@@ -13,6 +13,7 @@ interface PerfilData {
   preferenciasViaje?: string[];
   fondosActuales?: number | string;
   fondosTotales?: number | string;
+  numeroCancelaciones?: number;
 }
 
 interface VehiculoData {
@@ -60,7 +61,6 @@ const Perfil: React.FC = () => {
   const [vehiculosError, setVehiculosError] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Estados para retirada de fondos
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [withdrawSuccess, setWithdrawSuccess] = useState<string | null>(null);
@@ -151,6 +151,7 @@ const Perfil: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setPerfil(data);
+        localStorage.setItem('perfil', JSON.stringify(data));
       } else if (response.status === 401 || response.status === 403) {
         clearLocalSession('/inicio-sesion');
         return;
@@ -241,10 +242,6 @@ const Perfil: React.FC = () => {
         ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
       ).length;
 
-      const cancelados = viajes.filter((v) =>
-        ['CANCELADO', 'CANCELADA'].includes((v.estado || '').toUpperCase())
-      ).length;
-
       const tendenciaPct =
         offeredPrev === 0
           ? offeredCurrent > 0
@@ -255,13 +252,13 @@ const Perfil: React.FC = () => {
       setResumenActividad({
         ofrecidosMes: offeredCurrent,
         completados,
-        cancelados,
+        cancelados: perfil?.numeroCancelaciones ?? 0,
         tendenciaPct
       });
     } catch {
       // Si falla, dejamos valores por defecto.
     }
-  }, [clearLocalSession]);
+  }, [clearLocalSession, perfil?.numeroCancelaciones]);
 
   const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
     const token = getValidToken();
@@ -331,11 +328,10 @@ const Perfil: React.FC = () => {
 
       // SI LA RETIRADA FUE EXITOSA:
       if (data.status === 'SUCCESS') {
-        // Actualizamos los fondos disponibles en el estado local del perfil a 0
         setPerfil((prevPerfil) => 
           prevPerfil ? { ...prevPerfil, fondosActuales: 0 } : null
         );
-        setWithdrawSuccess('¡Retiro completado con éxito!');
+        setWithdrawSuccess('¡Retiro completado con éxito! El dinero llegará a su cuenta bancaria en un plazo de 1 a 3 días hábiles');
         setTimeout(() => {
           setWithdrawSuccess(null);
         }, 4000);
@@ -664,7 +660,8 @@ const Perfil: React.FC = () => {
           preferenciasViaje: updated.preferenciasViaje,
           reputacion: prev?.reputacion,
           fondosActuales: updated.fondosActuales ?? prev?.fondosActuales,
-          fondosTotales: updated.fondosTotales ?? prev?.fondosTotales
+          fondosTotales: updated.fondosTotales ?? prev?.fondosTotales,
+          numeroCancelaciones: updated.numeroCancelaciones ?? prev?.numeroCancelaciones
         } as PerfilData));
         setShowEditModal(false);
         setEditError('');

@@ -37,7 +37,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -88,7 +88,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -124,7 +124,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -176,7 +176,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -219,7 +219,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -261,17 +261,17 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
         Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
         Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
 
-        String passengerToken = registerAndLogin();
+        String passengerToken1 = registerAndLogin();
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
 
         MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
-            .header("Authorization", "Bearer " + passengerToken)
+            .header("Authorization", "Bearer " + passengerToken1)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk())
@@ -283,8 +283,10 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
         reserva.setEstado(EstadoReserva.PAGADA);
         reservaRepository.save(reserva);
 
+        String passengerToken2 = registerAndLogin();
+
         mockMvc.perform(post("/api/reservas/crear")
-            .header("Authorization", "Bearer " + passengerToken)
+            .header("Authorization", "Bearer " + passengerToken2)
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk());
@@ -329,7 +331,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -345,7 +347,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> updatePayload = Map.of(
             "viajeId", viajeId,
-            "plazas", 2,
+            "cantidadPlazas", 2,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -388,7 +390,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -433,7 +435,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );

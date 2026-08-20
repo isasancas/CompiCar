@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import com.compicar.viaje.Viaje;
+import com.compicar.viajeBase.ViajeBase;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
@@ -39,9 +41,14 @@ public class Parada {
     private Integer orden;
 
     @ManyToOne
-    @JoinColumn(name = "viaje_id", nullable = false)
+    @JoinColumn(name = "viaje_id", nullable = true)
     @JsonIgnore
     private Viaje viaje;
+
+    @ManyToOne
+    @JoinColumn(name = "viaje_recurrente_id", nullable = true)
+    @JsonIgnore
+    private ViajeRecurrente viajeRecurrente;
 
     @Column(precision = 9, scale = 6)
     private BigDecimal latitud;
@@ -61,6 +68,14 @@ public class Parada {
         this.viaje = viaje;
     }
 
+    public Parada(LocalDateTime fechaHora, String localizacion, TipoParada tipo, Integer orden, ViajeRecurrente viajeRecurrente) {
+        this.fechaHora = fechaHora;
+        this.localizacion = localizacion;
+        this.tipo = tipo;
+        this.orden = orden;
+        this.viajeRecurrente = viajeRecurrente;
+    }
+
     // Getters
     public Long getId() {
         return id;
@@ -76,6 +91,15 @@ public class Parada {
 
     public Viaje getViaje() {
         return viaje;
+    }
+
+    public ViajeRecurrente getViajeRecurrente() {
+        return viajeRecurrente;
+    }
+
+    @JsonIgnore
+    public ViajeBase getViajeBase() {
+        return viaje != null ? viaje : viajeRecurrente;
     }
 
     public TipoParada getTipo() {
@@ -107,6 +131,10 @@ public class Parada {
         this.viaje = viaje;
     }
 
+    public void setViajeRecurrente(ViajeRecurrente viajeRecurrente) {
+        this.viajeRecurrente = viajeRecurrente;
+    }
+
     public void setTipo(TipoParada tipo) {
         this.tipo = tipo;
     }
@@ -132,9 +160,9 @@ public class Parada {
                 ", tipo=" + tipo +
                 ", orden=" + orden +
                 ", viajeId=" + (viaje != null ? viaje.getId() : null) +
+                ", viajeRecurrenteId=" + (viajeRecurrente != null ? viajeRecurrente.getId() : null) +
                 ", latitud=" + latitud +
                 ", longitud=" + longitud +
                 '}';
     }
-    
 }

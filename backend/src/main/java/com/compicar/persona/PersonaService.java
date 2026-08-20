@@ -4,6 +4,7 @@ import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
 import com.compicar.autenticacion.registro.Registro;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,5 +19,5 @@ public interface PersonaService {
     PerfilPersonaDTO obtenerPerfilPorSlug(String slug);
     void subirFoto(String email, String fotoBase64);
     Map<String, Object> retirarFondos(String email);
-
+    List<PerfilPersonaDTO> obtenerTopConductores();
 }

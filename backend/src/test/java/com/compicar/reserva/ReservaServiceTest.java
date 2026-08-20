@@ -3,6 +3,7 @@ package com.compicar.reserva;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,6 +38,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -88,10 +90,8 @@ class ReservaServiceTest {
         viaje.setFechaHoraSalida(LocalDateTime.now().plusDays(1)); 
     }
 
-    private void setId(Object entity, Long id) throws Exception {
-        java.lang.reflect.Field f = entity.getClass().getDeclaredField("id");
-        f.setAccessible(true);
-        f.set(entity, id);
+    private void setId(Object entity, Long id) {
+        ReflectionTestUtils.setField(entity, "id", id);
     }
 
     private Reserva crearReserva(Long reservaId, Persona pasajeroReserva, Viaje viajeReserva,
@@ -116,13 +116,26 @@ class ReservaServiceTest {
     void crearReserva_ok() throws Exception {
         Long origenId = 101L;
         Long destinoId = 102L;
+
+        // Configurar paradas asociadas al viaje y con orden correcto
         Parada pOrigen = new Parada();
+        pOrigen.setViaje(viaje);
+        pOrigen.setOrden(1);
+
         Parada pDestino = new Parada();
-        
+        pDestino.setViaje(viaje);
+        pDestino.setOrden(2);
+
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
         when(paradaRepository.findById(origenId)).thenReturn(Optional.of(pOrigen));
         when(paradaRepository.findById(destinoId)).thenReturn(Optional.of(pDestino));
+        
+        // Mock para la validación de reserva duplicada
+        when(reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(
+                anyLong(), anyLong(), any(EstadoReserva.class)
+        )).thenReturn(false);
+
         when(reservaRepository.saveAndFlush(any(Reserva.class))).thenAnswer(inv -> {
             Reserva r = inv.getArgument(0);
             setId(r, 1L);
@@ -131,7 +144,13 @@ class ReservaServiceTest {
         when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pagoService.crearIntentoDePago(any(Reserva.class))).thenReturn("client-secret");
 
-        ReservaCreadaResponse res = reservaService.crearReserva("user@compicar.com", 10L, 1, origenId, destinoId);
+        ReservaCreadaResponse res = reservaService.crearReserva(
+            "user@compicar.com",
+            10L,
+            1,
+            origenId,
+            destinoId
+        );
 
         assertEquals(1L, res.reservaId());
         assertEquals(3, viaje.getPlazasDisponibles());
@@ -140,10 +159,8 @@ class ReservaServiceTest {
     @Test
     void crearReserva_plazasInvalidas_lanza() {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
-        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-
         assertThrows(IllegalArgumentException.class, () -> 
-            reservaService.crearReserva("user@compicar.com", 10L, 0, null, null));
+            reservaService.crearReserva("user@compicar.com", 10L, 0, 101L, 102L));
     }
 
     @Test
@@ -379,7 +396,7 @@ class ReservaServiceTest {
 
         assertEquals(EstadoReserva.CANCELADA, res.getEstado());
         assertEquals(5, viaje.getPlazasDisponibles());
-        assertEquals(EstadoPago.PENDIENTE, pago.getEstado());
+        assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
         verify(notificacionRepository).save(any(Notificacion.class));
@@ -406,7 +423,6 @@ class ReservaServiceTest {
         when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
         when(notificacionRepository.save(any(Notificacion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(personaRepository.save(any(Persona.class))).thenAnswer(inv -> inv.getArgument(0));
-        org.mockito.Mockito.doNothing().when(pagoService).capturarPago(any(String.class));
 
         Reserva res = reservaService.cancelarReserva("user@compicar.com", 101L);
 
@@ -415,7 +431,6 @@ class ReservaServiceTest {
         assertEquals(4, viaje.getPlazasDisponibles());
         assertEquals(1, pasajero.getNumeroCancelaciones());
 
-        verify(pagoService).capturarPago(any(String.class));
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
         verify(notificacionRepository).save(any(Notificacion.class));
@@ -508,7 +523,7 @@ class ReservaServiceTest {
     void crearReserva_plazasNulas_lanza() {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-
+        
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             reservaService.crearReserva("user@compicar.com", 10L, null, 101L, 102L));
 
@@ -551,7 +566,7 @@ class ReservaServiceTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
 
-        assertEquals("No puedes reservar tu propio viaje", ex.getMessage());
+        assertEquals("No puedes reservar tu propio viaje.", ex.getMessage());
     }
 
     @Test

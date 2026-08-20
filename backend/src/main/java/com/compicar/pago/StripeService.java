@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import com.compicar.reserva.Reserva;
 import com.stripe.Stripe;
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Refund;
@@ -62,23 +63,75 @@ public class StripeService {
 
     /**
      * PASO 3: Cancelar y liberar fondos
-     * Se llama si el viaje se cancela. El dinero vuelve al pasajero sin comisiones.
+     * Se llama si el viaje o la reserva se cancelan. Si el pago ya se capturó, se reembolsa;
+     * si solo estaba autorizado, se cancela la autorización y se libera la retención.
      */
     public EstadoPago liberarFondos(String stripePaymentIntentId) throws StripeException {
         PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
-        
-        if ("succeeded".equals(intent.getStatus())) {
+        String status = intent.getStatus();
+
+        // 1. Si ya se cobró, se realiza un REEMBOLSO
+        if ("succeeded".equals(status)) {
             RefundCreateParams params = RefundCreateParams.builder()
                     .setPaymentIntent(stripePaymentIntentId)
                     .build();
             Refund.create(params);
-            return EstadoPago.REEMBOLSADO;
+        } 
+        // 2. Si solo está reservado/autorizado (requiere captura o método de pago), se CANCELA la retención
+        else if (!"canceled".equals(status)) {
+            try {
+                intent.cancel();
+            } catch (InvalidRequestException e) {
+                // Si Stripe devuelve que ya estaba cancelado, lo ignoramos para no bloquear la BD
+                if (e.getMessage() != null && e.getMessage().contains("status of canceled")) {
+                    System.out.println("[STRIPE] El PaymentIntent " + stripePaymentIntentId + " ya figuraba como cancelado.");
+                } else {
+                    throw e;
+                }
+            }
         }
 
-        if (!"canceled".equals(intent.getStatus())) {
-            intent.cancel();
-        }
+        return EstadoPago.REEMBOLSADO;
+    }
 
-        return EstadoPago.FALLIDO;
+    /**
+     * Reembolsa solo la parte correspondiente a un viaje cancelado (si el dinero ya se capturó).
+     */
+    public void reembolsarParcial(String stripePaymentIntentId, BigDecimal montoAReembolsar) throws StripeException {
+        long montoCentavos = montoAReembolsar.multiply(new BigDecimal(100)).longValue();
+        RefundCreateParams params = RefundCreateParams.builder()
+                .setPaymentIntent(stripePaymentIntentId)
+                .setAmount(montoCentavos)
+                .build();
+        Refund.create(params);
+    }
+
+    /**
+     * Captura un importe inferior al autorizado (si se canceló algún viaje antes de la captura final).
+     */
+    public void confirmarCapturaParcial(String stripePaymentIntentId, BigDecimal montoACapturar) throws StripeException {
+        PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
+        if ("requires_capture".equals(intent.getStatus())) {
+            long montoCentavos = montoACapturar.multiply(new BigDecimal(100)).longValue();
+            com.stripe.param.PaymentIntentCaptureParams params = com.stripe.param.PaymentIntentCaptureParams.builder()
+                    .setAmountToCapture(montoCentavos)
+                    .build();
+            intent.capture(params);
+        }
+    }
+
+    /**
+     * Transfiere los fondos de la plataforma a la cuenta conectada del conductor (Stripe Connect)
+     */
+    public void transferirAConductor(String stripeAccountId, BigDecimal monto) throws StripeException {
+        long montoCentavos = monto.multiply(new BigDecimal(100)).longValue();
+
+        com.stripe.param.TransferCreateParams params = com.stripe.param.TransferCreateParams.builder()
+                .setAmount(montoCentavos)
+                .setCurrency("eur")
+                .setDestination(stripeAccountId)
+                .build();
+
+        com.stripe.model.Transfer.create(params);
     }
 }

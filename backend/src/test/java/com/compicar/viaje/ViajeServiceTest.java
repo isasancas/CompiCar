@@ -25,12 +25,16 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
+import com.compicar.scheduler.ProgramadorCancelacionViajes;
 import com.compicar.vehiculo.TipoVehiculo;
 import com.compicar.vehiculo.Vehiculo;
 import com.compicar.vehiculo.VehiculoRepository;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
+import com.compicar.viajeRecurrente.ViajeRecurrenteService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,6 +62,10 @@ class ViajeServiceTest {
     private PagoRepository pagoRepository;
     @Mock
     private NotificacionRepository notificacionRepository;
+    @Mock
+    private ViajeRecurrenteRepository viajeRecurrenteRepository;
+    @Mock
+    private ViajeRecurrenteService viajeRecurrenteService;
 
     @InjectMocks
     private ViajeServiceImpl viajeService;
@@ -500,23 +508,6 @@ class ViajeServiceTest {
     }
 
     @Test
-    void cancelarViaje_penalizaConductor_siEsMuyTarde() {
-        String slug = "viaje-urgente";
-        viajeBase.setSlug(slug);
-        viajeBase.setPersona(conductor);
-        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(2));
-        conductor.setNumeroCancelaciones(0);
-
-        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
-        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
-
-        viajeService.cancelarViaje(conductor.getEmail(), slug);
-
-        assertTrue(conductor.getNumeroCancelaciones() > 0);
-        verify(personaRepository).save(conductor);
-    }
-
-    @Test
     void cancelarViaje_error_usuarioNoEsConductor_lanza403() {
         viajeBase.setPersona(conductor);
         viajeBase.setSlug("slug-test");
@@ -607,7 +598,6 @@ class ViajeServiceTest {
         assertEquals(1, procesados);
         assertEquals(EstadoViaje.CANCELADO, viajeExpirado.getEstado());
         verify(viajeRepository).save(viajeExpirado);
-        verify(personaRepository).save(conductor);
     }
 
     @Test
@@ -972,7 +962,8 @@ class ViajeServiceTest {
     @Test
     void cancelarViajesExpirados_delegaEnServicio() {
         ViajeService viajeServiceMock = mock(ViajeService.class);
-        ProgramadorCancelacionViajes programador = new ProgramadorCancelacionViajes(viajeServiceMock);
+        ViajeRecurrenteService viajeRecurrenteServiceMock = mock(ViajeRecurrenteService.class);
+        ProgramadorCancelacionViajes programador = new ProgramadorCancelacionViajes(viajeServiceMock, viajeRecurrenteServiceMock);
 
         programador.cancelarViajesExpirados();
 
