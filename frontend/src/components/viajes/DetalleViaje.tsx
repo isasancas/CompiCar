@@ -141,10 +141,6 @@ const DetalleViaje: React.FC = () => {
   const usuarioActual = JSON.parse(localStorage.getItem('perfil') || '{}');
   const usuarioIdActual = usuarioActual.id;
 
-  // Esta es la lógica maestra: compara el ID del usuario con el ID del conductor del viaje
-  const esConductor = Boolean(viaje?.conductorId && usuarioIdActual && viaje.conductorId === usuarioIdActual);
-  const rolActual: 'conductor' | 'pasajero' = esConductor ? 'conductor' : 'pasajero';
-
   const esInstanciaRecurrente = Boolean(navState.esInstanciaRecurrente);
 
   const backLabel = esInstanciaRecurrente
@@ -1614,7 +1610,7 @@ const DetalleViaje: React.FC = () => {
                                 ? cantidadPlazas * (viaje?.precio || 0) * viaje.viajesRecurrentes.length
                                 : cantidadPlazas * (viaje?.precio || 0)
                             }
-                            onSuccess={(id) => { 
+                            onSuccess={(_id) => { 
                                 setMostrarStripe(false);
                                 reservarPlazas(); 
                             }}
