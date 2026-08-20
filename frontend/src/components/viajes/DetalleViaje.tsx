@@ -542,6 +542,7 @@ const DetalleViaje: React.FC = () => {
 
     setFinalizando(true);
     setFinalizarMsg(null);
+    setIniciarMsg(null);
 
     try {
       const response = await fetch(
