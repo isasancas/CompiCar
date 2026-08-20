@@ -144,10 +144,9 @@ class ReservaServiceTest {
         when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pagoService.crearIntentoDePago(any(Reserva.class))).thenReturn("client-secret");
 
-        ReservaCreadaResponse res = reservaService.crearReservaLote(
+        ReservaCreadaResponse res = reservaService.crearReserva(
             "user@compicar.com",
             10L,
-            List.of(),
             1,
             origenId,
             destinoId
@@ -160,10 +159,8 @@ class ReservaServiceTest {
     @Test
     void crearReserva_plazasInvalidas_lanza() {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
-        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-
         assertThrows(IllegalArgumentException.class, () -> 
-            reservaService.crearReservaLote("user@compicar.com", 10L, List.of(), 0, null, null));
+            reservaService.crearReserva("user@compicar.com", 10L, 0, 101L, 102L));
     }
 
     @Test
@@ -526,9 +523,9 @@ class ReservaServiceTest {
     void crearReserva_plazasNulas_lanza() {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-
+        
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-            reservaService.crearReservaLote("user@compicar.com", 10L, List.of(), null, 101L, 102L));
+            reservaService.crearReserva("user@compicar.com", 10L, null, 101L, 102L));
 
         assertEquals("Debes reservar al menos 1 plaza.", ex.getMessage());
     }
@@ -541,7 +538,7 @@ class ReservaServiceTest {
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-            reservaService.crearReservaLote("user@compicar.com", 10L, List.of(), 1, 101L, 102L));
+            reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
 
         assertEquals("El viaje no está disponible (estado: INICIADO)", ex.getMessage());
     }
@@ -554,7 +551,7 @@ class ReservaServiceTest {
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-            reservaService.crearReservaLote("user@compicar.com", 10L, List.of(), 2, 101L, 102L));
+            reservaService.crearReserva("user@compicar.com", 10L, 2, 101L, 102L));
 
         assertEquals("Solo quedan 1 plazas disponibles.", ex.getMessage());
     }
@@ -567,7 +564,7 @@ class ReservaServiceTest {
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-            reservaService.crearReservaLote("user@compicar.com", 10L, List.of(), 1, 101L, 102L));
+            reservaService.crearReserva("user@compicar.com", 10L, 1, 101L, 102L));
 
         assertEquals("No puedes reservar tu propio viaje.", ex.getMessage());
     }

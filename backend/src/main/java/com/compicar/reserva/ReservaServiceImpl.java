@@ -309,8 +309,16 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalStateException("La reserva no tiene un viaje ni viaje recurrente asociado.");
         }
 
-        // 2. Notificar al conductor
-        String msj = pasajero.getNombre() + " ha cancelado su reserva.";
+        // 2. Notificar al conductor con fecha y slug del viaje
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "";
+        
+        com.compicar.viajeBase.ViajeBase viajeBase = reserva.getViajeBase();
+        String slugViaje = (viajeBase != null && viajeBase.getSlug() != null) ? " (" + viajeBase.getSlug() + ")" : "";
+
+        String msj = String.format("%s ha cancelado su reserva para el viaje del %s%s.",
+                pasajero.getNombre(), fechaFormateada, slugViaje);
+
         notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.RESERVA_CANCELADA));
 
         // 3. Evaluar política de cancelación y Stripe
@@ -712,6 +720,10 @@ public class ReservaServiceImpl implements ReservaService {
     public ReservaCreadaResponse crearReservaLote(String usuarioEmail, Long viajeId, List<Long> viajeRecurrenteIds, 
                                                   Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
 
+        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+            throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
+        }
+        
         Persona pasajero = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
