@@ -1,7 +1,9 @@
 package com.compicar.persona;
 
+import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -28,4 +30,10 @@ public interface PersonaRepository extends JpaRepository<Persona, Long> {
 
     Optional<Persona> findBySlug(String slug);
     boolean existsBySlug(String slug);
+
+    @Query("SELECT p, AVG(v.puntuacion) FROM Persona p " +
+       "JOIN p.valoracionesRecibidas v " +
+       "GROUP BY p " +
+       "ORDER BY AVG(v.puntuacion) DESC")
+    List<Object[]> findTopConductoresConReputacion(Pageable pageable);
 }

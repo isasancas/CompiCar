@@ -1,10 +1,14 @@
 package com.compicar.persona;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -12,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
@@ -24,8 +29,6 @@ import com.stripe.param.AccountLinkCreateParams;
 import com.stripe.param.TransferCreateParams;
 import com.compicar.autenticacion.registro.Registro;
 import com.compicar.config.SlugUtils;
-
-import jakarta.transaction.Transactional;
 
 @Service
 @Transactional
@@ -259,6 +262,26 @@ public class PersonaServiceImpl implements PersonaService {
                     "Error al comunicarse con Stripe: " + e.getMessage()
             );
         }
+    }
+
+    @Override
+    public List<PerfilPersonaDTO> obtenerTopConductores() {
+        // Pedimos los 3 primeros resultados
+        List<Object[]> resultados = personaRepository.findTopConductoresConReputacion(PageRequest.of(0, 3));
+
+        return resultados.stream().map(row -> {
+            Persona persona = (Persona) row[0];
+            Double reputacionCalculada = (Double) row[1];
+
+            // 1. Instanciamos el DTO con la persona
+            PerfilPersonaDTO dto = new PerfilPersonaDTO(persona);
+
+            // 2. Redondeamos la reputación a 1 decimal y se la asignamos al DTO
+            Double reputacionRedondeada = Math.round(reputacionCalculada * 10.0) / 10.0;
+            dto.setReputacion(reputacionRedondeada);
+
+            return dto;
+        }).toList();
     }
 
     private String generarSlugUnico(String baseSlug) {

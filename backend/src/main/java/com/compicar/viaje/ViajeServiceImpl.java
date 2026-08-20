@@ -5,12 +5,14 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -41,6 +43,7 @@ import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeBase.ViajeBase;
 import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrenteService;
@@ -764,6 +767,56 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ViajeDTO obtenerProximoViajeUsuario(String email) {
+        Persona usuario = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        LocalDateTime ahora = LocalDateTime.now();
+
+        // 1. Conductor en Viaje simple/padre
+        Viaje vConductor = viajeRepository
+            .findProximoViajeConductor(usuario, ahora, EstadoViaje.CANCELADO)
+            .orElse(null);
+
+        // 2. Conductor en ViajeRecurrente
+        ViajeRecurrente vrConductor = viajeRecurrenteRepository
+            .findProximoViajeRecurrenteConductor(usuario, ahora, EstadoViaje.CANCELADO)
+            .orElse(null);
+
+        // 3. Pasajero en Viaje simple (Se incluyen reservas CONFIRMADA, PAGADA, etc.)
+        Reserva rPasajeroViaje = reservaRepository
+            .findProximaReservaViaje(usuario, ahora, EstadoReserva.CANCELADA, EstadoViaje.CANCELADO)
+            .orElse(null);
+        Viaje vPasajero = (rPasajeroViaje != null) ? rPasajeroViaje.getViaje() : null;
+
+        // 4. Pasajero en ViajeRecurrente
+        Reserva rPasajeroRecurrente = reservaRepository
+            .findProximaReservaViajeRecurrente(usuario, ahora, EstadoReserva.CANCELADA, EstadoViaje.CANCELADO)
+            .orElse(null);
+        ViajeRecurrente vrPasajero = (rPasajeroRecurrente != null) ? rPasajeroRecurrente.getViajeRecurrente() : null;
+
+        // Seleccionar el viaje que sale más pronto entre los 4 candidatos
+        ViajeBase proximoViaje = Stream.of(vConductor, vrConductor, vPasajero, vrPasajero)
+            .filter(Objects::nonNull)
+            .min(Comparator.comparing(ViajeBase::getFechaHoraSalida))
+            .orElse(null);
+
+        if (proximoViaje == null) {
+            return null;
+        }
+
+        if (proximoViaje instanceof Viaje viaje) {
+            return convertirADTO(viaje); 
+        } else if (proximoViaje instanceof ViajeRecurrente vr) {
+            return convertirRecurrenteADTO(vr);
+        }
+
+        return null;
+    }
+
+    @Override
+    @Transactional
     public ViajeDTO ponerEnCursoAutomatico(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
