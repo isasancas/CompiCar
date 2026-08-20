@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -72,9 +72,37 @@ const ViajesAsociadosScreen: React.FC = () => {
     usuarioActual?: PerfilData;
   };
 
-  const viajes = state.viajesRecurrentes || [];
-  const padre = state.viajePadre || null;
+  const [viajes, setViajes] = useState<ViajeInstancia[]>(state.viajesRecurrentes || []);
+  const [padre, setPadre] = useState<ViajePadreInfo | null>(state.viajePadre || null);
   const slugPadre = state.slugPadre || null;
+  const token = localStorage.getItem('token') || '';
+
+  useEffect(() => {
+    const cargarDatosActualizados = async () => {
+      if (!slugPadre) return;
+      try {
+        const res = await fetch(buildApiUrl(`/api/viajes/${slugPadre}`), {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Si la API nos devuelve las instancias recurrentes actualizadas, las guardamos
+          if (data.viajesRecurrentes) {
+            setViajes(data.viajesRecurrentes);
+          }
+          setPadre(data);
+        }
+      } catch (err) {
+        console.error('Error al actualizar datos en tiempo real:', err);
+      }
+    };
+
+    cargarDatosActualizados();
+  }, [slugPadre, token]);
+
+
   const rol = state.rol ? state.rol.toUpperCase() : '';
 
   const esConductor = rol.includes('CONDUCTOR');
@@ -93,8 +121,6 @@ const ViajesAsociadosScreen: React.FC = () => {
   const [reservando, setReservando] = useState(false);
   const [reservaMsg, setReservaMsg] = useState<string | null>(null);
   const [aceptaBloqueoPago, setAceptaBloqueoPago] = useState(false);
-
-  const token = localStorage.getItem('token') || '';
 
   const formatFecha = (fecha: string) => {
     return new Date(fecha).toLocaleString('es-ES', {
@@ -514,6 +540,13 @@ const ViajesAsociadosScreen: React.FC = () => {
             </div>
 
             <div className="px-6 py-4 overflow-y-auto flex-1 space-y-6 custom-scrollbar">
+              {/* MENSAJE MOVIDO AQUÍ ARRIBA PARA QUE SE VEA EN AMBAS VISTAS */}
+              {reservaMsg && (
+                <div className={`p-3 rounded-xl text-sm font-bold border ${reservaMsg.includes('✅') ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  {reservaMsg}
+                </div>
+              )}
+
               {mostrarStripe && clientSecret ? (
                 <div className="py-4 animate-in fade-in">
                   <Elements stripe={stripePromise} options={{ clientSecret }}>
@@ -521,11 +554,31 @@ const ViajesAsociadosScreen: React.FC = () => {
                       clientSecret={clientSecret} 
                       monto={precioTotal}
                       onSuccess={() => { 
+                        // 1. Establecemos el mensaje de éxito
                         setReservaMsg('✅ ¡Reservas y pagos completados con éxito!');
+
+                        // 2. Subimos el scroll del modal automáticamente hacia arriba para que el cartel sea visible
+                        const modalContainer = document.querySelector('.custom-scrollbar');
+                        if (modalContainer) {
+                          modalContainer.scrollTop = 0;
+                        }
+
+                        // 3. Damos 2 segundos para que el usuario lo lea antes de redirigir
                         setTimeout(() => {
                           setModalReservaAbierto(false);
                           setMostrarStripe(false);
-                        }, 1000);
+
+                          if (slugPadre) {
+                            navigate(`/viajes/${slugPadre}`, { 
+                              state: { 
+                                rol: state.rol,
+                                mensajeExito: '¡Reservas y pagos completados con éxito!' 
+                              } 
+                            });
+                          } else {
+                            navigate(-1);
+                          }
+                        }, 2000);
                       }}
                       onError={(message) => {
                         setReservaMsg(`❌ ${message || 'El pago no pudo completarse'}`);

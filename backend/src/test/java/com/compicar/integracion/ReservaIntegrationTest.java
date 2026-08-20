@@ -37,7 +37,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -88,7 +88,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -124,7 +124,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -176,7 +176,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -219,7 +219,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -265,7 +265,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -331,7 +331,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -347,7 +347,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> updatePayload = Map.of(
             "viajeId", viajeId,
-            "plazas", 2,
+            "cantidadPlazas", 2,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -390,7 +390,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );
@@ -435,7 +435,7 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Map<String, Object> payload = Map.of(
             "viajeId", viajeId,
-            "plazas", 1,
+            "cantidadPlazas", 1,
             "paradaSubidaId", pSubida,
             "paradaBajadaId", pBajada
         );

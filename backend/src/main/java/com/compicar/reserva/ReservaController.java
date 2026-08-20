@@ -157,6 +157,26 @@ public class ReservaController {
         return ResponseEntity.ok(pendientes);
     }
 
+    @PostMapping("/crear")
+    public ReservaCreadaResponse crearReserva(@RequestBody ReservaRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "No autenticado"
+            );
+        }
+        String usuarioEmail = auth.getName();
+        
+        // Añadimos los dos nuevos parámetros al llamar al servicio
+        return reservaService.crearReserva(
+            usuarioEmail, 
+            request.viajeId(), 
+            request.plazas(), 
+            request.paradaSubidaId(), 
+            request.paradaBajadaId()
+        );
+    }
+
     @GetMapping("/padre/{viajePadreId}/recurrentes")
     public ResponseEntity<List<ViajeRecurrenteDTO>> obtenerRecurrentesPorViajePadre(@PathVariable Long viajePadreId) {
         List<ViajeRecurrenteDTO> lista = reservaService.obtenerRecurrentesPorViajePadre(viajePadreId);

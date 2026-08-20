@@ -127,6 +127,108 @@ public class ReservaServiceImpl implements ReservaService {
 
     @Override
     @Transactional
+    public ReservaCreadaResponse crearReserva(String usuarioEmail, Long viajeId, Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
+
+        // 1. Obtener entidades
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        Viaje viaje = viajeRepository.findById(viajeId)
+                .orElseThrow(() -> new IllegalArgumentException("Viaje no encontrado"));
+
+        // 2. Validaciones de negocio
+        if (plazasSolicitadas == null || plazasSolicitadas < 1) {
+            throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
+        }
+
+        if (viaje.getEstado() != EstadoViaje.PENDIENTE) {
+            throw new IllegalArgumentException("El viaje no está disponible (estado: " + viaje.getEstado() + ")");
+        }
+
+        // Novedad: Validar que la fecha/hora de salida no haya transcurrido
+        if (viaje.getFechaHoraSalida() != null && viaje.getFechaHoraSalida().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("La hora prevista de salida del viaje ya ha pasado.");
+        }
+
+        if (viaje.getPlazasDisponibles() < plazasSolicitadas) {
+            throw new IllegalArgumentException("Solo quedan " + viaje.getPlazasDisponibles() + " plazas disponibles.");
+        }
+
+        if (viaje.getPersona().getId().equals(persona.getId())) {
+            throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
+        }
+
+        // Novedad: Validar paradas nulas
+        if (paradaSubidaId == null || paradaBajadaId == null) {
+            throw new IllegalArgumentException("Debes indicar una parada de subida y de bajada válidas.");
+        }
+
+        Parada paradaSubida = paradaRepository.findById(paradaSubidaId)
+                .orElseThrow(() -> new IllegalArgumentException("Parada de subida no encontrada"));
+        Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
+                .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
+
+        // Novedad: Validar que las paradas pertenezcan a este viaje
+        if (!paradaSubida.getViaje().getId().equals(viaje.getId()) || !paradaBajada.getViaje().getId().equals(viaje.getId())) {
+            throw new IllegalArgumentException("Las paradas seleccionadas no pertenecen a este viaje.");
+        }
+
+        // Novedad: Validar orden de recorrido de las paradas
+        if (paradaSubida.getOrden() >= paradaBajada.getOrden()) {
+            throw new IllegalArgumentException("La parada de subida debe ser anterior a la parada de bajada.");
+        }
+
+        // Novedad: Evitar reservas duplicadas activas del mismo usuario en este viaje
+        boolean yaTieneReserva = reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(
+                persona.getId(), viaje.getId(), EstadoReserva.CANCELADA
+        );
+        if (yaTieneReserva) {
+            throw new IllegalArgumentException("Ya tienes una reserva activa en este viaje.");
+        }
+
+        // 3. Crear y guardar la Reserva PRIMERO (sin Pago) para obtener su ID
+        Reserva reserva = new Reserva(
+                EstadoReserva.PENDIENTE,
+                LocalDateTime.now(),
+                persona,
+                paradaSubida,
+                paradaBajada,
+                viaje,
+                plazasSolicitadas
+        );
+        reserva.setSlug("reserva-tmp-" + System.currentTimeMillis()); // evita constraint unique
+        reserva = reservaRepository.saveAndFlush(reserva);
+
+        // 4. Ahora sí tenemos ID → slug definitivo
+        reserva.setSlug("reserva-" + reserva.getId());
+        reserva = reservaRepository.saveAndFlush(reserva);
+
+        // 5. Crear el Pago con la Reserva ya persistida
+        Pago pago = new Pago();
+        BigDecimal total = viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas));
+        pago.setImporteTotal(total);
+        BigDecimal comision = total.multiply(new BigDecimal("0.10"));
+        pago.setComision(comision);
+        pago.setImporteConductor(total.subtract(comision));
+        pago.setEstado(EstadoPago.PENDIENTE);
+        pago.setFechaCreacion(LocalDateTime.now());
+        pago.setFechaPago(null);
+        pago.setReserva(reserva);
+
+        // 6. Guardar el Pago (es el lado dueño de la FK en BD)
+        pago = pagoRepository.saveAndFlush(pago);
+        reserva.setPago(pago);
+
+        // 7. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
+        try {
+            String clientSecret = pagoService.crearIntentoDePago(reserva);
+            return new ReservaCreadaResponse(reserva.getId(), reserva.getSlug(), clientSecret);
+        } catch (StripeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error en Stripe: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
     public Reserva anularReservaPorFalloPago(String usuarioEmail, Long reservaId) {
         Persona pasajero = personaRepository.findByEmail(usuarioEmail)
             .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
