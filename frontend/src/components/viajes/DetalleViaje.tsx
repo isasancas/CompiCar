@@ -2244,7 +2244,7 @@ const DetalleViaje: React.FC = () => {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Cancelar viaje recurrente</h3>
-                <p className="text-xs text-slate-500">Este viaje es un viaje padre de otros viajes</p>
+                <p className="text-xs text-slate-500">Este viaje pertenece a una serie periódica</p>
               </div>
               <button
                 type="button"
@@ -2256,11 +2256,10 @@ const DetalleViaje: React.FC = () => {
             </div>
 
             <div className="px-6 py-5 space-y-4">
-              <p className="text-sm text-slate-700">
-                Has seleccionado cancelar un viaje que contiene una configuración recurrente. ¿Cómo deseas proceder?
+              <p className="text-sm text-slate-600">
+                ¿Cómo deseas proceder con la cancelación de este viaje?
               </p>
 
-              {/* Mensaje de estado por si ocurre algún error o éxito */}
               {cancelMsg && (
                 <div className={`p-3 rounded-xl text-xs font-bold border ${
                   cancelMsg.includes('✅') 
@@ -2271,23 +2270,49 @@ const DetalleViaje: React.FC = () => {
                 </div>
               )}
 
-              <div className="space-y-2 pt-2">
+              <div className="space-y-3 pt-1">
+                {/* Opción 1: Solo este viaje */}
                 <button
                   type="button"
                   onClick={confirmarCancelarViaje}
                   disabled={cancelando}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all text-left disabled:opacity-50"
+                  className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all text-left group disabled:opacity-50 flex items-start gap-3 shadow-xs"
                 >
-                  {cancelando ? 'Procesando...' : '1. Cancelar solo este viaje'}
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm group-hover:text-slate-900">
+                      Cancelar solo este viaje
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Se anulará únicamente esta fecha. El resto de salidas programadas se mantendrán activas.
+                    </p>
+                  </div>
                 </button>
 
+                {/* Opción 2: Toda la serie */}
                 <button
                   type="button"
                   onClick={confirmarCancelarViajeConjunto}
                   disabled={cancelando}
-                  className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 transition-all text-left disabled:opacity-50"
+                  className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all text-left group disabled:opacity-50 flex items-start gap-3 shadow-xs"
                 >
-                  {cancelando ? 'Procesando...' : '2. Cancelar todos los viajes en conjunto'}
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm group-hover:text-slate-900">
+                      Cancelar toda la serie
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      Se anularán este viaje y todas sus repeticiones futuras asociadas.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalCancelarViajeRecurrenteAbierto(false)}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  Volver
                 </button>
               </div>
             </div>

@@ -430,7 +430,8 @@ const ViajesAsociadosScreen: React.FC = () => {
               const reservasInstancia = instancia.reservas || instancia.reserva;
               const esHijaSeleccionable = esSeleccionableParaCliente(reservasInstancia, instancia.estado);
 
-              const tieneReservaActiva = reservasInstancia 
+              // Evaluamos la reserva solo si NO es el conductor
+              const tieneReservaActiva = !esConductor && reservasInstancia 
                 ? !esSeleccionableParaCliente(reservasInstancia)
                 : false;
 
@@ -462,11 +463,17 @@ const ViajesAsociadosScreen: React.FC = () => {
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200">
                           Plazas libres: <strong className="text-slate-900">{instancia.plazasDisponibles}</strong>
                         </span>
-                        {tieneReservaActiva && (
+
+                        {/* BADGES SEGÚN EL ROL */}
+                        {esConductor ? (
+                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-300">
+                            Eres el conductor
+                          </span>
+                        ) : tieneReservaActiva ? (
                           <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
                             Reservado por ti
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>
