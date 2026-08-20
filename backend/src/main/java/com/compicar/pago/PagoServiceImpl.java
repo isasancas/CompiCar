@@ -44,6 +44,9 @@ public class PagoServiceImpl implements PagoService {
     private final ViajeRepository viajeRepository;
     private final NotificacionRepository notificacionRepository;
 
+    @Value("${stripe.webhook.secret}")
+    private String endpointSecret;
+
     @Autowired
     public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, 
         ReservaRepository reservaRepository, StripeService stripeService, ViajeRepository viajeRepository, NotificacionRepository notificacionRepository) {
@@ -194,9 +197,6 @@ public class PagoServiceImpl implements PagoService {
         pago.setEstado(EstadoPago.REEMBOLSADO);
         return pagoRepository.save(pago);
     }
-    
-    @Value("${stripe.webhook.secret}")
-    private String endpointSecret;
 
     @Override
     @Transactional
@@ -220,6 +220,11 @@ public class PagoServiceImpl implements PagoService {
                 Event event = Webhook.constructEvent(payload, sigHeader, endpointSecret);
                 eventType = event.getType();
 
+                if (eventType == null || !eventType.startsWith("payment_intent.")) {
+                    System.out.println("ℹ️ Evento de Stripe omitido (no es PaymentIntent): " + eventType);
+                    return; 
+                }
+
                 EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
                 StripeObject stripeObject = deserializer.getObject().orElseGet(() -> {
                     try {
@@ -229,21 +234,24 @@ public class PagoServiceImpl implements PagoService {
                     }
                 });
 
-                PaymentIntent intent = (PaymentIntent) stripeObject;
-                paymentIntentId = intent.getId();
+                if (stripeObject instanceof PaymentIntent intent) {
+                    paymentIntentId = intent.getId();
+                } else {
+                    System.out.println("⚠️ El objeto recibido no es un PaymentIntent. Tipo real: " + stripeObject.getClass().getName());
+                    return;
+                }
             } catch (SignatureVerificationException e) {
                 throw new RuntimeException("Firma de Webhook inválida");
             }
         }
 
-        // 1. Filtramos rápido: Si no es un evento de PaymentIntent, salimos
+        // Filtro adicional por si viene del Bypass
         if (eventType == null || !eventType.startsWith("payment_intent.")) {
             return; 
         }
 
         System.out.println("👉 PROCESANDO EVENTO DE PAYMENT INTENT: " + eventType);
 
-        // 2. Ejecutamos la lógica de negocio
         switch (eventType) {
             case "payment_intent.amount_capturable_updated":
                 actualizarEstadoPago(paymentIntentId, EstadoPago.AUTORIZADO);
@@ -285,8 +293,6 @@ public class PagoServiceImpl implements PagoService {
                             }
 
                             viajeRecurrente.setPlazasDisponibles(viajeRecurrente.getPlazasDisponibles() - reserva.getCantidadPlazas());
-                            // Si tienes repositorio de ViajeRecurrente, desmarcar para guardar:
-                            // viajeRecurrenteRepository.save(viajeRecurrente);
 
                             reserva.setEstado(EstadoReserva.PAGADA);
                             reservaRepository.save(reserva);
@@ -296,8 +302,6 @@ public class PagoServiceImpl implements PagoService {
                     // Notificación única al conductor
                     if (!reservasDelPago.isEmpty()) {
                         Reserva principal = reservasDelPago.get(0);
-                        
-                        // Obtener conductor según el tipo de reserva
                         Persona conductor = principal.getViaje() != null 
                             ? principal.getViaje().getPersona() 
                             : principal.getViajeRecurrente().getPersona();
@@ -321,8 +325,10 @@ public class PagoServiceImpl implements PagoService {
                 actualizarEstadoPago(paymentIntentId, EstadoPago.FALLIDO);
                 pagoRepository.findByStripePaymentIntentId(paymentIntentId).ifPresent(pago -> {
                     Reserva r = pago.getReserva();
-                    r.setEstado(EstadoReserva.CANCELADA);
-                    reservaRepository.save(r);
+                    if (r != null) {
+                        r.setEstado(EstadoReserva.CANCELADA);
+                        reservaRepository.save(r);
+                    }
                 });
                 break;
                 

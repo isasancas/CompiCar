@@ -20,7 +20,7 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
 
     List<Viaje> findByPersonaId(Long personaId);
 
-    @Query("SELECT r.viaje FROM Reserva r WHERE r.persona.id = :personaId")
+    @Query("SELECT r.viaje FROM Reserva r WHERE r.persona.id = :personaId AND r.estado != 'CANCELADA'")
     List<Viaje> findViajesParticipadosByPersonaId(@Param("personaId") Long personaId);
 
     Optional<Viaje> findBySlug(String slug);

@@ -1,5 +1,6 @@
 package com.compicar.viaje;
 
+import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -93,6 +94,12 @@ public class ViajeController {
         return ResponseEntity.ok(viajeRouterService.cancelarViaje(usuarioEmail, slug));
     }
 
+    @PutMapping("/{slug}/cancelar-conjunto")
+    public ResponseEntity<Object> cancelarViajeConjunto(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeService.cancelarViajeConjunto(usuarioEmail, slug));
+    }
+
     @PutMapping("/{slug}")
     public ResponseEntity<Object> actualizarViaje(
             @PathVariable String slug, 
@@ -119,6 +126,12 @@ public class ViajeController {
         return ResponseEntity.ok(viajeRouterService.confirmarCheckin(usuarioEmail, slug, checkin));
     }
 
+    @PutMapping("/{slug}/en-curso")
+    public ResponseEntity<ViajeDTO> ponerEnCurso(Principal principal, @PathVariable String slug) {
+        ViajeDTO viaje = viajeService.ponerEnCursoAutomatico(principal.getName(), slug);
+        return ResponseEntity.ok(viaje);
+    }
+
     // --- Auxiliar de Autenticación ---
 
     private String getUsuarioAutenticado() {
@@ -128,4 +141,11 @@ public class ViajeController {
         }
         return auth.getName();
     }
+
+    @PutMapping("/{slug}/cancelarIncompareceConductor")
+    public ResponseEntity<Object> cancelarViajeIncompareceConductor(@PathVariable String slug) {
+        String usuarioEmail = getUsuarioAutenticado();
+        return ResponseEntity.ok(viajeRouterService.cancelarViajeIncompareceConductor(usuarioEmail, slug));
+    }
+
 }

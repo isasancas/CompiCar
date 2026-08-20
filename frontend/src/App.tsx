@@ -7,16 +7,17 @@ import Footer from './components/Footer';
 import Registro from './components/autenticacion/Registro';
 import InicioSesion from './components/autenticacion/InicioSesion';
 import Perfil from './components/autenticacion/Perfil';
-import OfrecerTrayecto from './components/ofrecerTrayecto/OfrecerTrayecto';
+import OfrecerTrayecto from './components/viajes/CrearViaje';
 import HomeLoggedIn from './components/HomeLoggedIn';
 import NuevoVehiculo from './components/vehiculos/NuevoVehiculo';
-import MisViajes from './components/misViajes/MisViajes';
+import MisViajes from './components/viajes/MisViajes';
 import DetalleViaje from './components/viajes/DetalleViaje';
 import ResultadosBusquedaViajes from './components/viajes/ResultadosBusquedaViajes';
 import TodosLosViajes from './components/viajes/TodosLosViajes';
 import PerfilPublico from './components/autenticacion/PerfilPublico';
 import Notificaciones from './components/notificacion/Notificaciones';
 import Valoraciones from './components/autenticacion/Valoraciones';
+import ViajesAsociadosScreen from './components/viajes/ViajesAsociadosScreen';
 
 const hasValidToken = () => {
   const token = localStorage.getItem('token');
@@ -70,6 +71,7 @@ function App() {
             <Route path="/usuarios/:slug/perfil" element={<PerfilPublico />} />
             <Route path="/notificaciones" element={<Notificaciones />} />
             <Route path="/valoraciones" element={isLoggedIn ? <Valoraciones /> : <Navigate to="/inicio-sesion" replace />} />
+            <Route path="/viajes/:slug/asociados" element={<ViajesAsociadosScreen />} />
           </Routes>
         </main>
 

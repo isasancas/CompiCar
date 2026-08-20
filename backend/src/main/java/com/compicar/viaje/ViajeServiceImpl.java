@@ -5,6 +5,8 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +41,8 @@ import com.compicar.vehiculo.dto.VehiculoDTO;
 import com.compicar.viaje.dto.CalcularPrecioTrayectoRequestDTO;
 import com.compicar.viaje.dto.PrecioTrayectoResponseDTO;
 import com.compicar.viaje.dto.ViajeDTO;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrenteService;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,6 +63,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final NotificacionRepository notificacionRepository;
     private final StripeService stripeService;
     private final ViajeRecurrenteService viajeRecurrenteService;
+    private final ViajeRecurrenteRepository viajeRecurrenteRepository;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
@@ -67,7 +72,7 @@ public class ViajeServiceImpl implements ViajeService {
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
             ReservaRepository reservaRepository, PagoRepository pagoRepository, 
             NotificacionRepository notificacionRepository, StripeService stripeService,
-            ViajeRecurrenteService viajeRecurrenteService) {
+            ViajeRecurrenteService viajeRecurrenteService, ViajeRecurrenteRepository viajeRecurrenteRepository) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -77,6 +82,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.notificacionRepository = notificacionRepository;
         this.stripeService = stripeService;
         this.viajeRecurrenteService = viajeRecurrenteService;
+        this.viajeRecurrenteRepository = viajeRecurrenteRepository;
     }
 
     public boolean tieneReservasActivas(Viaje viaje) {
@@ -228,8 +234,20 @@ public class ViajeServiceImpl implements ViajeService {
     public List<ViajeDTO> obtenerViajesParticipados(String email) {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        List<Viaje> viajes = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
-        return viajes.stream().map(this::convertirADTO).toList();
+        
+        // 1. Viajes normales donde participa directamente
+        List<Viaje> viajesNormales = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
+        
+        // 2. Viajes padre obtenidos a través de las reservas en viajes recurrentes
+        List<Viaje> viajesPadresRecurrentes = viajeRecurrenteRepository.findViajesPadreParticipadosByPersonaId(persona.getId());
+
+        // 3. Unir ambos listados usando un Set para evitar duplicados
+        Set<Viaje> todosLosViajes = new HashSet<>();
+        todosLosViajes.addAll(viajesNormales);
+        todosLosViajes.addAll(viajesPadresRecurrentes);
+
+        // 4. Convertir a DTO y retornar
+        return todosLosViajes.stream().map(this::convertirADTO).toList();
     }
 
     @Override
@@ -240,17 +258,38 @@ public class ViajeServiceImpl implements ViajeService {
 
         Set<EstadoViaje> estadosPublicos = Set.of(EstadoViaje.PENDIENTE, EstadoViaje.INICIADO);
 
+        // 1. Obtener viajes normales
         List<Viaje> base = (inicio != null && fin != null)
-            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin)
+            ? viajeRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin) 
             : viajeRepository.buscarViajesPublicosSinFecha(estadosPublicos);
+
+        // 2. Obtener viajes recurrentes
+        List<ViajeRecurrente> baseRecurrentes = (inicio != null && fin != null)
+            ? viajeRecurrenteRepository.buscarViajesPublicosConFecha(estadosPublicos, inicio, fin) 
+            : viajeRecurrenteRepository.buscarViajesPublicosSinFecha(estadosPublicos);
 
         String origenNorm = normalizar(origen);
         String destinoNorm = normalizar(destino);
 
-        return base.stream()
+        // 3. Procesar y convertir viajes normales a DTO
+        List<ViajeDTO> resultadosNormales = base.stream()
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
-            .map(this::convertirADTO)
+            .map(this::convertirADTO) // Asegúrate de que esRecurrente sea false o null aquí
             .toList();
+
+        // 4. Procesar y convertir viajes recurrentes a DTO 
+        // (Asegúrate de marcar esRecurrente = true en tu conversor o método de mapeo)
+        List<ViajeDTO> resultadosRecurrentes = baseRecurrentes.stream()
+            .filter(vr -> coincideEnParadasRecurrente(vr, origenNorm, destinoNorm)) // O tu método de paradas adaptado
+            .map(this::convertirRecurrenteADTO) 
+            .toList();
+
+        // 5. Unir ambas listas en una sola respuesta
+        List<ViajeDTO> resultadosTotales = new java.util.ArrayList<>();
+        resultadosTotales.addAll(resultadosNormales);
+        resultadosTotales.addAll(resultadosRecurrentes);
+
+        return resultadosTotales;
     }
 
     @Override
@@ -301,8 +340,181 @@ public class ViajeServiceImpl implements ViajeService {
 
     @Override
     @Transactional
+    public ViajeDTO cancelarViajeConjunto(String usuarioEmail, String slugViajePadre) {
+        // 1. Validar conductor
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        // 2. Buscar viaje padre
+        Viaje viajePadre = viajeRepository.findBySlug(slugViajePadre)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje principal no encontrado"));
+
+        // 3. Validar permisos
+        if (!viajePadre.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede cancelar este viaje");
+        }
+
+        // 4. Validar estado del viaje padre
+        if (viajePadre.getEstado() == EstadoViaje.CANCELADO || viajePadre.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viajePadre.getEstado());
+        }
+
+        boolean tieneReservasActivasPadre = viajePadre.getReservas() != null && viajePadre.getReservas().stream()
+            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.CONFIRMADA || reserva.getEstado() == EstadoReserva.PAGADA);
+
+        // 5. Cancelar reservas y reembolsar el viaje padre
+        cancelarReservasYReembolsar(viajePadre, true);
+
+        viajePadre.setEstado(EstadoViaje.CANCELADO);
+        viajeRepository.save(viajePadre);
+
+        // 6. Buscar y cancelar todos los viajes recurrentes asociados
+        List<ViajeRecurrente> viajesRecurrentes = viajeRecurrenteRepository.findByViaje(viajePadre);
+        
+        boolean penalizaConductor = tieneReservasActivasPadre;
+
+        for (ViajeRecurrente viajeRecurrente : viajesRecurrentes) {
+            // Omitir si ya está cancelado o finalizado
+            if (viajeRecurrente.getEstado() == EstadoViaje.CANCELADO || viajeRecurrente.getEstado() == EstadoViaje.FINALIZADO) {
+                continue;
+            }
+
+            // Obtener reservas activas del viaje recurrente (lógica similar a tu método cancelarViajeRecurrente)
+            List<Reserva> reservasActivasRecurrente = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
+            if (!reservasActivasRecurrente.isEmpty()) {
+                penalizaConductor = true;
+            }
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+            String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
+                    ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
+                    : "";
+
+            // Procesar reembolsos y notificaciones de cada reserva recurrente
+            for (Reserva reserva : reservasActivasRecurrente) {
+                reserva.setEstado(EstadoReserva.CANCELADA);
+                reservaRepository.save(reserva);
+
+                Pago pago = reserva.getPago();
+                if (pago != null && pago.getStripePaymentIntentId() != null) {
+                    BigDecimal importeADevolver = viajeRecurrente.getPrecio().multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
+
+                    List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(
+                            pago.getId(), EstadoReserva.CANCELADA
+                    );
+
+                    try {
+                        if (reservasRestantes.isEmpty()) {
+                            stripeService.liberarFondos(pago.getStripePaymentIntentId());
+                            pago.setEstado(EstadoPago.REEMBOLSADO);
+                            pago.setImporteTotal(BigDecimal.ZERO);
+                            pago.setComision(BigDecimal.ZERO);
+                            pago.setImporteConductor(BigDecimal.ZERO);
+                        } else {
+                            BigDecimal nuevoTotal = pago.getImporteTotal().subtract(importeADevolver);
+                            if (nuevoTotal.compareTo(BigDecimal.ZERO) < 0) {
+                                nuevoTotal = BigDecimal.ZERO;
+                            }
+
+                            pago.setImporteTotal(nuevoTotal);
+                            BigDecimal nuevaComision = nuevoTotal.multiply(new BigDecimal("0.10"));
+                            pago.setComision(nuevaComision);
+                            pago.setImporteConductor(nuevoTotal.subtract(nuevaComision));
+
+                            if (pago.getEstado() == EstadoPago.CAPTURADO) {
+                                stripeService.reembolsarParcial(pago.getStripePaymentIntentId(), importeADevolver);
+                            }
+                        }
+                        pagoRepository.save(pago);
+                    } catch (StripeException e) {
+                        throw new RuntimeException("Error al procesar el reembolso en Stripe: " + e.getMessage(), e);
+                    }
+                }
+
+                // Notificar al pasajero
+                String msj = "El viaje recurrente del " + fechaSalida + " ha sido cancelado conjuntamente por el conductor.";
+                Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
+                notificacionRepository.save(noti);
+            }
+
+            viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
+            viajeRecurrenteRepository.save(viajeRecurrente);
+        }
+
+        // 7. Aplicar penalización al conductor si hubo alguna reserva activa en el conjunto
+        if (penalizaConductor) {
+            conductor.incrementarCancelaciones();
+            personaRepository.save(conductor);
+        }
+
+        return convertirADTO(viajePadre);
+    }
+
+    @Override
+    @Transactional
+    public ViajeDTO cancelarViajeIncompareceConductor(String usuarioEmail, String slug) {
+        Persona usuario = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        // 1. Validar que el usuario sea un pasajero con reserva en este viaje y NO el conductor
+        if (viaje.getPersona().getId().equals(usuario.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El conductor no puede reportar su propia incomparecencia");
+        }
+
+        boolean tieneReservaConfirmadaEnViaje = viaje.getReservas() != null && viaje.getReservas().stream()
+            .anyMatch(r -> r.getPersona().getId().equals(usuario.getId()) && 
+                        r.getEstado() == EstadoReserva.CONFIRMADA);
+
+        if (!tieneReservaConfirmadaEnViaje) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Debes tener una reserva confirmada en este viaje para reportar una incidencia de incomparecencia.");
+        }
+
+        // 2. Validaciones de estado del viaje
+        if (viaje.getEstado() == EstadoViaje.EN_CURSO || viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cancelar un viaje en estado " + viaje.getEstado());
+        }
+
+        if (viaje.getEstado() == EstadoViaje.CANCELADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya ha sido cancelado");
+        }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime salida = viaje.getFechaHoraSalida();
+
+        // 3. Validar tiempos de espera (Ejemplo: Debe haber salido, y damos un margen prudencial de 15 minutos)
+        LocalDateTime tiempoMinimoReclamacion = salida.plusMinutes(15);
+        LocalDateTime tiempoMaximoReclamacion = salida.plusHours(2); // Evita que reclamen días después
+
+        if (ahora.isBefore(tiempoMinimoReclamacion)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aún no ha transcurrido el tiempo de espera prudencial desde la hora de salida.");
+        }
+
+        if (ahora.isAfter(tiempoMaximoReclamacion)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El plazo para reportar la incomparecencia del conductor ha expirado.");
+        }
+
+        Persona conductor = viaje.getPersona();
+
+        // 4. Ejecutar reembolso masivo o de la reserva del pasajero (según cómo tengas diseñada tu función auxiliar)
+        cancelarReservasYReembolsar(viaje, true);
+
+        viaje.setEstado(EstadoViaje.CANCELADO);
+        viajeRepository.save(viaje);
+
+        // 5. Penalizar al conductor
+        conductor.incrementarCancelaciones();
+        personaRepository.save(conductor);
+
+        return convertirADTO(viaje);
+    }
+
+    @Override
+    @Transactional
     public int cancelarViajesPendientesExpirados() {
-        LocalDateTime limite = LocalDateTime.now(ZoneId.of("Europe/Madrid")).minusHours(1);
+        LocalDateTime limite = LocalDateTime.now(ZoneId.of("Europe/Madrid")).minusMinutes(10);
 
         List<Viaje> viajesExpirados = viajeRepository.findByEstadoAndFechaHoraSalidaBefore(EstadoViaje.PENDIENTE, limite);
 
@@ -551,6 +763,28 @@ public class ViajeServiceImpl implements ViajeService {
         return convertirADTO(viaje);
     }
 
+    @Override
+    public ViajeDTO ponerEnCursoAutomatico(String usuarioEmail, String slug) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Viaje viaje = viajeRepository.findBySlug(slug)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        if (!viaje.getPersona().getId().equals(conductor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No autorizado");
+        }
+
+        if (viaje.getEstado() != EstadoViaje.INICIADO) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje debe estar iniciado");
+        }
+
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+        viajeRepository.save(viaje);
+
+        return convertirADTO(viaje);
+    }
+
     private String generarCheckin() {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         StringBuilder sb = new StringBuilder(6);
@@ -719,6 +953,27 @@ public class ViajeServiceImpl implements ViajeService {
         return origenOk && destinoOk;
     }
 
+    private boolean coincideEnParadasRecurrente(ViajeRecurrente viaje, String origenNorm, String destinoNorm) {
+        List<Parada> paradas = viaje.getParadas();
+        if (paradas == null || paradas.isEmpty()) {
+            return false;
+        }
+
+        boolean origenOk = origenNorm.isBlank() || paradas.stream()
+            .map(Parada::getLocalizacion)
+            .filter(loc -> loc != null && !loc.isBlank())
+            .map(this::normalizar)
+            .anyMatch(locNorm -> locNorm.contains(origenNorm));
+
+        boolean destinoOk = destinoNorm.isBlank() || paradas.stream()
+            .map(Parada::getLocalizacion)
+            .filter(loc -> loc != null && !loc.isBlank())
+            .map(this::normalizar)
+            .anyMatch(locNorm -> locNorm.contains(destinoNorm));
+
+        return origenOk && destinoOk;
+    }
+
     private String normalizar(String texto) {
         if (texto == null) {
             return "";
@@ -783,7 +1038,76 @@ public class ViajeServiceImpl implements ViajeService {
             reservasDTO,
             viaje.getFechaFinRecurrencia(),
             viaje.getDiasSemana(),
-            viajesRecurrentesDTO
+            viajesRecurrentesDTO,
+            viaje.getCheckin()
+        );
+    }
+
+        private ViajeDTO convertirRecurrenteADTO(ViajeRecurrente viajeRecurrente) {
+        // 1. Mapear Vehículo
+        VehiculoDTO vehiculoDTO = null;
+        if (viajeRecurrente.getVehiculo() != null) {
+            vehiculoDTO = new VehiculoDTO(
+                viajeRecurrente.getVehiculo().getId(),
+                viajeRecurrente.getVehiculo().getMarca(),
+                viajeRecurrente.getVehiculo().getModelo(),
+                viajeRecurrente.getVehiculo().getMatricula()
+            );
+        }
+
+        // 2. Mapear Paradas ordenadas
+        List<ParadaDTO> paradasDTO = viajeRecurrente.getParadas() != null
+            ? viajeRecurrente.getParadas().stream()
+                .map(parada -> new ParadaDTO(
+                    parada.getId(),
+                    parada.getLocalizacion(),
+                    parada.getTipo().toString(),
+                    parada.getOrden()
+                ))
+                .toList()
+            : List.of();
+
+        // 3. Mapear Reservas (filtrando las canceladas, igual que en el viaje normal)
+        List<ReservaDTO> reservasDTO = viajeRecurrente.getReservas() != null 
+            ? viajeRecurrente.getReservas().stream()
+                .filter(r -> r.getEstado() != EstadoReserva.CANCELADA)
+                .map(r -> new ReservaDTO(
+                    r.getId(),
+                    r.getEstado().toString(),
+                    r.getFechaHoraReserva(),
+                    r.getViaje() != null ? r.getViaje().getId() : null, // o ajustarlo si mapeas a viajeRecurrenteId
+                    r.getPersona().getId(),
+                    r.getPersona().getNombre(),
+                    r.getPersona().getSlug(),
+                    r.getParadaSubida().getId(),
+                    r.getParadaBajada().getId(),
+                    r.getCantidadPlazas()
+                )).toList()
+            : List.of();
+
+        // 4. Obtener datos del conductor (Persona) de forma segura
+        Long conductorId = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getId() : null;
+        String conductorNombre = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getNombre() : null;
+        String conductorSlug = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getSlug() : null;
+
+        // 5. Retornar el ViajeDTO marcándolo como recurrente (esRecurrente = true)
+        return new ViajeDTO(
+            viajeRecurrente.getId(),
+            viajeRecurrente.getFechaHoraSalida(),
+            viajeRecurrente.getEstado().toString(),
+            viajeRecurrente.getPlazasDisponibles(),
+            viajeRecurrente.getPrecio(),
+            vehiculoDTO,
+            paradasDTO,
+            viajeRecurrente.getSlug(),
+            conductorId,
+            conductorNombre,
+            conductorSlug,
+            reservasDTO,
+            viajeRecurrente.getFechaHoraFin(), // Mapea la fecha fin de recurrencia si tu DTO la acepta en este constructor
+            null, // diasSemana (si aplica en tu DTO de viaje normal, o ajústalo según tu constructor de ViajeDTO)
+            List.of(), // lista vacía de sub-recurrentes para evitar recursión infinita
+            viajeRecurrente.getCheckin() 
         );
     }
 

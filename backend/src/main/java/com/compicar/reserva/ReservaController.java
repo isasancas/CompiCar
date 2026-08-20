@@ -22,7 +22,7 @@ import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
-import com.compicar.reserva.dto.ReservaRecurrenteRequest;
+import com.compicar.reserva.dto.ReservaLoteRequest;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viajeRecurrente.dto.ViajeRecurrenteDTO;
 import com.stripe.exception.StripeException;
@@ -38,26 +38,6 @@ public class ReservaController {
     public ReservaController(ReservaService reservaService, PersonaRepository personaRepository ) {
         this.reservaService = reservaService;
         this.personaRepository = personaRepository;
-    }
-
-    @PostMapping("/crear")
-    public ReservaCreadaResponse crearReserva(@RequestBody ReservaRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED, "No autenticado"
-            );
-        }
-        String usuarioEmail = auth.getName();
-        
-        // Añadimos los dos nuevos parámetros al llamar al servicio
-        return reservaService.crearReserva(
-            usuarioEmail, 
-            request.viajeId(), 
-            request.plazas(), 
-            request.paradaSubidaId(), 
-            request.paradaBajadaId()
-        );
     }
 
     @PutMapping("/anular-pago-fallido")
@@ -164,6 +144,12 @@ public class ReservaController {
         return ResponseEntity.ok(noPresentado);
     }
 
+    @RequestMapping("/presentado")
+    public ResponseEntity<Reserva> reservaPresentado(Long reservaId) {
+        Reserva presentado = reservaService.reservaPresentado(reservaId);
+        return ResponseEntity.ok(presentado);
+    }
+
     @GetMapping("/pendientes-conductor")
     public ResponseEntity<List<Reserva>> obtenerPendientes(Principal principal) {
         if (principal == null) return ResponseEntity.status(401).build();
@@ -171,27 +157,30 @@ public class ReservaController {
         return ResponseEntity.ok(pendientes);
     }
 
+    @PostMapping("/crear")
+    public ReservaCreadaResponse crearReserva(@RequestBody ReservaRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "No autenticado"
+            );
+        }
+        String usuarioEmail = auth.getName();
+        
+        // Añadimos los dos nuevos parámetros al llamar al servicio
+        return reservaService.crearReserva(
+            usuarioEmail, 
+            request.viajeId(), 
+            request.plazas(), 
+            request.paradaSubidaId(), 
+            request.paradaBajadaId()
+        );
+    }
+
     @GetMapping("/padre/{viajePadreId}/recurrentes")
     public ResponseEntity<List<ViajeRecurrenteDTO>> obtenerRecurrentesPorViajePadre(@PathVariable Long viajePadreId) {
         List<ViajeRecurrenteDTO> lista = reservaService.obtenerRecurrentesPorViajePadre(viajePadreId);
         return ResponseEntity.ok(lista);
-    }
-
-    @PostMapping("/crear-recurrentes")
-    public ReservaCreadaResponse crearReservasRecurrentes(@RequestBody ReservaRecurrenteRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
-        }
-        String usuarioEmail = auth.getName();
-
-        return reservaService.crearReservasRecurrentes(
-            usuarioEmail,
-            request.viajeRecurrenteIds(),
-            request.plazas(),
-            request.paradaSubidaId(),
-            request.paradaBajadaId()
-        );
     }
 
     @PutMapping("/viaje-recurrente/{viajeRecurrenteId}/cancelar-por-conductor")
@@ -205,6 +194,23 @@ public class ReservaController {
 
         reservaService.cancelarOcurrenciaPorConductor(viajeRecurrenteId, principal.getName());
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/crear-lote")
+    public ReservaCreadaResponse crearReservaLote(@RequestBody ReservaLoteRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        
+        return reservaService.crearReservaLote(
+            auth.getName(), 
+            request.viajeId(), 
+            request.viajeRecurrenteIds(), 
+            request.cantidadPlazas(), 
+            request.paradaSubidaId(), 
+            request.paradaBajadaId()
+        );
     }
     
 }

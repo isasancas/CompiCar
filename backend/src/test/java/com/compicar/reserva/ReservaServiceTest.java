@@ -144,7 +144,13 @@ class ReservaServiceTest {
         when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pagoService.crearIntentoDePago(any(Reserva.class))).thenReturn("client-secret");
 
-        ReservaCreadaResponse res = reservaService.crearReserva("user@compicar.com", 10L, 1, origenId, destinoId);
+        ReservaCreadaResponse res = reservaService.crearReserva(
+            "user@compicar.com",
+            10L,
+            1,
+            origenId,
+            destinoId
+        );
 
         assertEquals(1L, res.reservaId());
         assertEquals(3, viaje.getPlazasDisponibles());
@@ -153,10 +159,8 @@ class ReservaServiceTest {
     @Test
     void crearReserva_plazasInvalidas_lanza() {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
-        when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-
         assertThrows(IllegalArgumentException.class, () -> 
-            reservaService.crearReserva("user@compicar.com", 10L, 0, null, null));
+            reservaService.crearReserva("user@compicar.com", 10L, 0, 101L, 102L));
     }
 
     @Test
@@ -519,7 +523,7 @@ class ReservaServiceTest {
     void crearReserva_plazasNulas_lanza() {
         when(personaRepository.findByEmail("user@compicar.com")).thenReturn(Optional.of(pasajero));
         when(viajeRepository.findById(10L)).thenReturn(Optional.of(viaje));
-
+        
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             reservaService.crearReserva("user@compicar.com", 10L, null, 101L, 102L));
 

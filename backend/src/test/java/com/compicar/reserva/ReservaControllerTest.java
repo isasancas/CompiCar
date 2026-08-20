@@ -59,42 +59,6 @@ class ReservaControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    /*@Test
-    void crearReserva_ok_autenticado() throws Exception {
-        autenticar("user@compicar.com");
-
-        Reserva retorno = new Reserva();
-        Field idField = Reserva.class.getDeclaredField("id");
-        idField.setAccessible(true);
-        idField.set(retorno, 1L);
-
-        // CORRECCIÓN: Usamos any() para todos los campos para evitar el error de Strict Stubbing
-        // Mockito a veces falla al diferenciar entre long y Long en modo estricto.
-        when(reservaService.crearReserva(any(), any(), any(), any(), any()))
-                .thenReturn(retorno);
-
-        mockMvc.perform(post("/api/reservas/crear")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"viajeId\":10,\"plazas\":1}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(1));
-
-        // Verificamos de la misma forma que definimos el stubbing
-        verify(reservaService).crearReserva(any(), any(), any(), any(), any());
-    }
-*/
-    @Test
-    void crearReserva_noAutenticado_401() throws Exception {
-        SecurityContextHolder.clearContext();
-
-        mockMvc.perform(post("/api/reservas/crear")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"viajeId\":10,\"plazas\":1}"))
-                .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(reservaService);
-    }
-
     @Test
     void obtenerReservasPorPersona_ok() throws Exception {
         autenticar("user@compicar.com");
