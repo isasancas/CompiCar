@@ -35,8 +35,8 @@ const HeroCarpooling: React.FC = () => {
           </h1>
 
           <p className="text-gray-500 text-lg md:text-xl mb-12 max-w-lg leading-relaxed">
-            Conecta con vecinos y companeros que hacen el mismo trayecto cada dia.
-            Ahorra dinero, reduce emisiones y llega sin estres.
+            Conecta con vecinos y compañeros que hacen el mismo trayecto cada día.
+            Ahorra dinero, reduce emisiones y llega sin estrés.
           </p>
 
           <div className="flex gap-4 mb-12">
