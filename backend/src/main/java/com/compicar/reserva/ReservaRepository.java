@@ -32,7 +32,18 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
     Optional<Reserva> findByViajeIdAndPersonaIdAndEstadoNot(@Param("viajeId") Long viajeId, @Param("personaId") Long personaId, @Param("estado") EstadoReserva estado);
 
     // 4. Reservas que le aparecen al conductor para gestionar
-    @Query("SELECT r FROM Reserva r WHERE r.viaje.persona.email = :email AND r.estado = com.compicar.reserva.EstadoReserva.PAGADA")
+    @Query("SELECT r FROM Reserva r " +
+       "LEFT JOIN r.viaje v " +
+       "LEFT JOIN v.persona p1 " +
+       "LEFT JOIN r.viajeRecurrente vr " +
+       "LEFT JOIN vr.persona p2 " +
+       "LEFT JOIN vr.viajePadre vp " +
+       "LEFT JOIN vp.persona p3 " +
+       "WHERE r.estado = com.compicar.reserva.EstadoReserva.PAGADA AND (" +
+       "  p1.email = :email " +
+       "  OR p2.email = :email " +
+       "  OR p3.email = :email" +
+       ")")
     List<Reserva> findPendientesParaConductor(@Param("email") String email);
 
     // 5. Método para el Cron Job (Limpieza de reservas fantasma caducadas)

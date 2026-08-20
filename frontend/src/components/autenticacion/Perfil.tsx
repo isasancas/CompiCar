@@ -151,6 +151,7 @@ const Perfil: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setPerfil(data);
+        localStorage.setItem('perfil', JSON.stringify(data));
       } else if (response.status === 401 || response.status === 403) {
         clearLocalSession('/inicio-sesion');
         return;

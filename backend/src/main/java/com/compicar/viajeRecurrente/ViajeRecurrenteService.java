@@ -15,4 +15,5 @@ public interface ViajeRecurrenteService {
     ViajeRecurrenteDTO cancelarViajeRecurrente(String usuarioEmail, String slug);
     void cancelarViajesRecurrentesPendientesExpirados();
     ViajeRecurrenteDTO actualizarViajeRecurrente(String usuarioEmail, String slug, Viaje viajeEditado);
+    ViajeRecurrenteDTO cancelarViajeRecurrenteIncompareceConductor(String usuarioEmail, String slug);
 }

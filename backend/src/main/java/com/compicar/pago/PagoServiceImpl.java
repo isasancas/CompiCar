@@ -197,7 +197,7 @@ public class PagoServiceImpl implements PagoService {
         pago.setEstado(EstadoPago.REEMBOLSADO);
         return pagoRepository.save(pago);
     }
-    
+
     @Override
     @Transactional
     public void procesarEventoWebhook(String payload, String sigHeader) {
@@ -240,7 +240,6 @@ public class PagoServiceImpl implements PagoService {
                     System.out.println("⚠️ El objeto recibido no es un PaymentIntent. Tipo real: " + stripeObject.getClass().getName());
                     return;
                 }
-
             } catch (SignatureVerificationException e) {
                 throw new RuntimeException("Firma de Webhook inválida");
             }
@@ -294,7 +293,6 @@ public class PagoServiceImpl implements PagoService {
                             }
 
                             viajeRecurrente.setPlazasDisponibles(viajeRecurrente.getPlazasDisponibles() - reserva.getCantidadPlazas());
-                            // viajeRecurrenteRepository.save(viajeRecurrente);
 
                             reserva.setEstado(EstadoReserva.PAGADA);
                             reservaRepository.save(reserva);
@@ -304,7 +302,6 @@ public class PagoServiceImpl implements PagoService {
                     // Notificación única al conductor
                     if (!reservasDelPago.isEmpty()) {
                         Reserva principal = reservasDelPago.get(0);
-                        
                         Persona conductor = principal.getViaje() != null 
                             ? principal.getViaje().getPersona() 
                             : principal.getViajeRecurrente().getPersona();

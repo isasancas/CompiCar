@@ -197,7 +197,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeService.obtenerMisViajes("driver@compicar.com")).thenReturn(List.of(v1));
@@ -236,7 +237,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeService.obtenerMisViajes("passenger@compicar.com")).thenReturn(List.of(v1));
@@ -266,7 +268,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeService.obtenerViajesParticipados("driver@compicar.com")).thenReturn(List.of(v1));
@@ -303,7 +306,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeRouterService.obtenerPorSlug("sevilla-huelva-2026-06-01")).thenReturn(dto);
@@ -340,7 +344,8 @@ class ViajeControllerTest {
             List.of(),
             null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeService.buscarViajesPublicos("Madrid", "Barcelona", java.time.LocalDate.of(2026, 5, 15)))
@@ -372,7 +377,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeService.buscarViajesPublicos("Valencia", "Murcia", null))
@@ -415,7 +421,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeService.obtenerViajesPublicosPorConductor("conductor-slug")).thenReturn(List.of(v1));
@@ -451,7 +458,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeRouterService.obtenerPorSlug("alicante-ibiza-2026-06-10")).thenReturn(dto);
@@ -480,7 +488,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeRouterService.cancelarViaje("driver@compicar.com", "sevilla-jaen-2026-05-30"))
@@ -542,7 +551,8 @@ class ViajeControllerTest {
                 List.of(),
                 null,
                 List.of(),
-                List.of()
+                List.of(),
+                "checkin789"
         );
 
         when(viajeRouterService.actualizarViaje(

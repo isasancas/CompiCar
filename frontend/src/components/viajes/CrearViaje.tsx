@@ -118,6 +118,9 @@ const OfrecerTrayecto: React.FC = () => {
   const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
 
+  // Dentro del componente OfrecerTrayecto, añade estos estados:
+  const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState(''); // <-- NUEVO ESTADO
+
   const token = localStorage.getItem('token') || '';
 
   const vehiculoSeleccionado = useMemo(
@@ -416,6 +419,17 @@ const OfrecerTrayecto: React.FC = () => {
       return;
     }
 
+    if (repetir) {
+      if (diasSeleccionados.length === 0) {
+        setError('Selecciona al menos un día de la semana para la recurrencia.');
+        return;
+      }
+      if (!fechaFinRecurrencia) {
+        setError('Indica la fecha de fin de recurrencia.');
+        return;
+      }
+    }
+
     const paradasPayload = [
       {
         localizacion: origen.localizacion.trim(),
@@ -459,7 +473,9 @@ const OfrecerTrayecto: React.FC = () => {
           plazasDisponibles,
           precio: precioNum,
           vehiculo: { id: vehiculoId },
-          paradas: paradasPayload
+          paradas: paradasPayload,
+          diasSemana: repetir ? diasSeleccionados : [],
+          fechaFinRecurrencia: repetir && fechaFinRecurrencia ? `${fechaFinRecurrencia}T23:59:59` : null
         })
       });
 
@@ -702,23 +718,48 @@ const OfrecerTrayecto: React.FC = () => {
             </div>
 
             <div className="mt-4">
-              <label className="flex items-center gap-2 text-slate-700">
-                <input type="checkbox" checked={repetir} onChange={(e) => setRepetir(e.target.checked)} />
-                ¿Se repite este viaje?
+              <label className="flex items-center gap-2 text-slate-700 font-semibold cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={repetir} 
+                  onChange={(e) => setRepetir(e.target.checked)} 
+                  className="rounded border-slate-400 text-green-600 focus:ring-green-500 h-4 w-4"
+                />
+                ¿Se repite este viaje de forma recurrente?
               </label>
 
               {repetir && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {diasSemana.map((dia) => (
-                    <label key={dia} className="flex items-center gap-1 rounded border border-slate-300 px-2 py-1">
-                      <input
-                        type="checkbox"
-                        checked={diasSeleccionados.includes(dia)}
-                        onChange={() => toggleDia(dia)}
-                      />
-                      <span>{dia}</span>
-                    </label>
-                  ))}
+                <div className="mt-3 space-y-3 pl-6 border-l-2 border-green-200">
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">Días de la semana</label>
+                    <div className="flex flex-wrap gap-2">
+                      {diasSemana.map((dia) => (
+                        <label key={dia} className="flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1.5 cursor-pointer hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={diasSeleccionados.includes(dia)}
+                            onChange={() => toggleDia(dia)}
+                            className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                          />
+                          <span className="text-sm font-bold text-slate-700">{dia}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">Fecha de fin de recurrencia</label>
+                    <input
+                      className="w-full sm:w-72 rounded-md border border-slate-400 px-3 py-2 bg-white"
+                      type="date"
+                      value={fechaFinRecurrencia}
+                      onChange={(e) => setFechaFinRecurrencia(e.target.value)}
+                      min={fecha || undefined}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Hasta qué día se generarán automáticamente las ocurrencias de este viaje.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
