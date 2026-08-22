@@ -43,7 +43,7 @@ const MisViajes: React.FC = () => {
     navigate(redirectTo, { replace: true });
   }, [navigate]);
 
-  const fetchViajes = async () => {
+  const fetchViajes = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -68,11 +68,9 @@ const MisViajes: React.FC = () => {
         resPasajero.json()
       ]);
 
-      // Mapeamos los arrays para inyectarles el 'rol' que necesita tu interfaz
       const conductorConRol: ViajeConRol[] = datosConductor.map((v: Viaje) => ({ ...v, rol: 'conductor' }));
       const pasajeroConRol: ViajeConRol[] = datosPasajero.map((v: Viaje) => ({ ...v, rol: 'pasajero' }));
 
-      // Unimos ambos arrays y los guardamos en el estado general
       setTodosLosViajes([...conductorConRol, ...pasajeroConRol]);
 
     } catch (err) {
@@ -81,7 +79,7 @@ const MisViajes: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchViajes();
