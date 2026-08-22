@@ -237,7 +237,20 @@ const HomeLoggedIn: React.FC = () => {
             {proximoViaje && (
               <button
                 type="button"
-                onClick={() => navigate(`/viajes/${proximoViaje.slug}`)}
+                onClick={() => {
+                  // Comprobamos el rol de nuevo para la navegación
+                  const esConductor = perfil?.id 
+                    ? proximoViaje.conductorId === perfil.id
+                    : proximoViaje.conductorNombre?.trim().toLowerCase() === perfil?.nombre?.trim().toLowerCase();
+
+                  navigate(`/viajes/${proximoViaje.slug}`, {
+                    state: {
+                      backTo: '/inicio', // Ajusta esto si tu ruta home se llama diferente
+                      backLabel: 'Volver al inicio',
+                      rol: esConductor ? 'conductor' : 'pasajero'
+                    }
+                  });
+                }}
                 className="mt-6 w-fit rounded-full bg-slate-800 px-6 py-2 text-sm font-bold text-white shadow hover:bg-slate-700 transition-colors"
               >
                 Ver detalles

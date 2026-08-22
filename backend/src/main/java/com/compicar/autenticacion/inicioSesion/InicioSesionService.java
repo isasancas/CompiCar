@@ -30,7 +30,6 @@ public class InicioSesionService {
             throw new RuntimeException("Contraseña incorrecta");
         }
 
-        // Generar token JWT usando el email como subject (identificador único)
         return jwtUtil.generateToken(persona.getEmail());
     }
 }

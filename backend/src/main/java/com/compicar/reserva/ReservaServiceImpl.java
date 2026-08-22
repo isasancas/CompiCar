@@ -157,7 +157,6 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalArgumentException("No puedes reservar tu propio viaje.");
         }
 
-        // Novedad: Validar paradas nulas
         if (paradaSubidaId == null || paradaBajadaId == null) {
             throw new IllegalArgumentException("Debes indicar una parada de subida y de bajada válidas.");
         }
@@ -167,17 +166,14 @@ public class ReservaServiceImpl implements ReservaService {
         Parada paradaBajada = paradaRepository.findById(paradaBajadaId)
                 .orElseThrow(() -> new IllegalArgumentException("Parada de bajada no encontrada"));
 
-        // Novedad: Validar que las paradas pertenezcan a este viaje
         if (!paradaSubida.getViaje().getId().equals(viaje.getId()) || !paradaBajada.getViaje().getId().equals(viaje.getId())) {
             throw new IllegalArgumentException("Las paradas seleccionadas no pertenecen a este viaje.");
         }
 
-        // Novedad: Validar orden de recorrido de las paradas
         if (paradaSubida.getOrden() >= paradaBajada.getOrden()) {
             throw new IllegalArgumentException("La parada de subida debe ser anterior a la parada de bajada.");
         }
 
-        // Novedad: Evitar reservas duplicadas activas del mismo usuario en este viaje
         boolean yaTieneReserva = reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(
                 persona.getId(), viaje.getId(), EstadoReserva.CANCELADA
         );
@@ -214,11 +210,11 @@ public class ReservaServiceImpl implements ReservaService {
         pago.setFechaPago(null);
         pago.setReserva(reserva);
 
-        // 6. Guardar el Pago (es el lado dueño de la FK en BD)
+        // 6. Guardar el Pago
         pago = pagoRepository.saveAndFlush(pago);
         reserva.setPago(pago);
 
-        // 7. Llamar a Stripe (si falla, @Transactional hace rollback de todo)
+        // 7. Llamar a Stripe
         try {
             String clientSecret = pagoService.crearIntentoDePago(reserva);
             return new ReservaCreadaResponse(reserva.getId(), reserva.getSlug(), clientSecret);

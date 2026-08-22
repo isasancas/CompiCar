@@ -80,24 +80,19 @@ public class SecurityConfig {
             )
             
             .authorizeHttpRequests(authz -> authz
-                // 1. PERMITIR TODAS LAS RUTAS DEL FRONTEND (cualquier ruta que NO empiece por /api)
                 .requestMatchers(request -> !request.getRequestURI().startsWith("/api")).permitAll()
 
-                // 2. Endpoints públicos de la API
                 .requestMatchers("/api/registro/**").permitAll()
                 .requestMatchers("/api/login/**").permitAll()
                 .requestMatchers("/api/v1/webhooks/**", "/api/webhooks/**").permitAll()
                 .requestMatchers("/ping").permitAll()
 
-                // 3. Endpoints públicos de solo lectura de la API
                 .requestMatchers(HttpMethod.GET, "/api/viajes/publicos/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/personas/*/perfil-publico").permitAll()
 
-                // 4. Endpoints protegidos de la API
                 .requestMatchers("/api/logout").authenticated()
                 .requestMatchers("/api/personas/**").authenticated()
 
-                // 5. Cualquier otra ruta /api/** no contemplada requiere autenticación
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

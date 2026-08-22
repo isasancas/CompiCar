@@ -259,9 +259,7 @@ const DetalleViaje: React.FC = () => {
 
       setMiReserva(reservaEncontrada || null);
 
-    } catch {
-      // Silencio
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -674,25 +672,21 @@ const DetalleViaje: React.FC = () => {
 
     try {
       const esLote = esViajeRecurrentePadre(viaje);
-      
-      // Definimos el endpoint dependiendo de si reservamos en lote (recurrentes) o individual
       const endpoint = esLote ? '/api/reservas/crear-lote' : '/api/reservas/crear';
       
-      // Extraemos todos los IDs de los hijos a reservar si es un lote
       const viajesRecurrentesIds = esLote && viaje?.viajesRecurrentes 
         ? viaje.viajesRecurrentes.map(v => v.id) 
         : [];
 
-      // Creamos el JSON correspondiente ESPEJO EXACTO de tu DTO
       const payload = esLote ? {
-        viajeId: viaje?.id,                       // ID del padre
-        viajeRecurrenteIds: viajesRecurrentesIds, // Array de IDs de los hijos
-        cantidadPlazas: cantidadPlazas,           // Cambiado de 'plazas' a 'cantidadPlazas'
+        viajeId: viaje?.id,
+        viajeRecurrenteIds: viajesRecurrentesIds,
+        cantidadPlazas: cantidadPlazas,
         paradaSubidaId: paradaSubidaId,
         paradaBajadaId: paradaBajadaId
       } : {
-        viajeId: viaje?.id,                       // ID individual
-        cantidadPlazas: cantidadPlazas,           // Cambiado de 'plazas' a 'cantidadPlazas'
+        viajeId: viaje?.id,
+        cantidadPlazas: cantidadPlazas,
         paradaSubidaId: paradaSubidaId,
         paradaBajadaId: paradaBajadaId
       };
@@ -715,7 +709,7 @@ const DetalleViaje: React.FC = () => {
       if (!data.clientSecret) throw new Error('No se recibió el clientSecret');
 
       // Guardamos el clientSecret; Stripe pedirá la tarjeta una sola vez para el total
-      setReservaEnProcesoId(data.reservaId || data.loteId); // Ajusta si el backend devuelve un ID de lote
+      setReservaEnProcesoId(data.reservaId || data.loteId);
       setClientSecret(data.clientSecret);
       setMostrarStripe(true);
 
