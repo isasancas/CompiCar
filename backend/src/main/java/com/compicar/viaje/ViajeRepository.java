@@ -20,7 +20,8 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
 
     boolean existsByVehiculoId(Long vehiculoId);
 
-    List<Viaje> findByPersonaId(Long personaId);
+    @Query("SELECT v FROM Viaje v LEFT JOIN FETCH v.vehiculo LEFT JOIN FETCH v.persona WHERE v.persona.id = :personaId")
+    List<Viaje> findByPersonaId(@Param("personaId") Long personaId);
 
     @Query("SELECT r.viaje FROM Reserva r WHERE r.persona.id = :personaId AND r.estado != 'CANCELADA'")
     List<Viaje> findViajesParticipadosByPersonaId(@Param("personaId") Long personaId);

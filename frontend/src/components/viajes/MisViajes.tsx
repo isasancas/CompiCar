@@ -37,64 +37,51 @@ const MisViajes: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<EstadoFiltro>('PENDIENTE');
 
-  const getValidToken = () => {
-    const token = localStorage.getItem('token');
-    if (!token || token === 'undefined' || token === 'null' || token.trim() === '') {
-      return null;
-    }
-    return token;
-  };
-
   const clearLocalSession = useCallback((redirectTo: string) => {
     localStorage.removeItem('token');
     window.dispatchEvent(new Event('authChange'));
     navigate(redirectTo, { replace: true });
   }, [navigate]);
 
-  const fetchViajes = useCallback(async () => {
-    const token = getValidToken();
-    if (!token) {
-      clearLocalSession('/inicio-sesion');
-      return;
-    }
+  const fetchViajes = async () => {
+    setLoading(true);
+    setError(null);
 
     try {
-      const resConductor = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-      });
+      const token = localStorage.getItem('token'); 
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      };
 
-      const resPasajero = await fetch(buildApiUrl('/api/viajes/participados'), {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-      });
+      const [resConductor, resPasajero] = await Promise.all([
+        fetch(buildApiUrl('/api/viajes/mis-viajes'), { headers }),
+        fetch(buildApiUrl('/api/viajes/participados'), { headers })
+      ]);
 
       if (!resConductor.ok || !resPasajero.ok) {
-        if (resConductor.status === 401 || resPasajero.status === 401) {
-          clearLocalSession('/inicio-sesion');
-          return;
-        }
-        setError('Error al cargar los viajes');
-        return;
+        throw new Error('Hubo un problema al cargar los viajes.');
       }
 
-      const viajesConductor: Viaje[] = await resConductor.json();
-      const viajesPasajero: Viaje[] = await resPasajero.json();
+      const [datosConductor, datosPasajero] = await Promise.all([
+        resConductor.json(),
+        resPasajero.json()
+      ]);
 
-      const combinados: ViajeConRol[] = [
-        ...viajesConductor.map(v => ({ ...v, rol: 'conductor' as const })),
-        ...viajesPasajero.map(v => ({ ...v, rol: 'pasajero' as const }))
-      ];
+      // Mapeamos los arrays para inyectarles el 'rol' que necesita tu interfaz
+      const conductorConRol: ViajeConRol[] = datosConductor.map((v: Viaje) => ({ ...v, rol: 'conductor' }));
+      const pasajeroConRol: ViajeConRol[] = datosPasajero.map((v: Viaje) => ({ ...v, rol: 'pasajero' }));
 
-      combinados.sort((a, b) => 
-        new Date(b.fechaHoraSalida).getTime() - new Date(a.fechaHoraSalida).getTime()
-      );
+      // Unimos ambos arrays y los guardamos en el estado general
+      setTodosLosViajes([...conductorConRol, ...pasajeroConRol]);
 
-      setTodosLosViajes(combinados);
-    } catch {
-      setError('Error de conexión');
+    } catch (err) {
+      console.error("Error al cargar los viajes:", err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, [clearLocalSession]);
+  };
 
   useEffect(() => {
     fetchViajes();
