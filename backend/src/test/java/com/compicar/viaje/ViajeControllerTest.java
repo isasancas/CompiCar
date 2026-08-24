@@ -631,6 +631,132 @@ class ViajeControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void cancelarViajeConjunto_ok_autenticado() throws Exception {
+        autenticar("driver@compicar.com");
+
+        ViajeDTO viajeCancelado = new ViajeDTO(
+                15L,
+                LocalDateTime.of(2026, 6, 1, 10, 0),
+                "CANCELADO",
+                4,
+                new BigDecimal("10.00"),
+                new VehiculoDTO(10L, "Seat", "Ibiza", "1234ABC"),
+                List.of(),
+                "viaje-padre-recurrente",
+                1L,
+                "",
+                "",
+                List.of(),
+                null,
+                List.of(),
+                List.of(),
+                "checkin789"
+        );
+
+        when(viajeService.cancelarViajeConjunto("driver@compicar.com", "viaje-padre-recurrente"))
+                .thenReturn(viajeCancelado);
+
+        mockMvc.perform(put("/api/viajes/viaje-padre-recurrente/cancelar-conjunto"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("CANCELADO"));
+
+        verify(viajeService).cancelarViajeConjunto("driver@compicar.com", "viaje-padre-recurrente");
+    }
+
+    @Test
+    void cancelarViajeConjunto_noAutenticado_401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/viajes/viaje-padre-recurrente/cancelar-conjunto"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(viajeService);
+    }
+
+    @Test
+    void cancelarViajeConjunto_errorServicio_403() throws Exception {
+        autenticar("pasajero@compicar.com");
+        when(viajeService.cancelarViajeConjunto("pasajero@compicar.com", "viaje-padre-recurrente"))
+                .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "No eres el conductor de este viaje"));
+
+        mockMvc.perform(put("/api/viajes/viaje-padre-recurrente/cancelar-conjunto"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarViajeConjunto_errorServicio_400() throws Exception {
+        autenticar("driver@compicar.com");
+        when(viajeService.cancelarViajeConjunto("driver@compicar.com", "viaje-cancelado"))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya está cancelado"));
+
+        mockMvc.perform(put("/api/viajes/viaje-cancelado/cancelar-conjunto"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_ok_autenticado() throws Exception {
+        autenticar("passenger@compicar.com");
+
+        ViajeDTO viajeCancelado = new ViajeDTO(
+                20L,
+                LocalDateTime.of(2026, 6, 10, 12, 0),
+                "CANCELADO",
+                2,
+                new BigDecimal("15.00"),
+                new VehiculoDTO(10L, "Seat", "Ibiza", "1234ABC"),
+                List.of(),
+                "sevilla-cadiz-incomparece",
+                1L,
+                "",
+                "",
+                List.of(),
+                null,
+                List.of(),
+                List.of(),
+                "checkin789"
+        );
+
+        when(viajeRouterService.cancelarViajeIncompareceConductor("passenger@compicar.com", "sevilla-cadiz-incomparece"))
+                .thenReturn(viajeCancelado);
+
+        mockMvc.perform(put("/api/viajes/sevilla-cadiz-incomparece/cancelarIncompareceConductor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("CANCELADO"));
+
+        verify(viajeRouterService).cancelarViajeIncompareceConductor("passenger@compicar.com", "sevilla-cadiz-incomparece");
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_noAutenticado_401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/viajes/slug-test/cancelarIncompareceConductor"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(viajeRouterService);
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_errorServicio_403() throws Exception {
+        autenticar("driver@compicar.com");
+        when(viajeRouterService.cancelarViajeIncompareceConductor("driver@compicar.com", "slug-test"))
+                .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "El conductor no puede reportar su propia incomparecencia"));
+
+        mockMvc.perform(put("/api/viajes/slug-test/cancelarIncompareceConductor"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_errorServicio_400() throws Exception {
+        autenticar("passenger@compicar.com");
+        when(viajeRouterService.cancelarViajeIncompareceConductor("passenger@compicar.com", "slug-test"))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aún no ha transcurrido el tiempo de espera mínimo"));
+
+        mockMvc.perform(put("/api/viajes/slug-test/cancelarIncompareceConductor"))
+                .andExpect(status().isBadRequest());
+    }
+
     private void autenticar(String email) {
         SecurityContext context = new org.springframework.security.core.context.SecurityContextImpl();
         context.setAuthentication(new org.springframework.security.authentication.TestingAuthenticationToken(email, null));
