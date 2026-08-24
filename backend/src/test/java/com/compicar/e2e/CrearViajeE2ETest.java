@@ -15,7 +15,7 @@ import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
-class OfrecerTrayectoE2ETest extends BaseE2ETest {
+class CrearViajeE2ETest extends BaseE2ETest {
 
     private static final String SEEDED_LOGIN_EMAIL = "selenium@compicar.test";
     private static final String SEEDED_LOGIN_PASSWORD = "Selenium123!";

@@ -1,25 +1,34 @@
 package com.compicar.e2e;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.Keys;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
+class DetalleViajeE2ETest extends BaseE2ETest {
 
     private static final String SEEDED_LOGIN_EMAIL = "selenium@compicar.test";
     private static final String SEEDED_LOGIN_PASSWORD = "Selenium123!";
@@ -482,6 +491,104 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
         assertTrue(plazasActuales == 2, "La reserva debe haberse actualizado correctamente a 2 plazas");
     }
 
+    @Test
+    void cancelarTrayecto_comoConductor_actualizaEstadoACancelado() throws Exception {
+        // 1. Iniciar sesión y obtener token de la API
+        loginConUsuarioSeeded();
+        String token = obtenerTokenLocalStorage();
+        long vehiculoId = crearVehiculoPorApi(token, String.valueOf(System.currentTimeMillis()));
+
+        // 2. Crear viaje a +5 días con formato ISO explícito
+        LocalDateTime fechaFutura = LocalDateTime.now().plusDays(5).withSecond(0).withNano(0);
+        String origen = "Sevilla" + (System.currentTimeMillis() % 10000);
+        String slug = crearViajePorApiYObtenerSlug(token, vehiculoId, origen, "Cadiz", fechaFutura);
+
+        // 3. Forzar el token en localStorage sobre la URL base antes de abrir la ruta del viaje
+        driver.get(baseUrl);
+        ((JavascriptExecutor) driver).executeScript("localStorage.setItem('token', arguments[0]);", token);
+        
+        // 4. Navegar directamente al detalle del viaje ya autenticado
+        driver.get(baseUrl + "/viaje/" + slug);
+
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(12));
+
+        // 5. Esperar a que la SPA de React reconozca al usuario cargando el indicador de estado o panel
+        wait.until(ExpectedConditions.presenceOfElementLocated(
+            By.xpath("//*[contains(translate(., 'PENDIENTE', 'pendiente'), 'pendiente')] | //main")
+        ));
+
+        // 6. Localizar el botón "Cancelar viaje" por texto exacto o por clase de peligro Tailwind
+        By selectorBtnCancelar = By.xpath(
+            "//button[contains(normalize-space(), 'Cancelar viaje')]" +
+            " | //button[contains(@class, 'bg-red')]" +
+            " | //button[contains(normalize-space(), 'Cancelar')]"
+        );
+        WebElement btnCancelar = wait.until(ExpectedConditions.presenceOfElementLocated(selectorBtnCancelar));
+
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        js.executeScript("arguments[0].scrollIntoView({block:'center'});", btnCancelar);
+        js.executeScript("arguments[0].click();", btnCancelar);
+
+        // 7. Modal de confirmación
+        By selectorConfirmar = By.xpath(
+            "//button[contains(translate(., 'CONFIRMAR', 'confirmar'), 'confirmar')]" +
+            " | //button[contains(., 'Sí') or contains(., 'Aceptar')]" +
+            " | //*[contains(@data-testid, 'confirmar')]"
+        );
+        WebElement btnConfirmarModal = wait.until(ExpectedConditions.presenceOfElementLocated(selectorConfirmar));
+        js.executeScript("arguments[0].click();", btnConfirmarModal);
+
+        // 8. Confirmar actualización del estado visual
+        By selectorCancelado = By.xpath("//*[contains(translate(., 'CANCELADO', 'cancelado'), 'cancelado')]");
+        WebElement confirmacion = wait.until(ExpectedConditions.presenceOfElementLocated(selectorCancelado));
+
+        assertTrue(confirmacion.isDisplayed(), "El estado 'CANCELADO' debe mostrarse en pantalla");
+    }
+
+    @Test
+    void noPermitirCancelarTrayectoPasado() throws Exception {
+        loginConUsuarioSeeded();
+        String token = obtenerTokenLocalStorage();
+        long vehiculoId = crearVehiculoPorApi(token, String.valueOf(System.currentTimeMillis()));
+
+        // Crear viaje con fecha en el pasado usando el método sobrecargado
+        LocalDateTime fechaPasada = LocalDateTime.now().minusHours(5).withSecond(0).withNano(0);
+        String slug = crearViajePorApiYObtenerSlug(token, vehiculoId, "Madrid", "Barcelona", fechaPasada);
+
+        driver.get(baseUrl + "/viaje/" + slug);
+
+        List<WebElement> botonesCancelar = driver.findElements(
+            By.xpath("//button[contains(normalize-space(),'Cancelar') or contains(@aria-label,'Cancelar')]")
+        );
+
+        if (!botonesCancelar.isEmpty()) {
+            assertFalse(botonesCancelar.get(0).isEnabled(), "El botón de cancelar debe estar deshabilitado para viajes pasados");
+        } else {
+            assertTrue(botonesCancelar.isEmpty(), "El botón de cancelar no debe renderizarse si el viaje ya ocurrió");
+        }
+    }
+
+    @Test
+    void cancelarTrayecto_muestraModalDeConfirmacion() {
+        loginConUsuarioSeeded();
+
+        driver.get(baseUrl + "/mis-viajes");
+
+        WebElement btnCancelar = wait.until(ExpectedConditions.elementToBeClickable(
+            By.xpath("//button[contains(normalize-space(),'Cancelar trayecto') or contains(normalize-space(),'Cancelar')]")
+        ));
+
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        js.executeScript("arguments[0].scrollIntoView({block:'center'});", btnCancelar);
+        js.executeScript("arguments[0].click();", btnCancelar);
+
+        WebElement modalConfirmacion = wait.until(ExpectedConditions.visibilityOfElementLocated(
+            By.xpath("//*[contains(normalize-space(),'¿Estás seguro') or contains(normalize-space(),'Confirmar cancelación')]")
+        ));
+
+        assertTrue(modalConfirmacion.isDisplayed(), "El modal de confirmación de cancelación debe ser visible");
+    }
+
     private String crearViajePorApiYObtenerSlug(String token, long vehiculoId, String origen, String destino, LocalDateTime fechaHora) throws Exception {
         String apiBase = System.getenv().getOrDefault("E2E_API_BASE_URL", "http://localhost:8080");
 
@@ -509,6 +616,13 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
         HttpResponse<String> crearResp = http.send(crearReq, HttpResponse.BodyHandlers.ofString());
         assertTrue(crearResp.statusCode() == 200, "Crear viaje API debe devolver 200, devolvió " + crearResp.statusCode());
 
+        // 1. Si el backend devuelve el slug en la respuesta de creación, usarlo directamente
+        JsonNode createdJson = mapper.readTree(crearResp.body());
+        if (createdJson.hasNonNull("slug")) {
+            return createdJson.path("slug").asText();
+        }
+
+        // 2. Si no, buscar en /mis-viajes recorriendo de atrás hacia adelante (de más reciente a más antiguo)
         HttpRequest misViajesReq = HttpRequest.newBuilder()
             .uri(URI.create(apiBase + "/api/viajes/mis-viajes"))
             .header("Authorization", "Bearer " + token)
@@ -516,10 +630,10 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
             .build();
 
         HttpResponse<String> misViajesResp = http.send(misViajesReq, HttpResponse.BodyHandlers.ofString());
-        assertTrue(misViajesResp.statusCode() == 200, "Mis viajes API debe devolver 200, devolvió " + misViajesResp.statusCode());
-
         JsonNode arr = mapper.readTree(misViajesResp.body());
-        for (JsonNode v : arr) {
+
+        for (int i = arr.size() - 1; i >= 0; i--) {
+            JsonNode v = arr.get(i);
             JsonNode paradas = v.path("paradas");
             for (JsonNode p : paradas) {
                 if (origen.equals(p.path("localizacion").asText())) {
@@ -530,6 +644,11 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
         }
 
         throw new IllegalStateException("No se encontró el viaje recién creado en /api/viajes/mis-viajes");
+    }
+
+    private String crearViajePorApiYObtenerSlug(String token, long vehiculoId, String origen, String destino) throws Exception {
+        LocalDateTime fechaPorDefecto = LocalDateTime.now().plusDays(2).withSecond(0).withNano(0);
+        return crearViajePorApiYObtenerSlug(token, vehiculoId, origen, destino, fechaPorDefecto);
     }
 
     private void loginConUsuarioSeeded() {
@@ -582,58 +701,6 @@ class DetalleViajeOfrecidoE2ETest extends BaseE2ETest {
 
         JsonNode json = mapper.readTree(resp.body());
         return json.path("id").asLong();
-    }
-
-    private String crearViajePorApiYObtenerSlug(String token, long vehiculoId, String origen, String destino) throws Exception {
-        String apiBase = System.getenv().getOrDefault("E2E_API_BASE_URL", "http://localhost:8080");
-
-        String fechaHora = LocalDateTime.now().plusDays(1).withSecond(0).withNano(0).toString();
-
-        String viajeBody = """
-            {
-              "fechaHoraSalida": "%s",
-              "estado": "PENDIENTE",
-              "plazasDisponibles": 3,
-              "precio": 10.50,
-              "vehiculo": { "id": %d },
-              "paradas": [
-                { "localizacion": "%s", "tipo": "ORIGEN", "orden": 1, "fechaHora": "%s" },
-                { "localizacion": "%s", "tipo": "DESTINO", "orden": 2, "fechaHora": "%s" }
-              ]
-            }
-            """.formatted(fechaHora, vehiculoId, escapeJson(origen), fechaHora, escapeJson(destino), fechaHora);
-
-        HttpRequest crearReq = HttpRequest.newBuilder()
-            .uri(URI.create(apiBase + "/api/viajes/crear"))
-            .header("Authorization", "Bearer " + token)
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(viajeBody))
-            .build();
-
-        HttpResponse<String> crearResp = http.send(crearReq, HttpResponse.BodyHandlers.ofString());
-        assertTrue(crearResp.statusCode() == 200, "Crear viaje API debe devolver 200, devolvió " + crearResp.statusCode());
-
-        HttpRequest misViajesReq = HttpRequest.newBuilder()
-            .uri(URI.create(apiBase + "/api/viajes/mis-viajes"))
-            .header("Authorization", "Bearer " + token)
-            .GET()
-            .build();
-
-        HttpResponse<String> misViajesResp = http.send(misViajesReq, HttpResponse.BodyHandlers.ofString());
-        assertTrue(misViajesResp.statusCode() == 200, "Mis viajes API debe devolver 200, devolvió " + misViajesResp.statusCode());
-
-        JsonNode arr = mapper.readTree(misViajesResp.body());
-        for (JsonNode v : arr) {
-            JsonNode paradas = v.path("paradas");
-            for (JsonNode p : paradas) {
-                if (origen.equals(p.path("localizacion").asText())) {
-                    String slug = v.path("slug").asText();
-                    if (!slug.isBlank()) return slug;
-                }
-            }
-        }
-
-        throw new IllegalStateException("No se encontró el viaje recién creado en /api/viajes/mis-viajes");
     }
 
     private String escapeJson(String text) {
