@@ -262,4 +262,88 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
             .content(objectMapper.writeValueAsString(updatePayload)))
             .andExpect(status().isForbidden());
     }
+
+    @Test
+    void cancelarViaje_usuarioDistinto_403() throws Exception {
+        String tokenPropietario = registerAndLogin();
+        Long vehiculoId = crearVehiculo(tokenPropietario);
+        crearViaje(tokenPropietario, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(tokenPropietario);
+
+        String tokenOtroUsuario = registerAndLogin();
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/cancelar")
+                .header("Authorization", "Bearer " + tokenOtroUsuario))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarViaje_noExiste_404() throws Exception {
+        String token = registerAndLogin();
+
+        mockMvc.perform(put("/api/viajes/slug-inexistente-123/cancelar")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void cancelarViajeConjunto_ok() throws Exception {
+        String token = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token);
+        crearViaje(token, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(token);
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/cancelar-conjunto")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.slug").value(slug));
+    }
+
+    @Test
+    void cancelarViajeConjunto_sinToken_401() throws Exception {
+        mockMvc.perform(put("/api/viajes/cualquier-slug/cancelar-conjunto"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarViajeConjunto_usuarioDistinto_403() throws Exception {
+        String tokenPropietario = registerAndLogin();
+        Long vehiculoId = crearVehiculo(tokenPropietario);
+        crearViaje(tokenPropietario, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(tokenPropietario);
+
+        String tokenOtroUsuario = registerAndLogin();
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/cancelar-conjunto")
+                .header("Authorization", "Bearer " + tokenOtroUsuario))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_sinToken_401() throws Exception {
+        mockMvc.perform(put("/api/viajes/cualquier-slug/cancelarIncompareceConductor"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_propietarioNoPuedeReportarse_403o400() throws Exception {
+        String tokenConductor = registerAndLogin();
+        Long vehiculoId = crearVehiculo(tokenConductor);
+        crearViaje(tokenConductor, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(tokenConductor);
+
+        // El propio conductor intenta reportar su incomparecencia
+        mockMvc.perform(put("/api/viajes/" + slug + "/cancelarIncompareceConductor")
+                .header("Authorization", "Bearer " + tokenConductor))
+            .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void cancelarViajeIncompareceConductor_noExiste_404() throws Exception {
+        String tokenPasajero = registerAndLogin();
+
+        mockMvc.perform(put("/api/viajes/slug-inexistente-456/cancelarIncompareceConductor")
+                .header("Authorization", "Bearer " + tokenPasajero))
+            .andExpect(status().isNotFound());
+    }
 }
