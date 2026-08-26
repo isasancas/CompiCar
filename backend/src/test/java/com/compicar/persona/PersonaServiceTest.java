@@ -265,4 +265,73 @@ public class PersonaServiceTest {
         });
         assertEquals("La contraseña actual es incorrecta", exception.getMessage());
     }
+
+    @Test
+    void testRetirarFondos_SaldoInsuficiente() {
+        // Given
+        persona.setFondosActuales(new java.math.BigDecimal("5.00")); // Menos del mínimo (10.00)
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+
+        // When & Then
+        org.springframework.web.server.ResponseStatusException exception = assertThrows(
+            org.springframework.web.server.ResponseStatusException.class, () -> {
+                personaService.retirarFondos("juan@example.com");
+            }
+        );
+
+        assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(exception.getReason().contains("Se requiere un saldo mínimo de 10.00€"));
+    }
+
+    @Test
+    void testRetirarFondos_UsuarioNoEncontrado() {
+        // Given
+        when(personaRepository.findByEmail("noexiste@example.com")).thenReturn(Optional.empty());
+
+        // When & Then
+        org.springframework.web.server.ResponseStatusException exception = assertThrows(
+            org.springframework.web.server.ResponseStatusException.class, () -> {
+                personaService.retirarFondos("noexiste@example.com");
+            }
+        );
+
+        assertEquals(org.springframework.http.HttpStatus.UNAUTHORIZED, exception.getStatusCode());
+        assertEquals("Usuario no encontrado", exception.getReason());
+    }
+
+    @Test
+    void testRetirarFondos_Success_CreaCuentaYTransfiere() {
+        // Given
+        persona.setFondosActuales(new java.math.BigDecimal("50.00")); // Más de 10€
+        persona.setStripeConductorId(null); // Forzamos a que cree la cuenta en Stripe
+
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+        when(personaRepository.save(any(Persona.class))).thenReturn(persona);
+
+        // Mockeamos las llamadas estáticas de Stripe usando mockStatic
+        try (org.mockito.MockedStatic<com.stripe.model.Account> mockedAccount = mockStatic(com.stripe.model.Account.class);
+             org.mockito.MockedStatic<com.stripe.model.AccountLink> mockedAccountLink = mockStatic(com.stripe.model.AccountLink.class)) {
+
+            // Simulamos Account.create(...)
+            com.stripe.model.Account mockAccount = mock(com.stripe.model.Account.class);
+            when(mockAccount.getId()).thenReturn("acct_123");
+            mockedAccount.when(() -> com.stripe.model.Account.create(any(com.stripe.param.AccountCreateParams.class)))
+                          .thenReturn(mockAccount);
+
+            // Simulamos AccountLink.create(...)
+            com.stripe.model.AccountLink mockLink = mock(com.stripe.model.AccountLink.class);
+            when(mockLink.getUrl()).thenReturn("https://connect.stripe.com/setup/s/xyz");
+            mockedAccountLink.when(() -> com.stripe.model.AccountLink.create(any(com.stripe.param.AccountLinkCreateParams.class)))
+                             .thenReturn(mockLink);
+
+            // When
+            java.util.Map<String, Object> resultado = personaService.retirarFondos("juan@example.com");
+
+            // Then
+            assertNotNull(resultado);
+            assertEquals("REQUIRES_ONBOARDING", resultado.get("status"));
+            assertEquals("https://connect.stripe.com/setup/s/xyz", resultado.get("url"));
+            verify(personaRepository).save(persona);
+        }
+    }
 }
