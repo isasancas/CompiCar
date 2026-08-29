@@ -1056,33 +1056,37 @@ const DetalleViaje: React.FC = () => {
                       <div className="flex items-center gap-2 w-full md:w-auto justify-end">
                         {viaje.estado === 'INICIADO' && (
                           <div className="flex items-center gap-2 mr-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReservaSeleccionadaParaPresente(res.id);
-                                setCodigoCheckinIndividual('');
-                                setErrorCheckinIndividual(null);
-                                setModalPresenteAbierto(true);
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                estadoActualPasajero === 'PRESENTE'
-                                  ? 'bg-emerald-600 text-white shadow-sm'
-                                  : 'bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50'
-                              }`}
-                            >
-                              Presente
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => marcarNoPresentadoPasajero(res.id)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                estadoActualPasajero === 'NO_PRESENTADO'
-                                  ? 'bg-rose-600 text-white shadow-sm'
-                                  : 'bg-white border border-rose-600 text-rose-700 hover:bg-rose-50'
-                              }`}
-                            >
-                              No presentado
-                            </button>
+                            {estadoActualPasajero === 'PRESENTE' ? (
+                              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm">
+                                Presente
+                              </span>
+                            ) : estadoActualPasajero === 'NO_PRESENTADO' ? (
+                              <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white shadow-sm">
+                                No presentado
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReservaSeleccionadaParaPresente(res.id);
+                                    setCodigoCheckinIndividual('');
+                                    setErrorCheckinIndividual(null);
+                                    setModalPresenteAbierto(true);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                                >
+                                  Presente
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => marcarNoPresentadoPasajero(res.id)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white border border-rose-600 text-rose-700 hover:bg-rose-50"
+                                >
+                                  No presentado
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
 
@@ -1351,7 +1355,10 @@ const DetalleViaje: React.FC = () => {
                       const todosRevisados = Boolean(
                         viaje?.reservas &&
                         viaje.reservas.length > 0 &&
-                        viaje.reservas.every(r => estadosPasajeros[r.id] !== undefined || r.estado === 'PRESENTE' || r.estado === 'NO_PRESENTADO')
+                        viaje.reservas.every(r => {
+                          const estado = estadosPasajeros[r.id] ?? r.estado;
+                          return estado === 'PRESENTE' || estado === 'NO_PRESENTADO';
+                        })
                       );
 
                       if (!todosRevisados) {
@@ -1362,9 +1369,10 @@ const DetalleViaje: React.FC = () => {
                         );
                       }
 
-                      const hayPasajeroPresente = viaje.reservas?.some(res => 
-                        estadosPasajeros[res.id] === 'PRESENTE' || res.estado === 'PRESENTE'
-                      );
+                      const hayPasajeroPresente = viaje.reservas?.some(res => {
+                        const estado = estadosPasajeros[res.id] ?? res.estado;
+                        return estado === 'PRESENTE';
+                      });
 
                       if (hayPasajeroPresente) {
                         return (

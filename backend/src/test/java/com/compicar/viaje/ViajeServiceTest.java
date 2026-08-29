@@ -152,6 +152,7 @@ class ViajeServiceTest {
         assertEquals(2, result.getParadas().get(1).getOrden());
         assertSame(result, result.getParadas().get(0).getViaje());
         assertSame(result, result.getParadas().get(1).getViaje());
+        assertNotNull(result.getCheckin());
         verify(viajeRepository).save(viajeBase);
     }
 
@@ -1450,6 +1451,104 @@ class ViajeServiceTest {
         );
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+    }
+
+    @Test
+    void confirmarCheckin_ok_cambiaEstadoAEnCurso() {
+        // Arrange
+        Persona conductor = new Persona();
+        conductor.setId(1L);
+        conductor.setEmail("conductor@test.com");
+
+        Vehiculo vehiculo = new Vehiculo();
+        vehiculo.setId(1L);
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductor);
+        viaje.setVehiculo(vehiculo);
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viaje.setCheckin("AB12CD");
+
+        when(personaRepository.findByEmail("conductor@test.com")).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug("viaje-slug")).thenReturn(Optional.of(viaje));
+        when(viajeRepository.save(any(Viaje.class))).thenReturn(viaje);
+
+        // Act
+        ViajeDTO resultado = viajeService.confirmarCheckin("conductor@test.com", "viaje-slug", "ab12cd ");
+
+        // Assert
+        assertEquals(EstadoViaje.EN_CURSO, viaje.getEstado());
+        assertNotNull(resultado);
+        verify(viajeRepository).save(viaje);
+    }
+
+    @Test
+    void confirmarCheckin_error_noEsElConductor_lanza403() {
+        // Arrange
+        Persona impostor = new Persona();
+        impostor.setId(99L);
+        impostor.setEmail("impostor@test.com");
+
+        Persona conductorReal = new Persona();
+        conductorReal.setId(1L);
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductorReal);
+
+        when(personaRepository.findByEmail("impostor@test.com")).thenReturn(Optional.of(impostor));
+        when(viajeRepository.findBySlug("viaje-slug")).thenReturn(Optional.of(viaje));
+
+        // Act & Assert
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            viajeService.confirmarCheckin("impostor@test.com", "viaje-slug", "AB12CD");
+        });
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+        verify(viajeRepository, never()).save(any());
+    }
+
+    @Test
+    void confirmarCheckin_error_estadoNoIniciado_lanza400() {
+        // Arrange
+        Persona conductor = new Persona();
+        conductor.setId(1L);
+        conductor.setEmail("conductor@test.com");
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductor);
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+
+        when(personaRepository.findByEmail("conductor@test.com")).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug("viaje-slug")).thenReturn(Optional.of(viaje));
+
+        // Act & Assert
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            viajeService.confirmarCheckin("conductor@test.com", "viaje-slug", "AB12CD");
+        });
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(exception.getReason().contains("viaje debe estar iniciado"));
+    }
+
+    @Test
+    void confirmarCheckin_error_codigoInvalido_lanza400() {
+        // Arrange
+        Persona conductor = new Persona();
+        conductor.setId(1L);
+        conductor.setEmail("conductor@test.com");
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductor);
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viaje.setCheckin("AB12CD");
+
+        when(personaRepository.findByEmail("conductor@test.com")).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug("viaje-slug")).thenReturn(Optional.of(viaje));
+
+        // Act & Assert
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            viajeService.confirmarCheckin("conductor@test.com", "viaje-slug", "INCORRECTO");
+        });
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(exception.getReason().contains("Checkin inválido"));
     }
 
     private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
