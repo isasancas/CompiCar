@@ -763,4 +763,77 @@ class ViajeControllerTest {
         SecurityContextHolder.setContext(context);
         clearInvocations(viajeService);
     }
+
+    @Test
+    void finalizarViaje_ok_autenticado() throws Exception {
+        autenticar("driver@compicar.com");
+
+        ViajeDTO viajeFinalizado = new ViajeDTO(
+                1L,
+                LocalDateTime.of(2026, 5, 10, 9, 0),
+                "FINALIZADO",
+                3,
+                new BigDecimal("10.00"),
+                new VehiculoDTO(10L, "Seat", "Ibiza", "1234ABC"),
+                List.of(),
+                "sevilla-cadiz-2026-05-10",
+                1L,
+                "",
+                "",
+                List.of(),
+                null,
+                List.of(),
+                List.of(),
+                "checkin789"
+        );
+
+        when(viajeRouterService.finalizarViaje("driver@compicar.com", "sevilla-cadiz-2026-05-10"))
+                .thenReturn(viajeFinalizado);
+
+        mockMvc.perform(put("/api/viajes/sevilla-cadiz-2026-05-10/finalizar"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("FINALIZADO"));
+
+        verify(viajeRouterService).finalizarViaje("driver@compicar.com", "sevilla-cadiz-2026-05-10");
+    }
+
+    @Test
+    void finalizarViaje_noAutenticado_401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/viajes/slug-test/finalizar"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(viajeRouterService);
+    }
+
+    @Test
+    void finalizarViaje_errorServicio_403() throws Exception {
+        autenticar("otro@compicar.com");
+        when(viajeRouterService.finalizarViaje("otro@compicar.com", "slug-no-suyo"))
+                .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo el conductor puede finalizar este viaje"));
+
+        mockMvc.perform(put("/api/viajes/slug-no-suyo/finalizar"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void finalizarViaje_errorServicio_404() throws Exception {
+        autenticar("driver@compicar.com");
+        when(viajeRouterService.finalizarViaje("driver@compicar.com", "no-existe"))
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
+
+        mockMvc.perform(put("/api/viajes/no-existe/finalizar"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void finalizarViaje_errorServicio_400_yaCancelado() throws Exception {
+        autenticar("driver@compicar.com");
+        when(viajeRouterService.finalizarViaje("driver@compicar.com", "viaje-cancelado"))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede finalizar un viaje en estado CANCELADO"));
+
+        mockMvc.perform(put("/api/viajes/viaje-cancelado/finalizar"))
+                .andExpect(status().isBadRequest());
+    }
 }
