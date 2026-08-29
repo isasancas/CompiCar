@@ -4,7 +4,6 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../setupTests';
 import DetalleViaje from '../viajes/DetalleViaje';
 
-// Mock de React Leaflet para evitar fallos de renderizado en JSDOM
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   TileLayer: () => <div>TileLayer</div>,
@@ -31,6 +30,28 @@ vi.mock('react-router-dom', async () => {
     useNavigate: () => mockNavigate,
   };
 });
+
+vi.mock('../pagos/CheckoutForm', () => ({
+  default: ({ onSuccess, onError, monto }: { onSuccess: (id: string) => void; onError: (msg: string) => void; monto: number }) => (
+    <div data-testid="checkout-form">
+      <span>Monto: {monto}€</span>
+      <button 
+        type="button" 
+        data-testid="btn-simular-pago-exitoso" 
+        onClick={() => onSuccess('pi_mock_123')}
+      >
+        Simular Pago Exitoso
+      </button>
+      <button 
+        type="button" 
+        data-testid="btn-simular-pago-fallido" 
+        onClick={() => onError('Tarjeta rechazada')}
+      >
+        Simular Fallo Pago
+      </button>
+    </div>
+  ),
+}));
 
 // Datos de prueba reutilizables
 const mockViajeBase = {
@@ -199,5 +220,108 @@ test('El pasajero reporta incomparecencia del conductor si este no se presenta',
   await waitFor(() => {
     expect(incomparecenciaCalled).toBe(true);
     expect(screen.getByText(/✅ Incomparecencia reportada correctamente/i)).toBeInTheDocument();
+  });
+});
+
+test('Inicia el proceso de pago e integra el formulario de Stripe', async () => {
+  let crearReservaCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear', () => {
+      crearReservaCalled = true;
+      return HttpResponse.json({ clientSecret: 'pi_test_secret_123', reservaId: 505 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  // Abrir modal e iniciar reserva
+  const btnReservar = screen.getByRole('button', { name: /reservar ahora/i });
+  fireEvent.click(btnReservar);
+
+  const checkboxAviso = screen.getByRole('checkbox');
+  fireEvent.click(checkboxAviso);
+
+  const btnPagar = screen.getByRole('button', { name: /pagar 20.00€ y reservar/i });
+  fireEvent.click(btnPagar);
+
+  await waitFor(() => {
+    expect(crearReservaCalled).toBe(true);
+    expect(screen.getByTestId('checkout-form')).toBeInTheDocument();
+  });
+});
+
+test('El pasajero completa el pago con éxito a través de Stripe', async () => {
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear', () => {
+      return HttpResponse.json({ clientSecret: 'pi_test_secret_123', reservaId: 505 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  await screen.findByText('Toyota Corolla');
+  fireEvent.click(screen.getByRole('button', { name: /reservar ahora/i }));
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /pagar 20.00€ y reservar/i }));
+
+  await screen.findByTestId('checkout-form');
+  fireEvent.click(screen.getByTestId('btn-simular-pago-exitoso'));
+
+  await waitFor(() => {
+    expect(screen.getByText(/✅ Pago confirmado. ¡Tu plaza está reservada!/i)).toBeInTheDocument();
+  });
+});
+
+test('El sistema anula la reserva provisional si el pago falla', async () => {
+  let anularPagoCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear', () => {
+      return HttpResponse.json({ clientSecret: 'pi_test_secret_123', reservaId: 505 });
+    }),
+    http.put('*/api/reservas/anular-pago-fallido', ({ request }) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get('reservaId') === '505') {
+        anularPagoCalled = true;
+        return HttpResponse.json({ message: 'Reserva anulada' });
+      }
+      return new HttpResponse(null, { status: 400 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  await screen.findByText('Toyota Corolla');
+  fireEvent.click(screen.getByRole('button', { name: /reservar ahora/i }));
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /pagar 20.00€ y reservar/i }));
+
+  await screen.findByTestId('checkout-form');
+  fireEvent.click(screen.getByTestId('btn-simular-pago-fallido'));
+
+  await waitFor(() => {
+    expect(anularPagoCalled).toBe(true);
+    expect(screen.getByText(/❌ Tarjeta rechazada/i)).toBeInTheDocument();
   });
 });
