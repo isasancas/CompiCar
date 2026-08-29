@@ -151,6 +151,10 @@ public class Reserva {
     }
 
     // Setters
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
     public void setEstado(EstadoReserva estado) {
         this.estado = estado;
     }
