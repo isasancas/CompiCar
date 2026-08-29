@@ -262,4 +262,39 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
             .content(objectMapper.writeValueAsString(updatePayload)))
             .andExpect(status().isForbidden());
     }
+
+    @Test
+    void finalizarViaje_ok() throws Exception {
+        String token = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token);
+        crearViaje(token, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(token);
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/finalizar")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("FINALIZADO"));
+    }
+
+    @Test
+    void finalizarViaje_sinToken_401() throws Exception {
+        mockMvc.perform(put("/api/viajes/cualquier-slug/finalizar"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void finalizarViaje_usuarioDistinto_403() throws Exception {
+        String token1 = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token1);
+        crearViaje(token1, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(token1);
+
+        // Registramos un segundo usuario distinto que no es el conductor del viaje
+        String token2 = registerAndLogin();
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/finalizar")
+            .header("Authorization", "Bearer " + token2))
+            .andExpect(status().isForbidden()); // O isUnauthorized() / isBadRequest() según cómo gestione tu backend los permisos de usuario no propietario
+    }
+
 }

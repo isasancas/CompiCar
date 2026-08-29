@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -97,6 +98,59 @@ class PersonaControllerTest {
             return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(obj);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+   @Test
+    void testRetirarFondos_Success() throws Exception {
+        // 1. Simulamos el contexto de seguridad que tu controlador consulta estáticamente
+        org.springframework.security.core.Authentication auth = 
+            new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("juan@example.com", null, java.util.List.of());
+        
+        org.springframework.security.core.context.SecurityContext securityContext = 
+            org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(auth);
+        org.springframework.security.core.context.SecurityContextHolder.setContext(securityContext);
+
+        try {
+            java.util.Map<String, Object> respuestaMock = java.util.Map.of(
+                "status", "SUCCESS",
+                "mensaje", "Retiro completado con éxito",
+                "transferId", "tr_123456"
+            );
+
+            when(personaService.retirarFondos("juan@example.com")).thenReturn(respuestaMock);
+
+            mockMvc.perform(post("/api/personas/retirar-fondos"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("SUCCESS"))
+                    .andExpect(jsonPath("$.mensaje").value("Retiro completado con éxito"))
+                    .andExpect(jsonPath("$.transferId").value("tr_123456"));
+        } finally {
+            // 2. Limpiamos el contexto de seguridad al finalizar el test para no afectar a otros tests
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void testRetirarFondos_BadRequest_SaldoInsuficiente() throws Exception {
+        // Simulamos autenticación
+        org.springframework.security.core.Authentication auth = 
+            new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("juan@example.com", null, java.util.List.of());
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+
+        try {
+            // Simulamos que el servicio lanza un ResponseStatusException por saldo menor a 10€
+            when(personaService.retirarFondos("juan@example.com"))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, 
+                    "Se requiere un saldo mínimo de 10.00€ para realizar la retirada."
+                ));
+
+            mockMvc.perform(post("/api/personas/retirar-fondos"))
+                    .andExpect(status().isBadRequest()); // Comprobamos que el controlador devuelve el código 400
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
     }
 }
