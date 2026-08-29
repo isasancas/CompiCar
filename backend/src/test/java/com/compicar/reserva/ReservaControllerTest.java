@@ -3,7 +3,9 @@ package com.compicar.reserva;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -36,6 +38,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
+import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 
@@ -338,6 +341,89 @@ class ReservaControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(reservaService);
+    }
+
+    @Test
+    void anularPagoFallido_ok_autenticado() throws Exception {
+        autenticar("user@compicar.com");
+        Reserva r = new Reserva();
+        Field idField = Reserva.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(r, 1L);
+
+        when(reservaService.anularReservaPorFalloPago("user@compicar.com", 1L)).thenReturn(r);
+
+        mockMvc.perform(put("/api/reservas/anular-pago-fallido")
+                .param("reservaId", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        verify(reservaService).anularReservaPorFalloPago("user@compicar.com", 1L);
+    }
+
+    @Test
+    void anularPagoFallido_noAutenticado_401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/reservas/anular-pago-fallido")
+                .param("reservaId", "1"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(reservaService);
+    }
+
+    @Test
+    void crearReserva_iniciaSesionPagoStripe_200() throws Exception {
+        autenticar("user@compicar.com");
+
+        ReservaCreadaResponse responseMock = mock(ReservaCreadaResponse.class);
+
+        when(reservaService.crearReserva(
+                eq("user@compicar.com"),
+                eq(10L),
+                any(),
+                eq(101L),
+                eq(102L)
+        )).thenReturn(responseMock);
+
+        mockMvc.perform(post("/api/reservas/crear")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"viajeId\":10,\"plazas\":2,\"cantidadPlazas\":2,\"paradaSubidaId\":101,\"paradaBajadaId\":102}"))
+                .andExpect(status().isOk());
+
+        verify(reservaService).crearReserva(
+                eq("user@compicar.com"),
+                eq(10L),
+                any(),
+                eq(101L),
+                eq(102L)
+        );
+    }
+
+    @Test
+    void crearReservaLote_iniciaPagoMúltipleStripe_200() throws Exception {
+        autenticar("user@compicar.com");
+
+        ReservaCreadaResponse responseMock = mock(ReservaCreadaResponse.class);
+
+        when(reservaService.crearReservaLote("user@compicar.com", 10L, List.of(1L, 2L), 2, 101L, 102L))
+                .thenReturn(responseMock);
+
+        mockMvc.perform(post("/api/reservas/crear-lote")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"viajeId\":10,\"viajeRecurrenteIds\":[1,2],\"cantidadPlazas\":2,\"paradaSubidaId\":101,\"paradaBajadaId\":102}"))
+                .andExpect(status().isOk());
+
+        verify(reservaService).crearReservaLote("user@compicar.com", 10L, List.of(1L, 2L), 2, 101L, 102L);
+    }
+
+    @Test
+    void cancelarViajeRecurrentePorConductor_procesaReembolsoStripe_200() throws Exception {
+        mockMvc.perform(put("/api/reservas/viaje-recurrente/5/cancelar-por-conductor")
+                .principal(new TestingAuthenticationToken("driver@compicar.com", null)))
+                .andExpect(status().isOk());
+
+        verify(reservaService).cancelarOcurrenciaPorConductor(5L, "driver@compicar.com");
     }
 
     private void autenticar(String email) {

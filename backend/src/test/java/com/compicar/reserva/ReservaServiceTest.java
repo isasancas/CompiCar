@@ -1,15 +1,18 @@
 package com.compicar.reserva;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -26,10 +29,14 @@ import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
+import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.compicar.viajeRecurrente.ViajeRecurrente;
+import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
+import com.stripe.exception.StripeException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +71,9 @@ class ReservaServiceTest {
 
     @Mock
     private PagoService pagoService;
+
+    @Mock
+    private ViajeRecurrenteRepository viajeRecurrenteRepository;
 
     @InjectMocks
     private ReservaServiceImpl reservaService;
@@ -843,5 +853,147 @@ class ReservaServiceTest {
         verify(personaRepository, never()).save(any(Persona.class));
         verify(pagoRepository, never()).save(any(Pago.class));
         verify(reservaRepository, never()).save(any(Reserva.class));
+    }
+
+    @Test
+    void crearReserva_errorEnPago_lanzaExcepcion() throws Exception {
+        // Given
+        String email = "user@compicar.com";
+        Long viajeId = 10L;
+        Integer plazas = 2;
+        Long origenId = 101L;
+        Long destinoId = 102L;
+
+        Parada pOrigen = new Parada();
+        pOrigen.setViaje(viaje);
+        pOrigen.setOrden(1);
+
+        Parada pDestino = new Parada();
+        pDestino.setViaje(viaje);
+        pDestino.setOrden(2);
+
+        when(personaRepository.findByEmail(email)).thenReturn(Optional.of(pasajero));
+        when(viajeRepository.findById(viajeId)).thenReturn(Optional.of(viaje));
+        when(paradaRepository.findById(origenId)).thenReturn(Optional.of(pOrigen));
+        when(paradaRepository.findById(destinoId)).thenReturn(Optional.of(pDestino));
+        when(reservaRepository.existsByPersonaIdAndViajeIdAndEstadoNot(anyLong(), anyLong(), any())).thenReturn(false);
+        when(reservaRepository.saveAndFlush(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StripeException stripeException = mock(StripeException.class);
+        when(pagoService.crearIntentoDePago(any(Reserva.class))).thenThrow(stripeException);
+
+        // When / Then
+        assertThrows(ResponseStatusException.class, () ->
+                reservaService.crearReserva(email, viajeId, plazas, origenId, destinoId)
+        );
+    }
+
+    @Test
+    void crearReservaLote_errorEnPago_lanzaExcepcion() throws Exception {
+        // Given
+        String email = "user@compicar.com";
+        Long viajeId = 10L;
+        List<Long> recurrentesIds = List.of(100L);
+        Integer plazas = 1;
+        Long subidaId = 101L;
+        Long bajadaId = 102L;
+
+        Parada subida = new Parada();
+        subida.setOrden(1);
+        Parada bajada = new Parada();
+        bajada.setOrden(2);
+
+        ViajeRecurrente vr = new ViajeRecurrente();
+        ReflectionTestUtils.setField(vr, "id", 100L);
+        vr.setEstado(EstadoViaje.PENDIENTE);
+        vr.setFechaHoraSalida(LocalDateTime.now().plusDays(2));
+        vr.setPlazasDisponibles(3);
+        vr.setPrecio(BigDecimal.TEN);
+        vr.setPersona(conductor);
+
+        when(personaRepository.findByEmail(email)).thenReturn(Optional.of(pasajero));
+        when(paradaRepository.findById(subidaId)).thenReturn(Optional.of(subida));
+        when(paradaRepository.findById(bajadaId)).thenReturn(Optional.of(bajada));
+        when(viajeRepository.findById(viajeId)).thenReturn(Optional.of(viaje));
+        when(viajeRecurrenteRepository.findAllById(recurrentesIds)).thenReturn(List.of(vr));
+        when(reservaRepository.saveAndFlush(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StripeException stripeException = mock(StripeException.class);
+        when(pagoService.crearIntentoDePago(any(Reserva.class))).thenThrow(stripeException);
+
+        // When / Then
+        assertThrows(ResponseStatusException.class, () ->
+                reservaService.crearReservaLote(email, viajeId, recurrentesIds, plazas, subidaId, bajadaId)
+        );
+    }
+
+    @Test
+    void anularReservaPorFalloPago_exito_cambiaEstadoACancelada() throws Exception {
+        // Given
+        String email = "user@compicar.com";
+        Long reservaId = 50L;
+
+        Reserva reserva = crearReserva(reservaId, pasajero, viaje, EstadoReserva.PENDIENTE, 1, null);
+
+        when(personaRepository.findByEmail(email)).thenReturn(Optional.of(pasajero));
+        when(reservaRepository.findById(reservaId)).thenReturn(Optional.of(reserva));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservaRepository.save(any(Reserva.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        Reserva resultado = reservaService.anularReservaPorFalloPago(email, reservaId);
+
+        // Then
+        assertEquals(EstadoReserva.CANCELADA, resultado.getEstado());
+        verify(reservaRepository).save(reserva);
+    }
+
+    @Test
+    void crearReservaLote_exito_procesaPagoCorrectamente() throws Exception {
+        // Given
+        String email = "user@compicar.com";
+        Long viajeId = 10L;
+        List<Long> recurrentesIds = List.of(100L);
+        Integer plazas = 1;
+        Long subidaId = 101L;
+        Long bajadaId = 102L;
+
+        Parada subida = new Parada();
+        subida.setOrden(1);
+        Parada bajada = new Parada();
+        bajada.setOrden(2);
+
+        ViajeRecurrente vr = new ViajeRecurrente();
+        ReflectionTestUtils.setField(vr, "id", 100L);
+        vr.setEstado(EstadoViaje.PENDIENTE);
+        vr.setFechaHoraSalida(LocalDateTime.now().plusDays(2));
+        vr.setPlazasDisponibles(3);
+        vr.setPrecio(BigDecimal.TEN);
+        vr.setPersona(conductor);
+
+        when(personaRepository.findByEmail(email)).thenReturn(Optional.of(pasajero));
+        when(paradaRepository.findById(subidaId)).thenReturn(Optional.of(subida));
+        when(paradaRepository.findById(bajadaId)).thenReturn(Optional.of(bajada));
+        when(viajeRepository.findById(viajeId)).thenReturn(Optional.of(viaje));
+        when(viajeRecurrenteRepository.findAllById(recurrentesIds)).thenReturn(List.of(vr));
+        when(reservaRepository.saveAndFlush(any(Reserva.class))).thenAnswer(inv -> {
+            Reserva r = inv.getArgument(0);
+            if (r.getId() == null) ReflectionTestUtils.setField(r, "id", 1L);
+            return r;
+        });
+        when(pagoRepository.saveAndFlush(any(Pago.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pagoService.crearIntentoDePago(any(Reserva.class))).thenReturn("client_secret_lote");
+
+        // When
+        ReservaCreadaResponse response = reservaService.crearReservaLote(
+                email, viajeId, recurrentesIds, plazas, subidaId, bajadaId
+        );
+
+        // Then
+        assertNotNull(response);
+        assertEquals("client_secret_lote", response.clientSecret());
+        verify(pagoService).crearIntentoDePago(any(Reserva.class));
     }
 }
