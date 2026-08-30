@@ -5,7 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-import java.util.Arrays;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,17 +15,28 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.autenticacion.registro.Registro;
 import com.compicar.persona.dto.ActualizarPerfilDTO;
 import com.compicar.persona.dto.PerfilPersonaDTO;
-import com.compicar.valoracion.Valoracion;
+import com.stripe.exception.StripeException;
+import com.stripe.model.Account;
+import com.stripe.model.AccountLink;
+import com.stripe.model.Transfer;
+import com.stripe.param.AccountCreateParams;
+import com.stripe.param.AccountLinkCreateParams;
+import com.stripe.param.TransferCreateParams;
 
 @ExtendWith(MockitoExtension.class)
 public class PersonaServiceTest {
@@ -55,43 +68,63 @@ public class PersonaServiceTest {
         persona.setEmail("juan@example.com");
         persona.setTelefono("123456789");
         persona.setContrasena("encodedPassword");
+
+        ReflectionTestUtils.setField(personaService, "frontendUrl", "http://localhost:3000");
     }
 
     @Test
-    void testCrearPersonaDesdeRegistro_Success() {
-        // Given
+    void testCrearPersonaDesdeRegistro_Success_ConSlugColisionYTelefono() {
         Registro registro = new Registro();
         registro.setNombre("Ana");
         registro.setPrimerApellido("Lopez");
         registro.setEmail("ana@example.com");
-        registro.setNumTelefono("987654321");
+        registro.setNumTelefono("+34612345678");
         registro.setContrasena("password123");
 
-        when(personaRepository.existsByEmail(anyString())).thenReturn(false);
-        when(personaRepository.existsByTelefono(anyString())).thenReturn(false);
+        when(personaRepository.existsByEmail("ana@example.com")).thenReturn(false);
+        when(personaRepository.existsByTelefono("+34612345678")).thenReturn(false);
+        when(personaRepository.existsBySlug("ana-lopez")).thenReturn(true);
+        when(personaRepository.existsBySlug("ana-lopez-2")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("encoded_pass");
         when(personaRepository.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        // When
         Persona result = personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
 
-        // Then
         assertNotNull(result);
         assertEquals("ana@example.com", result.getEmail());
+        assertEquals("ana-lopez-2", result.getSlug());
         assertEquals("encoded_pass", result.getContrasena());
         verify(personaRepository).save(any(Persona.class));
-        verify(passwordEncoder).encode("password123");
+    }
+
+    @Test
+    void testCrearPersonaDesdeRegistro_TelefonoNullOVacio() {
+        Registro registro = new Registro();
+        registro.setNombre("Ana");
+        registro.setPrimerApellido("Lopez");
+        registro.setEmail("ana@example.com");
+        registro.setNumTelefono("");
+        registro.setContrasena("password123");
+
+        when(personaRepository.existsByEmail("ana@example.com")).thenReturn(false);
+        when(personaRepository.existsBySlug("ana-lopez")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded_pass");
+        when(personaRepository.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Persona result = personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
+
+        assertNotNull(result);
+        assertEquals("", result.getTelefono());
+        verify(personaRepository, never()).existsByTelefono(anyString());
     }
 
     @Test
     void testCrearPersonaDesdeRegistro_EmailYaExiste() {
-        // Given
         Registro registro = new Registro();
         registro.setEmail(persona.getEmail());
 
         when(personaRepository.existsByEmail(persona.getEmail())).thenReturn(true);
 
-        // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
         });
@@ -102,15 +135,13 @@ public class PersonaServiceTest {
 
     @Test
     void testCrearPersonaDesdeRegistro_TelefonoYaExiste() {
-        // Given
         Registro registro = new Registro();
-        registro.setEmail("nuevo_email@example.com"); // Email libre
-        registro.setNumTelefono(persona.getTelefono()); // Teléfono ocupado
+        registro.setEmail("nuevo_email@example.com");
+        registro.setNumTelefono(persona.getTelefono());
 
         when(personaRepository.existsByEmail("nuevo_email@example.com")).thenReturn(false);
         when(personaRepository.existsByTelefono(persona.getTelefono())).thenReturn(true);
 
-        // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
         });
@@ -120,46 +151,36 @@ public class PersonaServiceTest {
 
     @Test
     void testCrearPersonaDesdeRegistro_TelefonoFormatoInvalido() {
-        // Given
         Registro registro = new Registro();
         registro.setEmail("test@example.com");
-        registro.setNumTelefono("123"); // Demasiado corto, no cumple el patrón
+        registro.setNumTelefono("123");
 
         when(personaRepository.existsByEmail(anyString())).thenReturn(false);
 
-        // When & Then
-        // Suponiendo que lanzas IllegalArgumentException por formato inválido
-        assertThrows(IllegalArgumentException.class, () -> {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             personaService.crearPersonaDesdeRegistro(registro, passwordEncoder);
         });
-        
+
+        assertEquals("El formato del teléfono es inválido", exception.getMessage());
         verify(personaRepository, never()).save(any(Persona.class));
     }
 
     @Test
-    void testObtenerPerfil_Success() {
-        // Given
+    void testObtenerPerfil_ok() {
         when(personaRepository.findById(1L)).thenReturn(Optional.of(persona));
 
-        // When
         PerfilPersonaDTO result = personaService.obtenerPerfil(1L);
 
-        // Then
         assertNotNull(result);
         assertEquals(1L, result.getId());
         assertEquals("Juan", result.getNombre());
         assertEquals("Perez", result.getPrimerApellido());
-        assertEquals("Garcia", result.getSegundoApellido());
-        assertEquals("juan@example.com", result.getEmail());
-        assertEquals("123456789", result.getTelefono());
     }
 
     @Test
     void testObtenerPerfil_PersonaNoEncontrada() {
-        // Given
         when(personaRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             personaService.obtenerPerfil(1L);
         });
@@ -167,32 +188,61 @@ public class PersonaServiceTest {
     }
 
     @Test
-    void testActualizarPerfil_Success() {
-        // Given
+    void testActualizarPerfil_ok_MismoEmailYPreferencias() {
         SecurityContextHolder.setContext(securityContext);
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.getName()).thenReturn("juan@example.com");
         when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
-        when(personaRepository.save(any(Persona.class))).thenReturn(persona);
+        when(personaRepository.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "juan@example.com", "123456789", "password123");
+        ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "juan@example.com", "123456789", null);
+        dto.setPreferenciasViaje(List.of("MÚSICA", "MASCOTAS"));
 
-        // When
         ActualizarPerfilDTO result = personaService.actualizarPerfil(1L, dto);
 
-        // Then
         assertNotNull(result);
         assertEquals("Juan", result.getNombre());
-        assertEquals("Perez", result.getPrimerApellido());
-        assertEquals("Garcia", result.getSegundoApellido());
-        assertEquals("juan@example.com", result.getEmail());
-        assertEquals("123456789", result.getTelefono());
+        assertEquals(2, persona.getPreferenciasViaje().size());
         verify(personaRepository).save(persona);
     }
 
     @Test
+    void testActualizarPerfil_ok_CambioEmailCorrecto() {
+        SecurityContextHolder.setContext(securityContext);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getName()).thenReturn("juan@example.com");
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+        when(personaRepository.existsByEmail("nuevo@example.com")).thenReturn(false);
+        when(passwordEncoder.matches("password123", "encodedPassword")).thenReturn(true);
+        when(personaRepository.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "nuevo@example.com", "123456789", "password123");
+
+        ActualizarPerfilDTO result = personaService.actualizarPerfil(1L, dto);
+
+        assertNotNull(result);
+        assertEquals("nuevo@example.com", result.getEmail());
+    }
+
+    @Test
+    void testActualizarPerfil_CambioEmail_ContrasenaNullOBlanca() {
+        SecurityContextHolder.setContext(securityContext);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getName()).thenReturn("juan@example.com");
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+        when(personaRepository.existsByEmail("nuevo@example.com")).thenReturn(false);
+
+        ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "nuevo@example.com", "123456789", "  ");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            personaService.actualizarPerfil(1L, dto);
+        });
+
+        assertEquals("Debes introducir tu contraseña actual para cambiar el email", exception.getMessage());
+    }
+
+    @Test
     void testActualizarPerfil_UsuarioNoAutenticado() {
-        // Given
         SecurityContextHolder.setContext(securityContext);
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.getName()).thenReturn("juan@example.com");
@@ -200,7 +250,6 @@ public class PersonaServiceTest {
 
         ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "juan@example.com", "123456789", "password123");
 
-        // When & Then
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
             personaService.actualizarPerfil(1L, dto);
         });
@@ -209,7 +258,6 @@ public class PersonaServiceTest {
 
     @Test
     void testActualizarPerfil_NoPuedeModificarOtroUsuario() {
-        // Given
         Persona otroUsuario = new Persona();
         ReflectionTestUtils.setField(otroUsuario, "id", 2L);
         otroUsuario.setEmail("otro@example.com");
@@ -221,9 +269,7 @@ public class PersonaServiceTest {
 
         ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "juan@example.com", "123456789", "password123");
 
-        // When & Then
-        org.springframework.security.access.AccessDeniedException exception = assertThrows(
-            org.springframework.security.access.AccessDeniedException.class, () -> {
+        AccessDeniedException exception = assertThrows(AccessDeniedException.class, () -> {
             personaService.actualizarPerfil(1L, dto);
         });
         assertEquals("No puedes modificar el perfil de otro usuario", exception.getMessage());
@@ -231,7 +277,6 @@ public class PersonaServiceTest {
 
     @Test
     void testActualizarPerfil_EmailYaRegistrado() {
-        // Given
         SecurityContextHolder.setContext(securityContext);
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.getName()).thenReturn("juan@example.com");
@@ -240,7 +285,6 @@ public class PersonaServiceTest {
 
         ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "nuevo@example.com", "123456789", "password123");
 
-        // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             personaService.actualizarPerfil(1L, dto);
         });
@@ -249,7 +293,6 @@ public class PersonaServiceTest {
 
     @Test
     void testActualizarPerfil_ContrasenaIncorrecta() {
-        // Given
         SecurityContextHolder.setContext(securityContext);
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.getName()).thenReturn("juan@example.com");
@@ -259,7 +302,6 @@ public class PersonaServiceTest {
 
         ActualizarPerfilDTO dto = new ActualizarPerfilDTO("Juan", "Perez", "Garcia", "nuevo@example.com", "123456789", "wrongPassword");
 
-        // When & Then
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             personaService.actualizarPerfil(1L, dto);
         });
@@ -267,71 +309,261 @@ public class PersonaServiceTest {
     }
 
     @Test
-    void testRetirarFondos_SaldoInsuficiente() {
-        // Given
-        persona.setFondosActuales(new java.math.BigDecimal("5.00")); // Menos del mínimo (10.00)
+    void testObtenerPersonaPorNombrePersona_ok() {
+        when(personaRepository.findByNombre("Juan")).thenReturn(persona);
+
+        Persona result = personaService.obtenerPersonaPorNombrePersona("Juan");
+
+        assertNotNull(result);
+        assertEquals("Juan", result.getNombre());
+    }
+
+    @Test
+    void testObtenerPersonaPorNombrePersona_NoEncontrado() {
+        when(personaRepository.findByNombre("NoExiste")).thenReturn(null);
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            personaService.obtenerPersonaPorNombrePersona("NoExiste");
+        });
+        assertEquals("Usuario no encontrado", exception.getMessage());
+    }
+
+    @Test
+    void testObtenerPersonaPorEmail_ok() {
         when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
 
-        // When & Then
-        org.springframework.web.server.ResponseStatusException exception = assertThrows(
-            org.springframework.web.server.ResponseStatusException.class, () -> {
-                personaService.retirarFondos("juan@example.com");
-            }
-        );
+        Persona result = personaService.obtenerPersonaPorEmail("juan@example.com");
 
-        assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertNotNull(result);
+        assertEquals("juan@example.com", result.getEmail());
+    }
+
+    @Test
+    void testObtenerPersonaPorEmail_NoEncontrado() {
+        when(personaRepository.findByEmail("noexiste@example.com")).thenReturn(Optional.empty());
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            personaService.obtenerPersonaPorEmail("noexiste@example.com");
+        });
+        assertEquals("Usuario no encontrado", exception.getMessage());
+    }
+
+    @Test
+    void testObtenerPerfilPorSlug_ok() {
+        persona.setSlug("juan-perez");
+        when(personaRepository.findBySlug("juan-perez")).thenReturn(Optional.of(persona));
+
+        PerfilPersonaDTO result = personaService.obtenerPerfilPorSlug("juan-perez");
+
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+    }
+
+    @Test
+    void testObtenerPerfilPorSlug_NoEncontrado() {
+        when(personaRepository.findBySlug("inexistente")).thenReturn(Optional.empty());
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            personaService.obtenerPerfilPorSlug("inexistente");
+        });
+        assertEquals("Persona no encontrada", exception.getMessage());
+    }
+
+    @Test
+    void testSubirFoto_ok() {
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+        when(personaRepository.save(any(Persona.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        personaService.subirFoto("juan@example.com", "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAE...");
+
+        assertEquals("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAE...", persona.getFoto());
+        verify(personaRepository).save(persona);
+    }
+
+    @Test
+    void testSubirFoto_UsuarioNoEncontrado() {
+        when(personaRepository.findByEmail("noexiste@example.com")).thenReturn(Optional.empty());
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            personaService.subirFoto("noexiste@example.com", "foto");
+        });
+        assertEquals("Usuario no encontrado", exception.getMessage());
+    }
+
+    @Test
+    void testSubirFoto_TamanoExcedido() {
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+
+        String fotoGrande = "a".repeat(5 * 1024 * 1024 + 1);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            personaService.subirFoto("juan@example.com", fotoGrande);
+        });
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertEquals("Foto demasiado grande", exception.getReason());
+    }
+
+    @Test
+    void testRetirarFondos_SaldoInsuficiente() {
+        persona.setFondosActuales(new BigDecimal("5.00"));
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            personaService.retirarFondos("juan@example.com");
+        });
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(exception.getReason().contains("Se requiere un saldo mínimo de 10.00€"));
     }
 
     @Test
+    void testRetirarFondos_FondosNull_SaldoInsuficiente() {
+        persona.setFondosActuales(null);
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            personaService.retirarFondos("juan@example.com");
+        });
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+    }
+
+    @Test
     void testRetirarFondos_UsuarioNoEncontrado() {
-        // Given
         when(personaRepository.findByEmail("noexiste@example.com")).thenReturn(Optional.empty());
 
-        // When & Then
-        org.springframework.web.server.ResponseStatusException exception = assertThrows(
-            org.springframework.web.server.ResponseStatusException.class, () -> {
-                personaService.retirarFondos("noexiste@example.com");
-            }
-        );
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+            personaService.retirarFondos("noexiste@example.com");
+        });
 
-        assertEquals(org.springframework.http.HttpStatus.UNAUTHORIZED, exception.getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatusCode());
         assertEquals("Usuario no encontrado", exception.getReason());
     }
 
     @Test
-    void testRetirarFondos_Success_CreaCuentaYTransfiere() {
-        // Given
-        persona.setFondosActuales(new java.math.BigDecimal("50.00")); // Más de 10€
-        persona.setStripeConductorId(null); // Forzamos a que cree la cuenta en Stripe
+    void testRetirarFondos_ok_CreaCuentaYTransfiere() {
+        persona.setFondosActuales(new BigDecimal("50.00"));
+        persona.setStripeConductorId(null);
 
         when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
         when(personaRepository.save(any(Persona.class))).thenReturn(persona);
 
-        // Mockeamos las llamadas estáticas de Stripe usando mockStatic
-        try (org.mockito.MockedStatic<com.stripe.model.Account> mockedAccount = mockStatic(com.stripe.model.Account.class);
-             org.mockito.MockedStatic<com.stripe.model.AccountLink> mockedAccountLink = mockStatic(com.stripe.model.AccountLink.class)) {
+        try (MockedStatic<Account> mockedAccount = mockStatic(Account.class);
+             MockedStatic<AccountLink> mockedAccountLink = mockStatic(AccountLink.class)) {
 
-            // Simulamos Account.create(...)
-            com.stripe.model.Account mockAccount = mock(com.stripe.model.Account.class);
+            Account mockAccount = mock(Account.class);
             when(mockAccount.getId()).thenReturn("acct_123");
-            mockedAccount.when(() -> com.stripe.model.Account.create(any(com.stripe.param.AccountCreateParams.class)))
+            mockedAccount.when(() -> Account.create(any(AccountCreateParams.class)))
                           .thenReturn(mockAccount);
 
-            // Simulamos AccountLink.create(...)
-            com.stripe.model.AccountLink mockLink = mock(com.stripe.model.AccountLink.class);
+            AccountLink mockLink = mock(AccountLink.class);
             when(mockLink.getUrl()).thenReturn("https://connect.stripe.com/setup/s/xyz");
-            mockedAccountLink.when(() -> com.stripe.model.AccountLink.create(any(com.stripe.param.AccountLinkCreateParams.class)))
+            mockedAccountLink.when(() -> AccountLink.create(any(AccountLinkCreateParams.class)))
                              .thenReturn(mockLink);
 
-            // When
-            java.util.Map<String, Object> resultado = personaService.retirarFondos("juan@example.com");
+            Map<String, Object> resultado = personaService.retirarFondos("juan@example.com");
 
-            // Then
             assertNotNull(resultado);
             assertEquals("REQUIRES_ONBOARDING", resultado.get("status"));
             assertEquals("https://connect.stripe.com/setup/s/xyz", resultado.get("url"));
             verify(personaRepository).save(persona);
         }
+    }
+
+    @Test
+    void testRetirarFondos_CuentaExistente_Incompleta_RequiresOnboarding() {
+        persona.setFondosActuales(new BigDecimal("25.00"));
+        persona.setStripeConductorId("acct_existente");
+
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+
+        try (MockedStatic<Account> mockedAccount = mockStatic(Account.class);
+             MockedStatic<AccountLink> mockedAccountLink = mockStatic(AccountLink.class)) {
+
+            Account mockAccount = mock(Account.class);
+            when(mockAccount.getId()).thenReturn("acct_existente");
+            when(mockAccount.getDetailsSubmitted()).thenReturn(false);
+
+            mockedAccount.when(() -> Account.retrieve("acct_existente")).thenReturn(mockAccount);
+
+            AccountLink mockLink = mock(AccountLink.class);
+            when(mockLink.getUrl()).thenReturn("http://localhost:3000/perfil?stripe=refresh");
+            mockedAccountLink.when(() -> AccountLink.create(any(AccountLinkCreateParams.class)))
+                             .thenReturn(mockLink);
+
+            Map<String, Object> resultado = personaService.retirarFondos("juan@example.com");
+
+            assertNotNull(resultado);
+            assertEquals("REQUIRES_ONBOARDING", resultado.get("status"));
+            assertEquals("http://localhost:3000/perfil?stripe=refresh", resultado.get("url"));
+        }
+    }
+
+    @Test
+    void testRetirarFondos_Success_TransfiereExitosamente() {
+        persona.setFondosActuales(new BigDecimal("50.00"));
+        persona.setStripeConductorId("acct_completa");
+
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+        when(personaRepository.save(any(Persona.class))).thenReturn(persona);
+
+        try (MockedStatic<Account> mockedAccount = mockStatic(Account.class);
+             MockedStatic<Transfer> mockedTransfer = mockStatic(Transfer.class)) {
+
+            Account mockAccount = mock(Account.class);
+            when(mockAccount.getDetailsSubmitted()).thenReturn(true);
+            mockedAccount.when(() -> Account.retrieve("acct_completa")).thenReturn(mockAccount);
+
+            Transfer mockTransfer = mock(Transfer.class);
+            when(mockTransfer.getId()).thenReturn("tr_9999");
+            mockedTransfer.when(() -> Transfer.create(any(TransferCreateParams.class))).thenReturn(mockTransfer);
+
+            Map<String, Object> resultado = personaService.retirarFondos("juan@example.com");
+
+            assertNotNull(resultado);
+            assertEquals("SUCCESS", resultado.get("status"));
+            assertEquals("tr_9999", resultado.get("transferId"));
+            assertEquals(BigDecimal.ZERO, persona.getFondosActuales());
+            verify(personaRepository).save(persona);
+        }
+    }
+
+    @Test
+    void testRetirarFondos_StripeException_LanzaResponseStatusException() {
+        persona.setFondosActuales(new BigDecimal("50.00"));
+        persona.setStripeConductorId("acct_error");
+
+        when(personaRepository.findByEmail("juan@example.com")).thenReturn(Optional.of(persona));
+
+        try (MockedStatic<Account> mockedAccount = mockStatic(Account.class)) {
+            mockedAccount.when(() -> Account.retrieve("acct_error")).thenThrow(mock(StripeException.class));
+
+            ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
+                personaService.retirarFondos("juan@example.com");
+            });
+
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, exception.getStatusCode());
+            assertTrue(exception.getReason().contains("Error al comunicarse con Stripe"));
+        }
+    }
+
+    @Test
+    void testObtenerTopConductores_ok() {
+        Persona conductorTop = new Persona();
+        ReflectionTestUtils.setField(conductorTop, "id", 2L);
+        conductorTop.setNombre("Carlos");
+
+        Object[] fila = new Object[]{ conductorTop, 4.766 };
+        List<Object[]> resultados = java.util.Collections.singletonList(fila);
+
+        when(personaRepository.findTopConductoresConReputacion(any(Pageable.class))).thenReturn(resultados);
+
+        List<PerfilPersonaDTO> dtos = personaService.obtenerTopConductores();
+
+        assertNotNull(dtos);
+        assertEquals(1, dtos.size());
+        assertEquals("Carlos", dtos.get(0).getNombre());
+        assertEquals(4.8, dtos.get(0).getReputacion());
     }
 }

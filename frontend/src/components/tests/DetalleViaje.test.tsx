@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../setupTests';
 import DetalleViaje from '../viajes/DetalleViaje';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -634,5 +635,299 @@ test('Muestra un mensaje de error si falla la llamada de check-in global', async
   // 4. Validar la respuesta de error
   await waitFor(() => {
     expect(screen.getByText(/Error al procesar check-in/i)).toBeInTheDocument();
+  });
+});
+
+test('El conductor inicia el viaje correctamente cuando llega la hora de salida', async () => {
+  let iniciarCalled = false;
+  const viajePasado = {
+    ...mockViajeBase,
+    conductorId: 5,
+    fechaHoraSalida: new Date(Date.now() - 3600000).toISOString() // Hora ya sucedida
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajePasado);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/iniciar', () => {
+      iniciarCalled = true;
+      return HttpResponse.json({ ...viajePasado, estado: 'INICIADO' });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  const btnIniciar = screen.getByRole('button', { name: /iniciar viaje/i });
+  expect(btnIniciar).not.toBeDisabled();
+  fireEvent.click(btnIniciar);
+
+  await waitFor(() => {
+    expect(iniciarCalled).toBe(true);
+    expect(screen.getByText(/✅ El viaje ha sido iniciado correctamente/i)).toBeInTheDocument();
+  });
+});
+
+test('El conductor marca el viaje como finalizado cuando está EN_CURSO', async () => {
+  let finalizarCalled = false;
+  const viajeEnCurso = {
+    ...mockViajeBase,
+    conductorId: 5,
+    estado: 'EN_CURSO'
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeEnCurso);
+    }),
+    http.all('*/api/viajes/*/finalizar', () => {
+      finalizarCalled = true;
+      return HttpResponse.json({ ...viajeEnCurso, estado: 'FINALIZADO' });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  const btnFinalizar = screen.getByRole('button', { name: /marcar viaje como finalizado|finalizar viaje/i });
+  fireEvent.click(btnFinalizar);
+
+  const btnConfirmarModal = screen.queryByRole('button', { name: /^confirmar$|^sí, finalizar$/i });
+  if (btnConfirmarModal) {
+    fireEvent.click(btnConfirmarModal);
+  }
+
+  await waitFor(() => {
+    expect(finalizarCalled).toBe(true);
+  });
+
+  const mensajes = await screen.findAllByText(/finalizado|viaje ha sido finalizado/i);
+  expect(mensajes.length).toBeGreaterThan(0);
+});
+
+test('El conductor edita los detalles del viaje (fecha y plazas)', async () => {
+  let editarCalled = false;
+  const viajeModificable = {
+    ...mockViajeBase,
+    conductorId: 5,
+    fechaHoraSalida: new Date(Date.now() + 86400000 * 2).toISOString()
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeModificable);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123', () => {
+      editarCalled = true;
+      return HttpResponse.json({ ...viajeModificable, plazasDisponibles: 5 });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  const btnEditar = screen.getByRole('button', { name: /editar detalles del viaje/i });
+  fireEvent.click(btnEditar);
+
+  const btnConfirmar = screen.getByRole('button', { name: /confirmar cambios/i });
+  fireEvent.click(btnConfirmar);
+
+  await waitFor(() => {
+    expect(editarCalled).toBe(true);
+    expect(screen.getByText(/✅ Viaje actualizado con éxito/i)).toBeInTheDocument();
+  });
+});
+
+test('El pasajero modifica su reserva existente con éxito', async () => {
+  const user = userEvent.setup();
+  let actualizarReservaCalled = false;
+
+  const reservaInicial = {
+    ...mockReservaPasajero,
+    id: 99,
+    cantidadPlazas: 1,
+    paradaOrigenId: 10,
+    paradaDestinoId: 12
+  };
+
+  const viajeConMargenValido = {
+    ...mockViajeBase,
+    plazasDisponibles: 4,
+    fechaHoraSalida: new Date(Date.now() + 86400000 * 2).toISOString(),
+    paradas: [
+      { id: 10, nombre: 'Madrid - Estación Sur' },
+      { id: 11, nombre: 'Zaragoza - Delicias' },
+      { id: 12, nombre: 'Barcelona - Sants' }
+    ],
+    reservas: [reservaInicial]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeConMargenValido);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([reservaInicial]);
+    }),
+    http.all('*/api/reservas*', () => {
+      actualizarReservaCalled = true;
+      return HttpResponse.json({ ...reservaInicial, paradaOrigenId: 11 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  // 1. Abrir edición de reserva
+  const btnModificar = await screen.findByRole('button', { name: /modificar mi reserva/i });
+  await user.click(btnModificar);
+
+  // 2. Cambiar la parada de origen de Madrid (10) a Zaragoza (11)
+  const desplegables = await screen.findAllByRole('combobox');
+  await user.selectOptions(desplegables[0], '11');
+
+  // 3. El botón "Guardar Cambios" se habilita al cambiar el valor del select
+  const btnGuardar = screen.getByRole('button', { name: /guardar cambios/i });
+  
+  await waitFor(() => {
+    expect(btnGuardar).not.toBeDisabled();
+  });
+
+  await user.click(btnGuardar);
+
+  // 4. Verificaciones
+  await waitFor(() => {
+    expect(actualizarReservaCalled).toBe(true);
+  });
+
+  const mensajesExito = await screen.findAllByText(/reserva actualizada|actualizada con éxito/i);
+  expect(mensajesExito.length).toBeGreaterThan(0);
+});
+
+test('Muestra un error cuando el conductor introduce un código de check-in individual erróneo', async () => {
+  const mockViajeConCheckin = {
+    ...mockViajeIniciado,
+    checkin: 'CODIGO_CORRECTO',
+    reservas: [{ ...mockReservaPasajero, id: 99, estado: 'PENDIENTE' }]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeConCheckin);
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnPresente = await screen.findByRole('button', { name: /^Presente$/i });
+  fireEvent.click(btnPresente);
+
+  const inputCodigo = screen.getByPlaceholderText(/introduce el código/i);
+  fireEvent.change(inputCodigo, { target: { value: 'CODIGO_ERRONEO' } });
+
+  const btnAceptar = screen.getByRole('button', { name: /^Aceptar$/i });
+  fireEvent.click(btnAceptar);
+
+  await waitFor(() => {
+    expect(
+      screen.getByText(/❌ El código introducido no coincide con el check-in del viaje/i)
+    ).toBeInTheDocument();
+  });
+});
+
+test('Muestra el aviso de autenticación requerida si un usuario no logueado intenta reservar', async () => {
+  localStorage.removeItem('token');
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  const btnReservar = screen.getByRole('button', { name: /reservar ahora/i });
+  fireEvent.click(btnReservar);
+
+  expect(
+    screen.getByText(/Debes iniciar sesión o registrarte para poder reservar un viaje/i)
+  ).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /iniciar sesión/i })).toBeInTheDocument();
+});
+
+test('El conductor cancela un viaje simple no recurrente', async () => {
+  let cancelSingleCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/cancelar', () => {
+      cancelSingleCalled = true;
+      return HttpResponse.json({ ...mockViajeBase, estado: 'CANCELADO' });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  // Abrir modal de cancelación simple
+  const btnCancelar = screen.getByRole('button', { name: /cancelar viaje/i });
+  fireEvent.click(btnCancelar);
+
+  // Confirmar la cancelación dentro del modal simple
+  const btnConfirmar = await screen.findByRole('button', { name: /sí, cancelar viaje/i });
+  fireEvent.click(btnConfirmar);
+
+  await waitFor(() => {
+    expect(cancelSingleCalled).toBe(true);
+    expect(screen.getByText(/✅ Viaje cancelado correctamente/i)).toBeInTheDocument();
+  });
+});
+
+test('El conductor cancela la serie completa de viajes recurrentes que quedan', async () => {
+  let cancelConjuntoCalled = false;
+
+  const viajeRecurrentePadre = {
+    ...mockViajeBase,
+    fechaFinRecurrencia: '2026-12-31T23:59:59Z',
+    diasSemana: ['LUNES', 'MIERCOLES'],
+    viajesRecurrentes: [
+      { id: 2, slug: 'madrid-barcelona-124', fechaHoraSalida: '2026-09-02T10:00:00Z' },
+      { id: 3, slug: 'madrid-barcelona-125', fechaHoraSalida: '2026-09-07T10:00:00Z' }
+    ]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeRecurrentePadre);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/cancelar-conjunto', () => {
+      cancelConjuntoCalled = true;
+      return HttpResponse.json({ ...viajeRecurrentePadre, estado: 'CANCELADO' });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  expect(await screen.findByText(/Configuración de Viaje Recurrente/i)).toBeInTheDocument();
+
+  // Abrir modal de opciones de cancelación recurrente
+  const btnCancelarRecurrente = screen.getByRole('button', { name: /cancelar viaje/i });
+  fireEvent.click(btnCancelarRecurrente);
+
+  // Seleccionar opción de cancelar la serie completa
+  const btnConfirmarConjunto = await screen.findByRole('button', { name: /cancelar toda la serie/i });
+  fireEvent.click(btnConfirmarConjunto);
+
+  await waitFor(() => {
+    expect(cancelConjuntoCalled).toBe(true);
+    expect(screen.getByText(/✅ Viajes cancelados en conjunto correctamente/i)).toBeInTheDocument();
   });
 });
