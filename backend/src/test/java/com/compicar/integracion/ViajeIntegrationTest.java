@@ -1,7 +1,14 @@
 package com.compicar.integracion;
 
+import com.compicar.reserva.EstadoReserva;
+import com.compicar.reserva.Reserva;
+import com.compicar.reserva.ReservaRepository;
+import com.compicar.viaje.EstadoViaje;
+import com.compicar.viaje.Viaje;
+import com.compicar.viaje.ViajeRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -17,6 +24,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class ViajeIntegrationTest extends BaseIntegrationTest {
 
+    @Autowired
+    private ViajeRepository viajeRepository;
+
+    @Autowired
+    private ReservaRepository reservaRepository;
+    
     @Test
     void crearViajeYObtenerPorSlug_ok() throws Exception {
         String token = registerAndLogin();
@@ -376,6 +389,104 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(put("/api/viajes/" + slug + "/finalizar")
             .header("Authorization", "Bearer " + token2))
-            .andExpect(status().isForbidden()); // O isUnauthorized() / isBadRequest() según cómo gestione tu backend los permisos de usuario no propietario
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void iniciarViaje_ok() throws Exception {
+        String token = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token);
+        crearViaje(token, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(token);
+
+        // Actualizamos la fecha a 'ahora' para pasar la validación temporal
+        Viaje viaje = viajeRepository.findBySlug(slug).orElseThrow();
+        viaje.setFechaHoraSalida(LocalDateTime.now());
+        viajeRepository.save(viaje);
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/iniciar")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("INICIADO"));
+    }
+
+    @Test
+    void obtenerProximoViaje_ok() throws Exception {
+        String token = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token);
+        crearViaje(token, vehiculoId);
+
+        mockMvc.perform(get("/api/viajes/proximo")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.slug").exists());
+    }
+
+    @Test
+    void ponerEnCurso_ok() throws Exception {
+        String token = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token);
+        crearViaje(token, vehiculoId);
+        String slug = obtenerPrimerViajeSlug(token);
+
+        Viaje viaje = viajeRepository.findBySlug(slug).orElseThrow();
+        // 1. Nos aseguramos de que el estado sea PENDIENTE y la fecha sea actual/pasada
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viaje.setFechaHoraSalida(LocalDateTime.now().minusMinutes(5));
+        viajeRepository.save(viaje);
+
+        mockMvc.perform(put("/api/viajes/" + slug + "/en-curso")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("EN_CURSO"));
+    }
+
+    @Test
+    void confirmarCheckin_ok() throws Exception {
+        String driverToken = registerAndLogin();
+        Long vehiculoId = crearVehiculo(driverToken);
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
+        String slug = obtenerPrimerViajeSlug(driverToken);
+
+        String passengerToken = registerAndLogin();
+
+        // 1. Crear la reserva como pasajero
+        Map<String, Object> payload = Map.of(
+            "viajeId", viajeId,
+            "cantidadPlazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
+        );
+
+        MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
+            .header("Authorization", "Bearer " + passengerToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
+
+        // 2. Configurar el viaje (fecha actual/pasada y código de 6 caracteres máximo)
+        Viaje viaje = viajeRepository.findBySlug(slug).orElseThrow();
+        viaje.setFechaHoraSalida(LocalDateTime.now().minusMinutes(5));
+        viaje.setEstado(EstadoViaje.INICIADO);
+        viaje.setCheckin("123456");
+        viajeRepository.saveAndFlush(viaje);
+
+        // 3. Confirmar la reserva del pasajero
+        Reserva reserva = reservaRepository.findById(reservaId).orElseThrow();
+        reserva.setEstado(EstadoReserva.CONFIRMADA);
+        reservaRepository.saveAndFlush(reserva);
+
+        // 4. El CONDUCTOR introduce el código que le proporciona el pasajero
+        mockMvc.perform(put("/api/viajes/" + slug + "/checkin")
+            .param("checkin", "123456")
+            .header("Authorization", "Bearer " + driverToken))
+            .andExpect(status().isOk());
     }
 }

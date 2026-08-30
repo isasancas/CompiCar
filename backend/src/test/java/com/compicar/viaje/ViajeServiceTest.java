@@ -2,6 +2,8 @@ package com.compicar.viaje;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -1237,44 +1239,6 @@ class ViajeServiceTest {
         assertTrue(ex.getMessage().contains("Error al reembolsar el pago en Stripe"));
     }
 
-    private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
-        Parada p = new Parada();
-        p.setTipo(tipo);
-        p.setLocalizacion(loc);
-        p.setFechaHora(fecha);
-        p.setOrden(orden);
-        return p;
-    }
-
-    private Viaje viajeCompleto(Long id, String slug) {
-        Viaje v = new Viaje();
-        ReflectionTestUtils.setField(v, "id", id);
-        v.setFechaHoraSalida(salida);
-        v.setEstado(EstadoViaje.PENDIENTE);
-        v.setPlazasDisponibles(3);
-        v.setPrecio(new BigDecimal("9.90"));
-        v.setVehiculo(vehiculoConductor);
-        v.setPersona(conductor);
-        v.setSlug(slug);
-
-        Parada o = new Parada();
-        ReflectionTestUtils.setField(o, "id", 100L + id);
-        o.setTipo(TipoParada.ORIGEN);
-        o.setLocalizacion("Sevilla");
-        o.setOrden(1);
-        o.setViaje(v);
-
-        Parada d = new Parada();
-        ReflectionTestUtils.setField(d, "id", 200L + id);
-        d.setTipo(TipoParada.DESTINO);
-        d.setLocalizacion("Cadiz");
-        d.setOrden(2);
-        d.setViaje(v);
-
-        v.setParadas(List.of(o, d));
-        return v;
-    }
-
     @Test
     void finalizarViaje_ok_capturaPagosYActualizaFondos() throws Exception { // <- CORREGIDO AQUÍ CON throws Exception
         String slug = "sevilla-cadiz-2026-05-01";
@@ -1381,5 +1345,148 @@ class ViajeServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
         assertTrue(ex.getReason().contains("No se puede finalizar un viaje en estado CANCELADO"));
+    }
+
+    @Test
+    void finalizarViaje_errorStripeCaptura_lanzaResponseStatusException() throws StripeException {
+        String usuarioEmail = "conductor@test.com";
+        String slug = "madrid-barcelona-2026-08-30";
+
+        Persona conductor = new Persona();
+        ReflectionTestUtils.setField(conductor, "id", 1L);
+        conductor.setEmail(usuarioEmail);
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductor);
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+        viaje.setPrecio(BigDecimal.valueOf(20));
+
+        Reserva reserva = new Reserva();
+        reserva.setCantidadPlazas(1);
+        Pago pago = new Pago();
+        pago.setStripePaymentIntentId("pi_test_123");
+        pago.setEstado(EstadoPago.PENDIENTE);
+        reserva.setPago(pago);
+
+        when(personaRepository.findByEmail(usuarioEmail)).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viaje));
+        when(reservaRepository.findByViajeAndEstadoNot(eq(viaje), any())).thenReturn(List.of(reserva));
+
+        StripeException stripeException = mock(StripeException.class);
+        doThrow(stripeException).when(stripeService).confirmarCaptura("pi_test_123");
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class, 
+            () -> viajeService.finalizarViaje(usuarioEmail, slug)
+        );
+
+        assertEquals(HttpStatus.PAYMENT_REQUIRED, exception.getStatusCode());
+    }
+
+    @Test
+    void finalizarViaje_exito_actualizaFondosConductorYCompletaViaje() throws StripeException {
+        String usuarioEmail = "conductor@test.com";
+        String slug = "madrid-barcelona-2026-08-30";
+
+        Persona conductor = new Persona();
+        ReflectionTestUtils.setField(conductor, "id", 1L);
+        conductor.setEmail(usuarioEmail);
+        conductor.setFondosActuales(BigDecimal.ZERO);
+        conductor.setFondosTotales(BigDecimal.ZERO);
+
+        Vehiculo vehiculo = new Vehiculo();
+        vehiculo.setId(10L);
+        vehiculo.setMarca("Seat");
+        vehiculo.setModelo("Ibiza");
+        vehiculo.setMatricula("1234ABC");
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductor);
+        viaje.setVehiculo(vehiculo);
+        viaje.setParadas(List.of());
+        viaje.setEstado(EstadoViaje.EN_CURSO);
+        viaje.setPrecio(BigDecimal.valueOf(20));
+
+        Reserva reserva = new Reserva();
+        reserva.setCantidadPlazas(1);
+        reserva.setPersona(conductor);
+        Pago pago = new Pago();
+        pago.setStripePaymentIntentId("pi_test_123");
+        pago.setEstado(EstadoPago.PENDIENTE);
+        reserva.setPago(pago);
+
+        when(personaRepository.findByEmail(usuarioEmail)).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viaje));
+        when(reservaRepository.findByViajeAndEstadoNot(eq(viaje), any())).thenReturn(List.of(reserva));
+
+        ViajeDTO resultado = viajeService.finalizarViaje(usuarioEmail, slug);
+
+        assertEquals("FINALIZADO", resultado.getEstado());
+        verify(stripeService).confirmarCaptura("pi_test_123");
+    }
+
+    @Test
+    void finalizarViaje_usuarioNoEsConductor_lanzaExcepcionAccesoDenegado() {
+        String usuarioEmail = "pasajero@test.com";
+        String slug = "madrid-barcelona-2026-08-30";
+
+        Persona conductor = new Persona();
+        ReflectionTestUtils.setField(conductor, "id", 1L);
+        conductor.setEmail("conductor@test.com");
+
+        Persona pasajero = new Persona();
+        ReflectionTestUtils.setField(pasajero, "id", 2L);
+        pasajero.setEmail(usuarioEmail);
+
+        Viaje viaje = new Viaje();
+        viaje.setPersona(conductor);
+
+        when(personaRepository.findByEmail(usuarioEmail)).thenReturn(Optional.of(pasajero));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viaje));
+
+        ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> viajeService.finalizarViaje(usuarioEmail, slug)
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+    }
+
+    private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
+        Parada p = new Parada();
+        p.setTipo(tipo);
+        p.setLocalizacion(loc);
+        p.setFechaHora(fecha);
+        p.setOrden(orden);
+        return p;
+    }
+
+    private Viaje viajeCompleto(Long id, String slug) {
+        Viaje v = new Viaje();
+        ReflectionTestUtils.setField(v, "id", id);
+        v.setFechaHoraSalida(salida);
+        v.setEstado(EstadoViaje.PENDIENTE);
+        v.setPlazasDisponibles(3);
+        v.setPrecio(new BigDecimal("9.90"));
+        v.setVehiculo(vehiculoConductor);
+        v.setPersona(conductor);
+        v.setSlug(slug);
+
+        Parada o = new Parada();
+        ReflectionTestUtils.setField(o, "id", 100L + id);
+        o.setTipo(TipoParada.ORIGEN);
+        o.setLocalizacion("Sevilla");
+        o.setOrden(1);
+        o.setViaje(v);
+
+        Parada d = new Parada();
+        ReflectionTestUtils.setField(d, "id", 200L + id);
+        d.setTipo(TipoParada.DESTINO);
+        d.setLocalizacion("Cadiz");
+        d.setOrden(2);
+        d.setViaje(v);
+
+        v.setParadas(List.of(o, d));
+        return v;
     }
 }
