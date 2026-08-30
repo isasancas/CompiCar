@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../setupTests';
 import DetalleViaje from '../viajes/DetalleViaje';
+import { userEvent } from '@testing-library/user-event/dist/cjs/setup/index.js';
 
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -100,6 +101,18 @@ const mockReservaPasajero = {
   paradaBajadaId: 11,
   cantidadPlazas: 1,
   nombrePasajero: 'Juan Pérez'
+};
+
+const mockViajeRecurrentePadre = {
+  ...mockViajeBase,
+  id: 10,
+  slug: 'madrid-valencia-recurrente',
+  diasSemana: ['LUNES', 'MIERCOLES', 'VIERNES'],
+  fechaFinRecurrencia: '2026-12-31T23:59:59Z',
+  viajesRecurrentes: [
+    { id: 11, slug: 'madrid-valencia-1', fechaHoraSalida: new Date(Date.now() + 86400000).toISOString(), estado: 'PENDIENTE', plazasDisponibles: 3, precio: 20, vehiculo: mockViajeBase.vehiculo, paradas: mockViajeBase.paradas },
+    { id: 12, slug: 'madrid-valencia-2', fechaHoraSalida: new Date(Date.now() + 172800000).toISOString(), estado: 'PENDIENTE', plazasDisponibles: 3, precio: 20, vehiculo: mockViajeBase.vehiculo, paradas: mockViajeBase.paradas }
+  ]
 };
 
 beforeEach(() => {
@@ -636,3 +649,111 @@ test('Muestra un mensaje de error si falla la llamada de check-in global', async
     expect(screen.getByText(/Error al procesar check-in/i)).toBeInTheDocument();
   });
 });
+test('Permite al conductor finalizar un viaje que está en curso para proceder a su cierre y cobro', async () => {
+  let finalizarCalled = false;
+
+  const mockViajeEnCurso = {
+    ...mockViajeBase,
+    estado: 'EN_CURSO',
+  };
+
+  const mockViajeFinalizado = {
+    ...mockViajeEnCurso,
+    estado: 'FINALIZADO',
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeEnCurso);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/finalizar', () => {
+      finalizarCalled = true;
+      return HttpResponse.json(mockViajeFinalizado);
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const botonFinalizar = await screen.findByRole('button', { name: /marcar viaje como finalizado/i });
+  expect(botonFinalizar).toBeInTheDocument();
+
+  fireEvent.click(botonFinalizar);
+
+  await waitFor(() => {
+  expect(finalizarCalled).toBe(true);
+  expect(screen.getAllByText('FINALIZADO').length).toBeGreaterThan(0);
+  });
+});
+
+test('Inicia el proceso de pago en lote para un viaje recurrente e integra Stripe', async () => {
+  let crearLoteCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeRecurrentePadre);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear-lote', async ({ request }) => {
+      crearLoteCalled = true;
+      const body = await request.json() as any;
+      // Comprobamos que envía los IDs de los viajes recurrentes asociados
+      if (body.viajeRecurrenteIds && body.viajeRecurrenteIds.length === 2) {
+        return HttpResponse.json({ clientSecret: 'pi_test_secret_lote_123', loteId: 900 });
+      }
+      return new HttpResponse(null, { status: 400 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
+
+  // Abrir modal de reserva para viaje recurrente
+  const btnReservarRecurrente = screen.getByRole('button', { name: /reservar viajes recurrentes/i });
+  fireEvent.click(btnReservarRecurrente);
+
+  // Aceptar el aviso de cobro
+  const checkboxAviso = screen.getByRole('checkbox');
+  fireEvent.click(checkboxAviso);
+
+  // El monto total calculado debe reflejar el viaje padre + las instancias recurrentes (3 viajes en total x 20€ = 60€)
+  const btnPagarLote = screen.getByRole('button', { name: /pagar 60.00€ y reservar/i });
+  fireEvent.click(btnPagarLote);
+
+  await waitFor(() => {
+    expect(crearLoteCalled).toBe(true);
+    expect(screen.getByTestId('checkout-form')).toBeInTheDocument();
+    expect(screen.getByText(/monto: 40€/i)).toBeInTheDocument();
+  });
+});
+
+test('El pasajero completa con éxito el pago del lote de viajes recurrentes a través de Stripe', async () => {
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeRecurrentePadre);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear-lote', () => {
+      return HttpResponse.json({ clientSecret: 'pi_test_secret_lote_123', loteId: 900 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  await screen.findByText('Toyota Corolla');
+  fireEvent.click(screen.getByRole('button', { name: /reservar viajes recurrentes/i }));
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByRole('button', { name: /pagar 60.00€ y reservar/i }));
+
+  await screen.findByTestId('checkout-form');
+  fireEvent.click(screen.getByTestId('btn-simular-pago-exitoso'));
+
+  await waitFor(() => {
+    expect(screen.getByText(/✅ Pago confirmado. ¡Tu plaza está reservada!/i)).toBeInTheDocument();
+  });
+});
+
