@@ -7,7 +7,7 @@ import Footer from './components/Footer';
 import Registro from './components/autenticacion/Registro';
 import InicioSesion from './components/autenticacion/InicioSesion';
 import Perfil from './components/autenticacion/Perfil';
-import OfrecerTrayecto from './components/viajes/CrearViaje';
+import CrearViaje from './components/viajes/CrearViaje';
 import HomeLoggedIn from './components/HomeLoggedIn';
 import NuevoVehiculo from './components/vehiculos/NuevoVehiculo';
 import MisViajes from './components/viajes/MisViajes';
@@ -63,9 +63,9 @@ function App() {
             <Route path="/perfil" element={<Perfil />} />
             <Route path="/vehiculos/nuevo" element={<NuevoVehiculo />} />
             <Route path="/mis-viajes" element={<MisViajes />} />
-            <Route path="/ofrecer-trayecto" element={<OfrecerTrayecto />} />
+            <Route path="/ofrecer-trayecto" element={<CrearViaje />} />
             <Route path="/viajes/:slug" element={<DetalleViaje />} />
-            <Route path="/ofrecer-trayecto" element={isLoggedIn ? <OfrecerTrayecto /> : <Navigate to="/inicio-sesion" replace />} />
+            <Route path="/ofrecer-trayecto" element={isLoggedIn ? <CrearViaje /> : <Navigate to="/inicio-sesion" replace />} />
             <Route path="/buscar" element={<ResultadosBusquedaViajes />} />
             <Route path="/explorar" element={<TodosLosViajes />} />
             <Route path="/usuarios/:slug/perfil" element={<PerfilPublico />} />

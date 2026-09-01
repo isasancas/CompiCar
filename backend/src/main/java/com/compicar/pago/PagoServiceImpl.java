@@ -110,7 +110,7 @@ public class PagoServiceImpl implements PagoService {
             pago.setImporteTotal(total);
             
             // Rellena los campos obligatorios (Not Null) de tu tabla Pago
-            pago.setComision(total.multiply(new BigDecimal("0.10"))); // Ejemplo 10%
+            pago.setComision(total.multiply(new BigDecimal("0.20"))); // Ejemplo 20%
             pago.setImporteConductor(total.subtract(pago.getComision()));
         }
         

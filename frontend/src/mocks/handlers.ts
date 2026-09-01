@@ -27,12 +27,17 @@ export const handlers = [
     ]);
   }),
 
-  // 3. Mock por defecto para reservas
+  // 3. Mock por defecto para reservas del usuario
   http.get('*/api/reservas/mis-reservas', () => {
     return HttpResponse.json([]);
   }),
 
-  // 4. Autenticación de usuarios
+  // 4. Mock por defecto para notificaciones del conductor (evita AbortError en Navbar)
+  http.get('*/api/reservas/pendientes-conductor', () => {
+    return HttpResponse.json([]);
+  }),
+
+  // 5. Autenticación de usuarios
   http.post('*/api/login', async ({ request }) => {
     const body = (await request.clone().json()) as { email?: string; contrasena?: string };
 

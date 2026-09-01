@@ -801,7 +801,7 @@ public class ReservaServiceImpl implements ReservaService {
 
         Pago pago = new Pago();
         pago.setImporteTotal(totalAcumulado);
-        BigDecimal comision = totalAcumulado.multiply(new BigDecimal("0.10"));
+        BigDecimal comision = totalAcumulado.multiply(new BigDecimal("0.20"));
         pago.setComision(comision);
         pago.setImporteConductor(totalAcumulado.subtract(comision));
         pago.setEstado(EstadoPago.PENDIENTE);
