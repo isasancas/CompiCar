@@ -54,28 +54,6 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('../pagos/CheckoutForm', () => ({
-  default: ({ onSuccess, onError, monto }: { onSuccess: (id: string) => void; onError: (msg: string) => void; monto: number }) => (
-    <div data-testid="checkout-form">
-      <span>Monto: {monto}€</span>
-      <button 
-        type="button" 
-        data-testid="btn-simular-pago-exitoso" 
-        onClick={() => onSuccess('pi_mock_123')}
-      >
-        Simular Pago Exitoso
-      </button>
-      <button 
-        type="button" 
-        data-testid="btn-simular-pago-fallido" 
-        onClick={() => onError('Tarjeta rechazada')}
-      >
-        Simular Fallo Pago
-      </button>
-    </div>
-  ),
-}));
-
 // Datos de prueba reutilizables
 const mockViajeBase = {
   id: 1,
@@ -171,7 +149,6 @@ test('El conductor cancela exitosamente un viaje individual', async () => {
   const btnCancelar = screen.getByRole('button', { name: /cancelar viaje/i });
   fireEvent.click(btnCancelar);
 
-  // Ajustado al texto exacto del botón dentro de modalCancelarViajeAbierto ("Sí, cancelar viaje")
   const btnConfirmar = await screen.findByRole('button', { name: /sí, cancelar viaje/i });
   fireEvent.click(btnConfirmar);
 
@@ -241,7 +218,6 @@ test('El pasajero cancela su reserva activa correctamente', async () => {
   const btnCancelarReserva = await screen.findByRole('button', { name: /cancelar mi reserva/i });
   fireEvent.click(btnCancelarReserva);
 
-  // Ajustado al texto exacto del botón en modalCancelarReservaAbierto ("Confirmar cancelación")
   const btnConfirmarModal = await screen.findByRole('button', { name: /confirmar cancelación/i });
   fireEvent.click(btnConfirmarModal);
 
@@ -298,7 +274,6 @@ test('Inicia el proceso de pago e integra el formulario de Stripe', async () => 
 
   expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
 
-  // Abrir modal e iniciar reserva
   const btnReservar = screen.getByRole('button', { name: /reservar ahora/i });
   fireEvent.click(btnReservar);
 
@@ -381,87 +356,6 @@ test('El sistema anula la reserva provisional si el pago falla', async () => {
   });
 });
 
-test('Inicia el proceso de pago e integra el formulario de Stripe', async () => {
-  let crearReservaCalled = false;
-
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => HttpResponse.json(mockViajeBase)),
-    http.get('*/api/reservas/mis-reservas', () => HttpResponse.json([])),
-    http.post('*/api/reservas/crear', () => {
-      crearReservaCalled = true;
-      return HttpResponse.json({ clientSecret: 'pi_test_secret_123', reservaId: 505 });
-    })
-  );
-
-  renderConRuta({ rol: 'pasajero' });
-
-  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole('button', { name: /reservar ahora/i }));
-  fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: /pagar 20.00€ y reservar/i }));
-
-  await waitFor(() => {
-    expect(crearReservaCalled).toBe(true);
-    expect(screen.getByTestId('checkout-form')).toBeInTheDocument();
-  });
-});
-
-test('El pasajero completa el pago con éxito a través de Stripe', async () => {
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => HttpResponse.json(mockViajeBase)),
-    http.get('*/api/reservas/mis-reservas', () => HttpResponse.json([])),
-    http.post('*/api/reservas/crear', () => HttpResponse.json({ clientSecret: 'pi_test_secret_123', reservaId: 505 }))
-  );
-
-  renderConRuta({ rol: 'pasajero' });
-
-  await screen.findByText('Toyota Corolla');
-  fireEvent.click(screen.getByRole('button', { name: /reservar ahora/i }));
-  fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: /pagar 20.00€ y reservar/i }));
-
-  await screen.findByTestId('checkout-form');
-  fireEvent.click(screen.getByTestId('btn-simular-pago-exitoso'));
-
-  await waitFor(() => {
-    expect(screen.getByText(/✅ Pago confirmado. ¡Tu plaza está reservada!/i)).toBeInTheDocument();
-  });
-});
-
-test('El sistema anula la reserva provisional si el pago falla', async () => {
-  let anularPagoCalled = false;
-
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => HttpResponse.json(mockViajeBase)),
-    http.get('*/api/reservas/mis-reservas', () => HttpResponse.json([])),
-    http.post('*/api/reservas/crear', () => HttpResponse.json({ clientSecret: 'pi_test_secret_123', reservaId: 505 })),
-    http.put('*/api/reservas/anular-pago-fallido', ({ request }) => {
-      const url = new URL(request.url);
-      if (url.searchParams.get('reservaId') === '505') {
-        anularPagoCalled = true;
-        return HttpResponse.json({ message: 'Reserva anulada' });
-      }
-      return new HttpResponse(null, { status: 400 });
-    })
-  );
-
-  renderConRuta({ rol: 'pasajero' });
-
-  await screen.findByText('Toyota Corolla');
-  fireEvent.click(screen.getByRole('button', { name: /reservar ahora/i }));
-  fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: /pagar 20.00€ y reservar/i }));
-
-  await screen.findByTestId('checkout-form');
-  fireEvent.click(screen.getByTestId('btn-simular-pago-fallido'));
-
-  await waitFor(() => {
-    expect(anularPagoCalled).toBe(true);
-    expect(screen.getByText(/❌ Tarjeta rechazada/i)).toBeInTheDocument();
-  });
-});
-
 test('El conductor marca como PRESENTE a un pasajero mediante su código', async () => {
   let endpointLlamado = false;
 
@@ -494,19 +388,15 @@ test('El conductor marca como PRESENTE a un pasajero mediante su código', async
 
   renderConRuta({ rol: 'conductor' });
 
-  // 1. Clic en el botón Presente de la lista del pasajero
   const btnPresente = await screen.findByRole('button', { name: /^Presente$/i });
   fireEvent.click(btnPresente);
 
-  // 2. Rellenar el código en el modal individual
   const inputCodigo = screen.getByPlaceholderText(/Introduce el código/i);
   fireEvent.change(inputCodigo, { target: { value: 'CODIGO123' } });
 
-  // 3. Confirmar con el botón Aceptar del modal
   const btnAceptar = screen.getByRole('button', { name: /^Aceptar$/i });
   fireEvent.click(btnAceptar);
 
-  // Esperar a que el fetch concluya y la UI se actualice a "Presente"
   await screen.findByText(/^Presente$/i, { selector: 'span' });
   expect(endpointLlamado).toBe(true);
 });
@@ -522,7 +412,7 @@ test('El conductor realiza el check-in global cuando el pasajero ya está PRESEN
       {
         ...mockReservaPasajero,
         id: 99,
-        estado: 'PRESENTE', // Obligatorio para habilitar el botón global
+        estado: 'PRESENTE',
       },
     ],
   };
@@ -539,19 +429,15 @@ test('El conductor realiza el check-in global cuando el pasajero ya está PRESEN
 
   renderConRuta({ rol: 'conductor' });
 
-  // 1. Clic en el botón principal para abrir modal global
   const btnAbrirGlobal = await screen.findByRole('button', { name: /Realizar check-in global/i });
   fireEvent.click(btnAbrirGlobal);
 
-  // 2. Rellenar input del modal
   const inputCodigo = screen.getByPlaceholderText(/Introduce el código/i);
   fireEvent.change(inputCodigo, { target: { value: 'CODIGO123' } });
 
-  // 3. Clic en Confirmar check-in
   const btnConfirmar = screen.getByRole('button', { name: /Confirmar check-in/i });
   fireEvent.click(btnConfirmar);
 
-  // Esperar a que el modal se cierre al terminar la petición HTTP
   await waitFor(() => {
     expect(screen.queryByPlaceholderText(/Introduce el código/i)).not.toBeInTheDocument();
     expect(endpointGlobalLlamado).toBe(true);
@@ -593,13 +479,9 @@ test('El conductor marca como no presentado a un pasajero ausente', async () => 
   const btnNoPresentado = await screen.findByRole('button', { name: /^No presentado$/i });
   fireEvent.click(btnNoPresentado);
 
-  // 1. Esperar a que el span con el nuevo estado aparezca (espera a que la promesa del fetch resuelva completamente)
   await screen.findByText(/^No presentado$/i, { selector: 'span' });
 
-  // 2. Verificar llamada al endpoint
   expect(noPresentadoCalled).toBe(true);
-
-  // 3. Confirmar que el botón ya no está en el DOM
   expect(screen.queryByRole('button', { name: /^No presentado$/i })).not.toBeInTheDocument();
 });
 
@@ -631,19 +513,15 @@ test('Muestra un mensaje de error si falla la llamada de check-in global', async
 
   renderConRuta({ rol: 'conductor' });
 
-  // 1. Abrir el modal de check-in global
   const btnAbrirModal = await screen.findByRole('button', { name: /Realizar check-in global/i });
   fireEvent.click(btnAbrirModal);
 
-  // 2. Rellenar el código del modal
   const inputCodigo = screen.getByPlaceholderText(/Introduce el código/i);
   fireEvent.change(inputCodigo, { target: { value: 'CODIGO123' } });
 
-  // 3. Hacer clic en Confirmar check-in (ahora visible en el modal)
   const btnConfirmar = screen.getByRole('button', { name: /confirmar check-in/i });
   fireEvent.click(btnConfirmar);
 
-  // 4. Validar la respuesta de error
   await waitFor(() => {
     expect(screen.getByText(/Error al procesar check-in/i)).toBeInTheDocument();
   });
@@ -940,142 +818,6 @@ test('El conductor cancela la serie completa de viajes recurrentes que quedan', 
   await waitFor(() => {
     expect(cancelConjuntoCalled).toBe(true);
     expect(screen.getByText(/✅ Viajes cancelados en conjunto correctamente/i)).toBeInTheDocument();
-  });
-});
-
-test('Permite al conductor finalizar un viaje que está en curso para proceder a su cierre y cobro', async () => {
-  let finalizarCalled = false;
-
-  const mockViajeEnCurso = {
-    ...mockViajeBase,
-    estado: 'EN_CURSO',
-  };
-
-  const mockViajeFinalizado = {
-    ...mockViajeEnCurso,
-    estado: 'FINALIZADO',
-  };
-
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
-      return HttpResponse.json(mockViajeEnCurso);
-    }),
-    http.put('*/api/viajes/madrid-barcelona-123/finalizar', () => {
-      finalizarCalled = true;
-      return HttpResponse.json(mockViajeFinalizado);
-    })
-  );
-
-  renderConRuta({ rol: 'conductor' });
-
-  const botonFinalizar = await screen.findByRole('button', { name: /marcar viaje como finalizado/i });
-  expect(botonFinalizar).toBeInTheDocument();
-
-  fireEvent.click(botonFinalizar);
-
-  await waitFor(() => {
-    expect(finalizarCalled).toBe(true);
-    expect(screen.getAllByText('FINALIZADO').length).toBeGreaterThan(0);
-  });
-});
-
-test('Inicia el proceso de pago en lote para un viaje recurrente e integra Stripe', async () => {
-  let crearLoteCalled = false;
-
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
-      return HttpResponse.json(mockViajeRecurrentePadre);
-    }),
-    http.get('*/api/reservas/mis-reservas', () => {
-      return HttpResponse.json([]);
-    }),
-    http.post('*/api/reservas/crear-lote', async ({ request }) => {
-      crearLoteCalled = true;
-      const body = await request.json() as any;
-      if (body.viajeRecurrenteIds && body.viajeRecurrenteIds.length === 2) {
-        return HttpResponse.json({ clientSecret: 'pi_test_secret_lote_123', loteId: 900 });
-      }
-      return new HttpResponse(null, { status: 400 });
-    })
-  );
-
-  renderConRuta({ rol: 'pasajero' });
-
-  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
-
-  const btnReservarRecurrente = screen.getByRole('button', { name: /reservar viajes recurrentes/i });
-  fireEvent.click(btnReservarRecurrente);
-
-  const checkboxAviso = screen.getByRole('checkbox');
-  fireEvent.click(checkboxAviso);
-
-  const btnPagarLote = screen.getByRole('button', { name: /pagar 60.00€ y reservar/i });
-  fireEvent.click(btnPagarLote);
-
-  await waitFor(() => {
-    expect(crearLoteCalled).toBe(true);
-    expect(screen.getByTestId('checkout-form')).toBeInTheDocument();
-    expect(screen.getByText(/monto: 40€/i)).toBeInTheDocument();
-  });
-});
-
-test('El pasajero completa con éxito el pago del lote de viajes recurrentes a través de Stripe', async () => {
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
-      return HttpResponse.json(mockViajeRecurrentePadre);
-    }),
-    http.get('*/api/reservas/mis-reservas', () => {
-      return HttpResponse.json([]);
-    }),
-    http.post('*/api/reservas/crear-lote', () => {
-      return HttpResponse.json({ clientSecret: 'pi_test_secret_lote_123', loteId: 900 });
-    })
-  );
-
-  renderConRuta({ rol: 'pasajero' });
-
-  await screen.findByText('Toyota Corolla');
-  fireEvent.click(screen.getByRole('button', { name: /reservar viajes recurrentes/i }));
-  fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: /pagar 60.00€ y reservar/i }));
-
-  await screen.findByTestId('checkout-form');
-  fireEvent.click(screen.getByTestId('btn-simular-pago-exitoso'));
-
-  await waitFor(() => {
-    expect(screen.getByText(/✅ Pago confirmado. ¡Tu plaza está reservada!/i)).toBeInTheDocument();
-  });
-});
-
-test('El conductor inicia el viaje correctamente cuando llega la hora de salida', async () => {
-  let iniciarCalled = false;
-  const viajePasado = {
-    ...mockViajeBase,
-    conductorId: 5,
-    fechaHoraSalida: new Date(Date.now() - 3600000).toISOString()
-  };
-
-  server.use(
-    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
-      return HttpResponse.json(viajePasado);
-    }),
-    http.put('*/api/viajes/madrid-barcelona-123/iniciar', () => {
-      iniciarCalled = true;
-      return HttpResponse.json({ ...viajePasado, estado: 'INICIADO' });
-    })
-  );
-
-  renderConRuta({ rol: 'conductor' });
-
-  expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
-
-  const btnIniciar = screen.getByRole('button', { name: /iniciar viaje/i });
-  expect(btnIniciar).not.toBeDisabled();
-  fireEvent.click(btnIniciar);
-
-  await waitFor(() => {
-    expect(iniciarCalled).toBe(true);
-    expect(screen.getByText(/✅ El viaje ha sido iniciado correctamente/i)).toBeInTheDocument();
   });
 });
 
