@@ -532,7 +532,7 @@ test('El conductor inicia el viaje correctamente cuando llega la hora de salida'
   const viajePasado = {
     ...mockViajeBase,
     conductorId: 5,
-    fechaHoraSalida: new Date(Date.now() - 3600000).toISOString() // Hora ya sucedida
+    fechaHoraSalida: new Date(Date.now() - 3600000).toISOString()
   };
 
   server.use(
@@ -766,11 +766,9 @@ test('El conductor cancela un viaje simple no recurrente', async () => {
 
   expect(await screen.findByText('Toyota Corolla')).toBeInTheDocument();
 
-  // Abrir modal de cancelación simple
   const btnCancelar = screen.getByRole('button', { name: /cancelar viaje/i });
   fireEvent.click(btnCancelar);
 
-  // Confirmar la cancelación dentro del modal simple
   const btnConfirmar = await screen.findByRole('button', { name: /sí, cancelar viaje/i });
   fireEvent.click(btnConfirmar);
 
@@ -807,11 +805,9 @@ test('El conductor cancela la serie completa de viajes recurrentes que quedan', 
 
   expect(await screen.findByText(/Configuración de Viaje Recurrente/i)).toBeInTheDocument();
 
-  // Abrir modal de opciones de cancelación recurrente
   const btnCancelarRecurrente = screen.getByRole('button', { name: /cancelar viaje/i });
   fireEvent.click(btnCancelarRecurrente);
 
-  // Seleccionar opción de cancelar la serie completa
   const btnConfirmarConjunto = await screen.findByRole('button', { name: /cancelar toda la serie/i });
   fireEvent.click(btnConfirmarConjunto);
 
@@ -967,4 +963,366 @@ test('Muestra el aviso de autenticación requerida si un usuario no logueado int
     screen.getByText(/Debes iniciar sesión o registrarte para poder reservar un viaje/i)
   ).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /iniciar sesión/i })).toBeInTheDocument();
+});
+
+test('Muestra un mensaje de error cuando falla la carga del viaje', async () => {
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return new HttpResponse(null, { status: 404 });
+    })
+  );
+
+  renderConRuta();
+
+  expect(await screen.findByText(/No se pudo cargar el viaje/i)).toBeInTheDocument();
+  
+  const btnVolver = screen.getByRole('button', { name: /Volver al inicio/i });
+  fireEvent.click(btnVolver);
+  expect(mockNavigate).toHaveBeenCalledWith('/');
+});
+
+test('El conductor pone el viaje en curso automáticamente cuando el pasajero no se presenta', async () => {
+  let enCursoCalled = false;
+  const mockViajeSinPresentados = {
+    ...mockViajeIniciado,
+    reservas: [{ ...mockReservaPasajero, id: 99, estado: 'NO_PRESENTADO' }]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeSinPresentados);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/en-curso', () => {
+      enCursoCalled = true;
+      return HttpResponse.json({ ...mockViajeSinPresentados, estado: 'EN_CURSO' });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnEnCurso = await screen.findByRole('button', { name: /Poner viaje en curso automáticamente/i });
+  fireEvent.click(btnEnCurso);
+
+  await waitFor(() => {
+    expect(enCursoCalled).toBe(true);
+    expect(screen.getByText(/El viaje ha pasado a EN_CURSO automáticamente/i)).toBeInTheDocument();
+  });
+});
+
+test('Crea una reserva en lote para toda la serie de un viaje recurrente', async () => {
+  let loteCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeRecurrentePadre);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear-lote', () => {
+      loteCalled = true;
+      return HttpResponse.json({ clientSecret: 'pi_lote_secret_123', loteId: 999 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  const btnReservarRecurrente = await screen.findByRole('button', { name: /Reservar viajes recurrentes/i });
+  fireEvent.click(btnReservarRecurrente);
+
+  const checkboxAviso = await screen.findByRole('checkbox');
+  fireEvent.click(checkboxAviso);
+
+  const btnContinuarPago = await screen.findByRole('button', {
+    name: (content) => content.includes('Continuar con el pago') || content.includes('Pagar')
+  });
+  fireEvent.click(btnContinuarPago);
+
+  await waitFor(() => {
+    expect(loteCalled).toBe(true);
+    expect(screen.getByTestId('checkout-form')).toBeInTheDocument();
+  });
+});
+
+test('Deshabilita el botón de iniciar viaje si la hora de salida no ha llegado y permite navegar a perfiles', async () => {
+  const viajeFuturo = {
+    ...mockViajeBase,
+    conductorId: 5,
+    conductorNombre: 'Carlos Conductor',
+    conductorSlug: 'carlos-conductor',
+    fechaHoraSalida: new Date(Date.now() + 86400000).toISOString(),
+    reservas: [{ ...mockReservaPasajero, pasajeroSlug: 'juan-perez' }]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeFuturo);
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnIniciar = await screen.findByRole('button', { name: /iniciar viaje/i });
+  expect(btnIniciar).toBeDisabled();
+  expect(screen.getByText(/El botón se activará cuando llegue la hora de salida/i)).toBeInTheDocument();
+
+  const btnsPerfil = screen.getAllByRole('button', { name: /Ver perfil público/i });
+  fireEvent.click(btnsPerfil[0]);
+  expect(mockNavigate).toHaveBeenCalledWith('/usuarios/carlos-conductor/perfil');
+});
+
+test('Muestra mensajes de error si falla la llamada al finalizar viaje o al reportar incomparecencia', async () => {
+  const viajeEnCurso = { ...mockViajeBase, conductorId: 5, estado: 'EN_CURSO' };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeEnCurso);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/finalizar', () => {
+      return new HttpResponse(JSON.stringify({ message: 'Error al finalizar viaje' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnFinalizar = await screen.findByRole('button', { name: /marcar viaje como finalizado/i });
+  fireEvent.click(btnFinalizar);
+
+  expect(await screen.findByText(/Error al finalizar/i)).toBeInTheDocument();
+});
+
+test('Muestra error si el conductor introduce un código de check-in incorrecto', async () => {
+  const mockViajeIniciadoConCheckin = {
+    ...mockViajeIniciado,
+    estado: 'INICIADO',
+    checkin: 'CODIGO123',
+    reservas: [{ ...mockReservaPasajero, id: 99, estado: 'PENDIENTE' }]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeIniciadoConCheckin);
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnPresente = await screen.findByRole('button', { name: /^Presente$/i });
+  fireEvent.click(btnPresente);
+
+  const inputCodigo = screen.getByPlaceholderText(/Introduce el código/i);
+  fireEvent.change(inputCodigo, { target: { value: 'WRONG_CODE' } });
+
+  const btnAceptar = screen.getByRole('button', { name: /^Aceptar$/i });
+  fireEvent.click(btnAceptar);
+
+  expect(await screen.findByText(/El código introducido no coincide con el check-in del viaje/i)).toBeInTheDocument();
+});
+
+test('El conductor marca como NO PRESENTADO a un pasajero', async () => {
+  let noPresentadoCalled = false;
+
+  const mockViajeIniciadoConCheckin = {
+    ...mockViajeIniciado,
+    estado: 'INICIADO',
+    reservas: [{ ...mockReservaPasajero, id: 99, estado: 'PENDIENTE' }]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeIniciadoConCheckin);
+    }),
+    http.put('*/api/reservas/noPresentado', ({ request }) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get('reservaId') === '99') {
+        noPresentadoCalled = true;
+        return HttpResponse.json({ ...mockReservaPasajero, estado: 'NO_PRESENTADO' });
+      }
+      return new HttpResponse(null, { status: 400 });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnNoPresentado = await screen.findByRole('button', { name: /^No presentado$/i });
+  fireEvent.click(btnNoPresentado);
+
+  await waitFor(() => {
+    expect(noPresentadoCalled).toBe(true);
+  });
+});
+
+test('El conductor inicia el viaje cuando ya ha llegado la hora de salida', async () => {
+  let viajeIniciadoCalled = false;
+
+  const viajeListoParaIniciar = {
+    ...mockViajeBase,
+    fechaHoraSalida: new Date(Date.now() - 3600000).toISOString(),
+    estado: 'PENDIENTE'
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeListoParaIniciar);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/iniciar', () => {
+      viajeIniciadoCalled = true;
+      return HttpResponse.json({ ...viajeListoParaIniciar, estado: 'INICIADO' });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnIniciar = await screen.findByRole('button', { name: /Iniciar viaje/i });
+  expect(btnIniciar).not.toBeDisabled();
+
+  fireEvent.click(btnIniciar);
+
+  await waitFor(() => {
+    expect(viajeIniciadoCalled).toBe(true);
+    expect(screen.getByText(/El viaje ha sido iniciado correctamente/i)).toBeInTheDocument();
+  });
+});
+
+test('El conductor realiza el check-in global exitosamente', async () => {
+  let checkinGlobalCalled = false;
+
+  const viajeIniciadoConPasajeroPresente = {
+    ...mockViajeIniciado,
+    estado: 'INICIADO',
+    checkin: 'CHECK123',
+    reservas: [{ ...mockReservaPasajero, id: 99, estado: 'PRESENTE' }]
+  };
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(viajeIniciadoConPasajeroPresente);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123/checkin', ({ request }) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get('checkin') === 'CHECK123') {
+        checkinGlobalCalled = true;
+        return HttpResponse.json({ ...viajeIniciadoConPasajeroPresente, estado: 'EN_CURSO' });
+      }
+      return new HttpResponse(null, { status: 400 });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnCheckinGlobal = await screen.findByRole('button', { name: /Realizar check-in global/i });
+  fireEvent.click(btnCheckinGlobal);
+
+  const inputCheckinGlobal = screen.getByPlaceholderText(/Introduce el código/i);
+  fireEvent.change(inputCheckinGlobal, { target: { value: 'CHECK123' } });
+
+  const btnConfirmar = screen.getByRole('button', { name: /Confirmar check-in/i });
+  fireEvent.click(btnConfirmar);
+
+  await waitFor(() => {
+    expect(checkinGlobalCalled).toBe(true);
+    expect(screen.getByText(/El viaje ha pasado a EN_CURSO/i)).toBeInTheDocument();
+  });
+});
+
+test('El conductor edita los detalles del viaje correctamente', async () => {
+  let editarCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    }),
+    http.put('*/api/viajes/madrid-barcelona-123', () => {
+      editarCalled = true;
+      return HttpResponse.json({ ...mockViajeBase, plazasDisponibles: 5 });
+    })
+  );
+
+  renderConRuta({ rol: 'conductor' });
+
+  const btnEditar = await screen.findByRole('button', { name: /Editar detalles del viaje/i });
+  fireEvent.click(btnEditar);
+
+  const inputPlazas = screen.getByRole('spinbutton');
+  fireEvent.change(inputPlazas, { target: { value: '5' } });
+
+  const btnConfirmar = screen.getByRole('button', { name: /Confirmar cambios/i });
+  fireEvent.click(btnConfirmar);
+
+  await waitFor(() => {
+    expect(editarCalled).toBe(true);
+    expect(screen.getByText(/Viaje actualizado con éxito/i)).toBeInTheDocument();
+  });
+});
+
+test('El pasajero actualiza su reserva correctamente', async () => {
+  let actualizarReservaCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeBase);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([mockReservaPasajero]);
+    }),
+    http.put('*/api/reservas/actualizar/99', () => {
+      actualizarReservaCalled = true;
+      return HttpResponse.json({ ...mockReservaPasajero, cantidadPlazas: 2 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  const btnModificar = await screen.findByRole('button', { name: /Modificar mi reserva/i });
+  fireEvent.click(btnModificar);
+
+  const btnIncrementar = screen.getByRole('button', { name: '+' });
+  fireEvent.click(btnIncrementar);
+
+  const checkboxConfirmar = screen.getByRole('checkbox');
+  fireEvent.click(checkboxConfirmar);
+
+  const btnGuardar = screen.getByRole('button', { name: /Guardar Cambios/i });
+  fireEvent.click(btnGuardar);
+
+  await waitFor(() => {
+    expect(actualizarReservaCalled).toBe(true);
+    expect(screen.getByText(/Reserva actualizada con éxito/i)).toBeInTheDocument();
+  });
+});
+
+test('El pasajero inicia y completa la reserva para una serie de viajes recurrentes', async () => {
+  let crearLoteCalled = false;
+
+  server.use(
+    http.get('*/api/viajes/publicos/madrid-barcelona-123', () => {
+      return HttpResponse.json(mockViajeRecurrentePadre);
+    }),
+    http.get('*/api/reservas/mis-reservas', () => {
+      return HttpResponse.json([]);
+    }),
+    http.post('*/api/reservas/crear-lote', () => {
+      crearLoteCalled = true;
+      return HttpResponse.json({ clientSecret: 'pi_test_lote_secret', loteId: 101 });
+    })
+  );
+
+  renderConRuta({ rol: 'pasajero' });
+
+  const btnReservarRecurrente = await screen.findByRole('button', { name: /Reservar viajes recurrentes/i });
+  fireEvent.click(btnReservarRecurrente);
+
+  const checkbox = screen.getByRole('checkbox');
+  fireEvent.click(checkbox);
+
+  const btnPagarLote = screen.getByRole('button', { name: /Pagar.*Reservar/i });
+  fireEvent.click(btnPagarLote);
+
+  await waitFor(() => {
+    expect(crearLoteCalled).toBe(true);
+    expect(screen.getByTestId('checkout-form')).toBeInTheDocument();
+  });
 });

@@ -16,7 +16,6 @@ test('Renderiza el encabezado de sección, badge informativa y subtítulo', () =
 test('Renderiza las 3 etapas del proceso con sus títulos y descripciones correspondientes', () => {
   render(<HowItWorks />);
 
-  // Títulos de las tarjetas (Etiquetas H3)
   expect(
     screen.getByRole('heading', { level: 3, name: 'Crea tu perfil' })
   ).toBeInTheDocument();
@@ -27,7 +26,6 @@ test('Renderiza las 3 etapas del proceso con sus títulos y descripciones corres
     screen.getByRole('heading', { level: 3, name: '¡Comparte y ahorra!' })
   ).toBeInTheDocument();
 
-  // Contenido textual informativo
   expect(screen.getByText(/regístrate en segundos/i)).toBeInTheDocument();
   expect(
     screen.getByText(/buscamos personas con trayectos similares/i)
@@ -43,4 +41,14 @@ test('Muestra los emoticonos / iconos representativos de cada paso', () => {
   expect(screen.getByText('👤')).toBeInTheDocument();
   expect(screen.getByText('🔍')).toBeInTheDocument();
   expect(screen.getByText('🚗')).toBeInTheDocument();
+});
+
+test('Renderiza la sección contenedor con el ID idéntico y exactamente 3 pasos', () => {
+  const { container } = render(<HowItWorks />);
+
+  const section = container.querySelector('section#como-funciona');
+  expect(section).toBeInTheDocument();
+
+  const pasosH3 = screen.getAllByRole('heading', { level: 3 });
+  expect(pasosH3).toHaveLength(3);
 });
