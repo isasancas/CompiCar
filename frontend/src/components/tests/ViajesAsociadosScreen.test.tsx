@@ -131,7 +131,6 @@ test('Muestra la interfaz para el conductor sin checkboxes de reserva', async ()
   expect(await screen.findByText('Vista de Conductor')).toBeInTheDocument();
   expect(screen.getAllByText('Eres el conductor').length).toBeGreaterThan(0);
   
-  // Verificamos que no existan checkboxes de selección de reserva
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Configurar y Pagar/i })).not.toBeInTheDocument();
 });
@@ -145,18 +144,14 @@ test('El pasajero selecciona todos los viajes y abre el modal de reserva', async
 
   renderConRuta({ rol: 'PASAJERO' });
 
-  // Esperar a la carga
   expect(await screen.findByText('Madrid → Barcelona')).toBeInTheDocument();
 
-  // Seleccionar la opción de "Seleccionar todo"
   const checkboxTodos = screen.getByLabelText(/Seleccionar todo/i);
   fireEvent.click(checkboxTodos);
 
-  // Aparece la barra flotante con el total (3 viajes x 20€ = 60€)
   const btnConfigurar = screen.getByRole('button', { name: /Configurar y Pagar \(3\)/i });
   expect(btnConfigurar).toBeInTheDocument();
 
-  // Abrir modal
   fireEvent.click(btnConfigurar);
   expect(screen.getByText('Configurar Reservas Múltiples')).toBeInTheDocument();
 });
@@ -182,15 +177,12 @@ test('Inicia el proceso de reserva en lote y muestra el formulario de Stripe', a
 
   expect(await screen.findByText('Madrid → Barcelona')).toBeInTheDocument();
 
-  // Seleccionar todo
   fireEvent.click(screen.getByLabelText(/Seleccionar todo/i));
   fireEvent.click(screen.getByRole('button', { name: /Configurar y Pagar/i }));
 
-  // Aceptar términos en el modal
   const checkboxTerminos = screen.getByRole('checkbox', { name: /Acepto el cargo total/i });
   fireEvent.click(checkboxTerminos);
 
-  // Clic en Pagar
   const btnPagar = screen.getByRole('button', { name: /Pagar 60.00€/i });
   fireEvent.click(btnPagar);
 
@@ -218,7 +210,6 @@ test('Completa el pago del lote con éxito y navega de regreso', async () => {
   fireEvent.click(screen.getByRole('checkbox', { name: /Acepto el cargo total/i }));
   fireEvent.click(screen.getByRole('button', { name: /Pagar 60.00€/i }));
 
-  // Esperar a Stripe
   await screen.findByTestId('checkout-form');
   fireEvent.click(screen.getByTestId('btn-simular-pago-exitoso'));
 
@@ -226,7 +217,6 @@ test('Completa el pago del lote con éxito y navega de regreso', async () => {
     expect(screen.getByText(/✅ ¡Reservas y pagos completados con éxito!/i)).toBeInTheDocument();
   });
 
-  // Verificar navegación tras timeout
   await waitFor(() => {
     expect(mockNavigate).toHaveBeenCalledWith('/viajes/madrid-barcelona-padre', expect.objectContaining({
       state: expect.objectContaining({
@@ -286,4 +276,190 @@ test('Muestra un mensaje de error si el pago con Stripe es rechazado', async () 
   await waitFor(() => {
     expect(screen.getAllByText(/❌ Error en el procesamiento del pago/i)[0]).toBeInTheDocument();
   });
+});
+
+test('Navega correctamente hacia atrás según exista o no slugPadre', async () => {
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    })
+  );
+
+  // Caso 1: Con slugPadre
+  const { unmount } = renderConRuta({ slugPadre: 'madrid-barcelona-padre' });
+  const btnVolver = await screen.findByRole('button', { name: /Volver al detalle del viaje/i });
+  fireEvent.click(btnVolver);
+  expect(mockNavigate).toHaveBeenCalledWith('/viajes/madrid-barcelona-padre', { state: { rol: 'PASAJERO' } });
+
+  unmount();
+
+  // Caso 2: Sin slugPadre
+  render(
+    <MemoryRouter initialEntries={[{ pathname: '/viajes/asociados', state: { viajesRecurrentes: mockInstancias } }]}>
+      <Routes>
+        <Route path="/viajes/asociados" element={<ViajesAsociadosScreen />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+  const btnVolverSinSlug = screen.getByRole('button', { name: /Volver al detalle del viaje/i });
+  fireEvent.click(btnVolverSinSlug);
+  expect(mockNavigate).toHaveBeenCalledWith(-1);
+});
+
+test('Permite seleccionar/desmarcar el viaje padre e instancias individualmente', async () => {
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    })
+  );
+
+  renderConRuta({ rol: 'PASAJERO' });
+  await screen.findByText('Madrid → Barcelona');
+
+  // 1. Seleccionar solo el viaje padre
+  const checkboxPadre = screen.getByLabelText(/Seleccionar viaje padre/i);
+  fireEvent.click(checkboxPadre);
+  expect(screen.getByRole('button', { name: /Configurar y Pagar \(1\)/i })).toBeInTheDocument();
+
+  // 2. Desmarcar el viaje padre
+  fireEvent.click(checkboxPadre);
+  expect(screen.queryByRole('button', { name: /Configurar y Pagar/i })).not.toBeInTheDocument();
+
+  // 3. Seleccionar solo la primera instancia
+  const allCheckboxes = screen.getAllByRole('checkbox');
+  fireEvent.click(allCheckboxes[2]); 
+
+  expect(screen.getByRole('button', { name: /Configurar y Pagar \(1\)/i })).toBeInTheDocument();
+});
+
+test('Cambia selectores de plazas y paradas dentro del modal', async () => {
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    })
+  );
+
+  renderConRuta({ rol: 'PASAJERO' });
+  await screen.findByText('Madrid → Barcelona');
+
+  fireEvent.click(screen.getByLabelText(/Seleccionar todo/i));
+  fireEvent.click(screen.getByRole('button', { name: /Configurar y Pagar/i }));
+
+  const selects = screen.getAllByRole('combobox');
+  const selectPlazas = selects[0];
+  const selectSubida = selects[1];
+  const selectBajada = selects[2];
+
+  fireEvent.change(selectPlazas, { target: { value: '2' } });
+  fireEvent.change(selectSubida, { target: { value: '2' } });
+
+  expect(selectBajada).toHaveValue('3');
+});
+
+test('Muestra advertencia si se intenta pagar sin aceptar los términos', async () => {
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    })
+  );
+
+  renderConRuta({ rol: 'PASAJERO' });
+  await screen.findByText('Madrid → Barcelona');
+
+  fireEvent.click(screen.getByLabelText(/Seleccionar todo/i));
+  fireEvent.click(screen.getByRole('button', { name: /Configurar y Pagar/i }));
+
+  const btnPagar = screen.getByRole('button', { name: /Pagar 60.00€/i });
+  
+  expect(btnPagar).toBeDisabled();
+});
+
+test('Gestiona instancias donde el pasajero ya tiene reserva activa o cancelada', async () => {
+  const instanciasConReserva = [
+    {
+      ...mockInstancias[0],
+      reservas: [{ id: 10, personaId: 5, estado: 'ACEPTADA', viajeId: 101, paradaSubidaId: 1, paradaBajadaId: 3, cantidadPlazas: 1, nombrePasajero: 'Test' }]
+    },
+    {
+      ...mockInstancias[1],
+      reservas: [{ id: 11, personaId: 5, estado: 'CANCELADA', viajeId: 102, paradaSubidaId: 1, paradaBajadaId: 3, cantidadPlazas: 1, nombrePasajero: 'Test' }]
+    }
+  ];
+
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: instanciasConReserva });
+    })
+  );
+
+  renderConRuta({ rol: 'PASAJERO', usuarioId: 5, viajesRecurrentes: instanciasConReserva });
+
+  expect(await screen.findByText('Reservado por ti')).toBeInTheDocument();
+  const btnGestionar = screen.getByRole('button', { name: /Ver detalle \/ Gestionar/i });
+  fireEvent.click(btnGestionar);
+  expect(mockNavigate).toHaveBeenCalledWith(`/viajes/${mockInstancias[0].slug}`, expect.anything());
+});
+
+test('Obtiene el usuarioId decodificando el token JWT cuando no está en localStorage', async () => {
+  localStorage.removeItem('userId');
+  const mockToken = 'header.eyJ1c2VySWQiOjV9.signature'; 
+  localStorage.setItem('token', mockToken);
+
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    })
+  );
+
+  renderConRuta({ usuarioId: undefined, rol: 'PASAJERO' });
+
+  expect(await screen.findByText('Madrid → Barcelona')).toBeInTheDocument();
+  expect(screen.getByLabelText(/Seleccionar todo/i)).toBeInTheDocument();
+});
+
+test('Muestra error si la API de lote responde 200 pero sin clientSecret', async () => {
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    }),
+    http.post('*/api/reservas/crear-lote', () => {
+      return HttpResponse.json({ clientSecret: null });
+    })
+  );
+
+  renderConRuta({ rol: 'PASAJERO' });
+
+  await screen.findByText('Madrid → Barcelona');
+  fireEvent.click(screen.getByLabelText(/Seleccionar todo/i));
+  fireEvent.click(screen.getByRole('button', { name: /Configurar y Pagar/i }));
+  fireEvent.click(screen.getByRole('checkbox', { name: /Acepto el cargo total/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Pagar 60.00€/i }));
+
+  await waitFor(() => {
+    expect(screen.getAllByText(/❌ No se recibió el clientSecret del lote/i)[0]).toBeInTheDocument();
+  });
+});
+
+test('Permite cerrar el modal mediante los botones Cancelar y X', async () => {
+  server.use(
+    http.get('*/api/viajes/madrid-barcelona-padre', () => {
+      return HttpResponse.json({ ...mockPadre, viajesRecurrentes: mockInstancias });
+    })
+  );
+
+  renderConRuta({ rol: 'PASAJERO' });
+
+  await screen.findByText('Madrid → Barcelona');
+  fireEvent.click(screen.getByLabelText(/Seleccionar todo/i));
+  fireEvent.click(screen.getByRole('button', { name: /Configurar y Pagar/i }));
+
+  const btnCancelar = screen.getByRole('button', { name: /Cancelar/i });
+  fireEvent.click(btnCancelar);
+  expect(screen.queryByText('Configurar Reservas Múltiples')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /Configurar y Pagar/i }));
+  const btnCerrarX = screen.getByRole('button', { name: '✕' });
+  fireEvent.click(btnCerrarX);
+  expect(screen.queryByText('Configurar Reservas Múltiples')).not.toBeInTheDocument();
 });

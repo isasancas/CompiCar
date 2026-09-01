@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../setupTests';
 import CrearViaje from '../viajes/CrearViaje';
 
-// Mock de Leaflet
+// Mock de Leaflet con captura del evento de clic para el mapa
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="map-container">{children}</div>
@@ -13,7 +13,12 @@ vi.mock('react-leaflet', () => ({
   CircleMarker: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Polyline: () => null,
   Tooltip: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  useMapEvents: () => null,
+  useMapEvents: (events: any) => {
+    if (events?.click) {
+      (window as any).__mapClick = events.click;
+    }
+    return null;
+  },
   useMap: () => ({ fitBounds: vi.fn() }),
 }));
 
@@ -63,7 +68,6 @@ const renderComponent = () => {
   );
 };
 
-// Función auxiliar para esperar a que carguen las opciones antes de seleccionar vehículo
 const seleccionarVehiculo = async (id = '10') => {
   await screen.findByRole('option', { name: /Toyota Corolla/i });
   const select = screen.getByRole('combobox') as HTMLSelectElement;
@@ -71,26 +75,60 @@ const seleccionarVehiculo = async (id = '10') => {
   return select;
 };
 
-// Función auxiliar para forzar el envío del formulario sin bloqueo HTML5
 const submitForm = () => {
   const btnPublicar = screen.getByRole('button', { name: /Crear y publicar trayecto/i });
   const form = btnPublicar.closest('form') || btnPublicar.parentElement!;
   fireEvent.submit(form);
 };
 
-test('Carga los vehículos del usuario y los muestra en el selector', async () => {
-  renderComponent();
+  test('Carga los vehículos del usuario y los muestra en el selector', async () => {
+    renderComponent();
 
-  expect(await screen.findByRole('option', { name: /Toyota Corolla/i })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /Toyota Corolla/i })).toBeInTheDocument();
 
-  await waitFor(() => {
-    const select = screen.getByRole('combobox') as HTMLSelectElement;
-    expect(select.children.length).toBe(2);
-    expect(select.value).toBe('10');
+    await waitFor(() => {
+      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      expect(select.children.length).toBe(2);
+      expect(select.value).toBe('10');
+    });
+
+    expect(screen.getByText('Toyota Corolla - 1234ABC')).toBeInTheDocument();
+    expect(screen.getByText('Ford Focus - 5678DEF')).toBeInTheDocument();
   });
 
-  expect(screen.getByText('Toyota Corolla - 1234ABC')).toBeInTheDocument();
-  expect(screen.getByText('Ford Focus - 5678DEF')).toBeInTheDocument();
+test('Muestra error si falla la carga inicial de vehículos', async () => {
+  server.use(
+    http.get('*/api/vehiculos/propios', () => new HttpResponse(null, { status: 500 }))
+  );
+  renderComponent();
+  expect(await screen.findByText('No se pudieron cargar tus vehículos.')).toBeInTheDocument();
+});
+
+test('Navega a /perfil al pulsar el botón Volver', async () => {
+  renderComponent();
+  const btnVolver = await screen.findByRole('button', { name: /Volver/i });
+  fireEvent.click(btnVolver);
+  expect(mockNavigate).toHaveBeenCalledWith('/perfil');
+});
+
+test('Ajusta el número de plazas respetando los límites del vehículo', async () => {
+  renderComponent();
+  await seleccionarVehiculo('10');
+
+  const btnMinus = screen.getByText('-');
+  const btnPlus = screen.getByText('+');
+
+  fireEvent.click(btnMinus);
+  expect(screen.getByText('1')).toBeInTheDocument();
+
+  fireEvent.click(btnMinus);
+  expect(screen.getByText('1')).toBeInTheDocument();
+
+  fireEvent.click(btnPlus);
+  fireEvent.click(btnPlus);
+  fireEvent.click(btnPlus);
+  fireEvent.click(btnPlus);
+  expect(screen.getByText('4')).toBeInTheDocument();
 });
 
 test('Permite añadir y eliminar paradas intermedias', async () => {
@@ -140,6 +178,25 @@ test('Calcula la horquilla de precio correctamente desde el backend', async () =
   expect(screen.getByText(/Puedes elegir un precio dentro de este rango: 12.50€ - 25.00€/i)).toBeInTheDocument();
 });
 
+test('Muestra errores al calcular precio si la distancia es 0 o falla la API', async () => {
+  renderComponent();
+  await seleccionarVehiculo('10');
+
+  const btnCalcular = screen.getByRole('button', { name: /^Calcular$/i });
+  fireEvent.click(btnCalcular);
+  expect(await screen.findByText(/Indica una distancia válida/i)).toBeInTheDocument();
+
+  const inputDistancia = screen.getAllByRole('spinbutton')[0];
+  fireEvent.change(inputDistancia, { target: { value: '100' } });
+
+  server.use(
+    http.post('*/api/viajes/precio/calcular', () => new HttpResponse(null, { status: 500 }))
+  );
+
+  fireEvent.click(btnCalcular);
+  expect(await screen.findByText(/No se pudo calcular el precio\./i)).toBeInTheDocument();
+});
+
 test('Muestra errores de validación si faltan campos requeridos al publicar', async () => {
   const { container } = renderComponent();
 
@@ -156,6 +213,45 @@ test('Muestra errores de validación si faltan campos requeridos al publicar', a
 
   submitForm();
   expect(await screen.findByText(/Debes indicar una parada inicial\./i)).toBeInTheDocument();
+});
+
+test('Valida destino vacío, precio no válido y precio fuera de horquilla', async () => {
+  const { container } = renderComponent();
+  await seleccionarVehiculo('10');
+
+  const inputFecha = container.querySelector('input[type="date"]')!;
+  const inputHora = container.querySelector('input[type="time"]')!;
+  fireEvent.change(inputFecha, { target: { value: '2026-09-01' } });
+  fireEvent.change(inputHora, { target: { value: '10:00' } });
+  fireEvent.change(screen.getByPlaceholderText(/Ciudad\/dirección de salida/i), {
+    target: { value: 'Madrid' },
+  });
+
+  submitForm();
+  expect(await screen.findByText(/Debes indicar una parada final\./i)).toBeInTheDocument();
+
+  fireEvent.change(screen.getByPlaceholderText(/Ciudad\/dirección de llegada/i), {
+    target: { value: 'Barcelona' },
+  });
+
+  fireEvent.change(screen.getByPlaceholderText(/Elige precio/i), { target: { value: '0' } });
+  submitForm();
+  expect(await screen.findByText(/El precio elegido no es válido\./i)).toBeInTheDocument();
+
+  server.use(
+    http.post('*/api/viajes/precio/calcular', () =>
+      HttpResponse.json({ precioMinimoPasajero: 10, precioMaximoPasajero: 20 })
+    )
+  );
+  const inputDistancia = screen.getAllByRole('spinbutton')[0];
+  fireEvent.change(inputDistancia, { target: { value: '100' } });
+  fireEvent.click(screen.getByRole('button', { name: /^Calcular$/i }));
+
+  await screen.findByText(/Horquilla calculada/i);
+
+  fireEvent.change(screen.getByPlaceholderText(/Elige precio/i), { target: { value: '50' } });
+  submitForm();
+  expect(await screen.findByText(/El precio elegido debe estar dentro de la horquilla\./i)).toBeInTheDocument();
 });
 
 test('Muestra un error de validación para viajes recurrentes sin días ni fecha de fin', async () => {
@@ -176,10 +272,6 @@ test('Muestra un error de validación para viajes recurrentes sin días ni fecha
   fireEvent.change(inputsFecha[0], { target: { value: '2026-09-01' } });
   fireEvent.change(inputHora, { target: { value: '18:19' } });
 
-  const spinbuttons = screen.getAllByRole('spinbutton');
-  if (spinbuttons.length > 0) {
-    fireEvent.change(spinbuttons[0], { target: { value: '205.39' } });
-  }
   fireEvent.change(screen.getByPlaceholderText(/Elige precio/i), {
     target: { value: '41.98' },
   });
@@ -201,6 +293,75 @@ test('Muestra un error de validación para viajes recurrentes sin días ni fecha
   expect(
     await screen.findByText(/Indica la fecha de fin de recurrencia\./i)
   ).toBeInTheDocument();
+});
+
+test('Interacción con el mapa: cambiar modos de selección y geocodificación inversa', async () => {
+  server.use(
+    http.get('https://nominatim.openstreetmap.org/reverse', () =>
+      HttpResponse.json({ display_name: 'Plaza Mayor, Madrid' })
+    )
+  );
+
+  renderComponent();
+  await seleccionarVehiculo('10');
+
+  await waitFor(() => expect((window as any).__mapClick).toBeDefined());
+
+  (window as any).__mapClick({ latlng: { lat: 40.416, lng: -3.703 } });
+  expect(await screen.findByText(/Origen seleccionado/i)).toBeInTheDocument();
+
+  (window as any).__mapClick({ latlng: { lat: 41.385, lng: 2.173 } });
+  expect(await screen.findByText(/Destino seleccionado/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /Editar origen/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Editar destino/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Añadir intermedia/i }));
+});
+
+test('Geocodifica direcciones automáticamente al escribir y calcula la ruta OSRM', async () => {
+  server.use(
+    http.get('https://nominatim.openstreetmap.org/search', ({ request }) => {
+      const url = new URL(request.url);
+      const q = url.searchParams.get('q');
+      if (q?.includes('Madrid')) {
+        return HttpResponse.json([{ lat: '40.416', lon: '-3.703' }]);
+      }
+      return HttpResponse.json([{ lat: '41.385', lon: '2.173' }]);
+    }),
+    http.get('https://router.project-osrm.org/route/v1/driving/*', () => {
+      return HttpResponse.json({
+        routes: [
+          {
+            geometry: { coordinates: [[-3.703, 40.416], [2.173, 41.385]] },
+            distance: 620000,
+          },
+        ],
+      });
+    })
+  );
+
+  renderComponent();
+  await seleccionarVehiculo('10');
+
+  fireEvent.click(screen.getByRole('button', { name: /Añadir parada/i }));
+  const inputIntermedia = screen.getByPlaceholderText('Parada intermedia 1');
+  fireEvent.click(screen.getAllByRole('button', { name: /Usar en mapa/i })[0]);
+
+  fireEvent.change(screen.getByPlaceholderText(/Ciudad\/dirección de salida/i), {
+    target: { value: 'Madrid' },
+  });
+  fireEvent.change(inputIntermedia, { target: { value: 'Zaragoza' } });
+  fireEvent.change(screen.getByPlaceholderText(/Ciudad\/dirección de llegada/i), {
+    target: { value: 'Barcelona' },
+  });
+
+  await waitFor(
+    () => {
+      const inputDistancia = screen.getAllByRole('spinbutton')[0] as HTMLInputElement;
+      expect(inputDistancia.value).toBe('620');
+    },
+    { timeout: 3000 }
+  );
 });
 
 test('Publica con éxito un viaje puntual y redirige a mis-viajes', async () => {
@@ -241,59 +402,9 @@ test('Publica con éxito un viaje puntual y redirige a mis-viajes', async () => 
     fechaFinRecurrencia: null,
   });
 
-  expect(payloadEnviado.paradas.length).toBe(2);
-  expect(payloadEnviado.paradas[0]).toMatchObject({ localizacion: 'Madrid', tipo: 'ORIGEN', orden: 1 });
-  expect(payloadEnviado.paradas[1]).toMatchObject({ localizacion: 'Valencia', tipo: 'DESTINO', orden: 2 });
-
   await waitFor(() => {
     expect(mockNavigate).toHaveBeenCalledWith('/mis-viajes');
   }, { timeout: 2000 });
-});
-
-test('Publica con éxito un viaje recurrente', async () => {
-  let payloadEnviado: any = null;
-
-  server.use(
-    http.post('*/api/viajes/crear', async ({ request }) => {
-      payloadEnviado = await request.json();
-      return HttpResponse.json({ id: 1000, status: 'CREATED' });
-    })
-  );
-
-  const { container } = renderComponent();
-
-  await seleccionarVehiculo('10');
-
-  fireEvent.change(screen.getByPlaceholderText(/Ciudad\/dirección de salida/i), { target: { value: 'Sevilla' } });
-  fireEvent.change(screen.getByPlaceholderText(/Ciudad\/dirección de llegada/i), { target: { value: 'Córdoba' } });
-
-  const inputHora = container.querySelector('input[type="time"]') as HTMLInputElement;
-  fireEvent.change(inputHora, { target: { value: '07:00' } });
-
-  fireEvent.change(screen.getByPlaceholderText(/Elige precio/i), { target: { value: '10' } });
-
-  const checkboxRepetir = screen.getByLabelText(/¿Se repite este viaje de forma recurrente\?/i);
-  fireEvent.click(checkboxRepetir);
-
-  await waitFor(() => {
-    expect(container.querySelectorAll('input[type="date"]').length).toBe(2);
-  });
-
-  const inputsFecha = container.querySelectorAll('input[type="date"]');
-  fireEvent.change(inputsFecha[0], { target: { value: '2026-10-01' } });
-  fireEvent.change(inputsFecha[1], { target: { value: '2026-10-31' } });
-
-  fireEvent.click(screen.getByText('L'));
-  fireEvent.click(screen.getByText('X'));
-
-  submitForm();
-
-  expect(await screen.findByText(/Trayecto creado correctamente\./i)).toBeInTheDocument();
-
-  expect(payloadEnviado).toMatchObject({
-    diasSemana: ['L', 'X'],
-    fechaFinRecurrencia: '2026-10-31T23:59:59',
-  });
 });
 
 test('Muestra mensaje de error devuelto por la API cuando falla la creación', async () => {

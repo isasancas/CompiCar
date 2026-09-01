@@ -1,27 +1,25 @@
-import React from 'react';
-
 const steps = [
   {
-    icon: '👤', // Icono Perfil
+    icon: '👤',
     title: 'Crea tu perfil',
     description: 'Regístrate en segundos, indica tu ruta habitual y horario de trabajo. Verificamos tu identidad para mayor confianza.',
-    color: '#00BF63' // Verde
+    color: '#00BF63'
   },
   {
-    icon: '🔍', // Icono Lupa
+    icon: '🔍',
     title: 'Encuentra tu compañero',
     description: 'Buscamos personas con trayectos similares al tuyo. Filtra por horario, punto de encuentro y valoraciones.',
-    color: '#00BF63' // Verde
+    color: '#00BF63'
   },
   {
-    icon: '🚗', // Icono Coche
+    icon: '🚗',
     title: '¡Comparte y ahorra!',
     description: 'Coordina el viaje, divide el coste del combustible y viaja más cómodo. Todo desde la app.',
-    color: '#00BF63' // Verde
+    color: '#00BF63'
   }
 ];
 
-const HowItWorks: React.FC = () => {
+export default function HowItWorks() {
   return (
     <section id="como-funciona" className="bg-slate-50 px-8 md:px-20 py-24 border-t border-gray-100">
       <div className="max-w-6xl mx-auto text-center">
@@ -74,6 +72,4 @@ const HowItWorks: React.FC = () => {
       </div>
     </section>
   );
-};
-
-export default HowItWorks;
+}
