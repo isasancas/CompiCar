@@ -123,6 +123,7 @@ class ViajeServiceTest {
         viajeBase.setEstado(EstadoViaje.PENDIENTE);
         viajeBase.setPlazasDisponibles(3);
         viajeBase.setPrecio(new BigDecimal("8.50"));
+        viajeBase.setKilometrosRecorridos(125);
 
         Vehiculo v = new Vehiculo();
         v.setId(vehiculoConductor.getId());
@@ -147,6 +148,7 @@ class ViajeServiceTest {
         assertEquals(vehiculoConductor, result.getVehiculo());
         assertEquals("sevilla-cadiz-2026-05-01", result.getSlug());
         assertEquals(2, result.getParadas().size());
+        assertEquals(125, result.getKilometrosRecorridos());
         assertEquals(salida, result.getParadas().get(0).getFechaHora());
         assertEquals(1, result.getParadas().get(0).getOrden());
         assertEquals(2, result.getParadas().get(1).getOrden());

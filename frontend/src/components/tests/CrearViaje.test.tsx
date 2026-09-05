@@ -397,6 +397,7 @@ test('Publica con éxito un viaje puntual y redirige a mis-viajes', async () => 
     estado: 'PENDIENTE',
     plazasDisponibles: 2,
     precio: 18.5,
+    kilometrosRecorridos: expect.any(Number),
     vehiculo: { id: 10 },
     diasSemana: [],
     fechaFinRecurrencia: null,

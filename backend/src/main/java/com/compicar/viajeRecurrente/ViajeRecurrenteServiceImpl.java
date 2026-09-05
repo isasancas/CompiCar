@@ -150,6 +150,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 vr.setEstado(EstadoViaje.PENDIENTE);
                 vr.setPlazasDisponibles(viajePadre.getPlazasDisponibles());
                 vr.setPrecio(viajePadre.getPrecio());
+                vr.setKilometrosRecorridos(viajePadre.getKilometrosRecorridos());
                 vr.setPersona(viajePadre.getPersona());
                 vr.setVehiculo(viajePadre.getVehiculo());
                 vr.setCheckin(generarCheckin());
@@ -659,6 +660,22 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
             sufijo++;
         }
         return candidato;
+    }
+
+    public Integer contarKilometrosRecorridosPorUsuario(String usuarioEmail) {
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesRecurrentes = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId());
+        
+        Integer totalKilometros = 0;
+        for (ViajeRecurrente viaje : viajesRecurrentes) {
+            if (viaje.getKilometrosRecorridos() != null) {
+                totalKilometros += viaje.getKilometrosRecorridos();
+            }
+        }
+        return totalKilometros;
     }
     
 }

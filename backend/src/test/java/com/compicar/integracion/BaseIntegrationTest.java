@@ -112,6 +112,7 @@ public abstract class BaseIntegrationTest {
             "estado", "PENDIENTE",
             "plazasDisponibles", 3,
             "precio", 10.50,
+            "kilometrosRecorridos", 125,
             "vehiculo", Map.of("id", vehiculoId),
             "paradas", List.of(
                 Map.of(

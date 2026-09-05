@@ -471,6 +471,7 @@ const CrearViaje: React.FC = () => {
           estado: 'PENDIENTE',
           plazasDisponibles,
           precio: precioNum,
+          kilometrosRecorridos: Math.round(distanciaFinalKm),
           vehiculo: { id: vehiculoId },
           paradas: paradasPayload,
           diasSemana: repetir ? diasSeleccionados : [],

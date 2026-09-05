@@ -58,8 +58,15 @@ public interface ViajeRecurrenteRepository extends JpaRepository<ViajeRecurrente
         @Param("fin") LocalDateTime fin
     );
 
-    @Query("SELECT DISTINCT r.viajeRecurrente FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL")
+    @Query("SELECT DISTINCT r.viajeRecurrente FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL AND r.estado != 'CANCELADA' AND r.estado != 'NO_PRESENTADO' AND r.estado != 'RECHAZADA' AND r.viajeRecurrente.estado = 'FINALIZADO'")
     List<ViajeRecurrente> findViajesRecurrentesParticipadosByPersonaId(@Param("personaId") Long personaId);
+
+    @Query("SELECT DISTINCT v FROM ViajeRecurrente v LEFT JOIN v.reservas r "
+        + "WHERE v.estado = 'FINALIZADO' AND (v.persona.id = :personaId "
+        + "OR (r.persona.id = :personaId AND r.estado != 'CANCELADA' "
+        + "AND r.estado != 'NO_PRESENTADO' AND r.estado != 'RECHAZADA'))")
+    List<ViajeRecurrente> findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(
+        @Param("personaId") Long personaId);
     
     @Query("SELECT DISTINCT r.viajeRecurrente.viajePadre FROM Reserva r WHERE r.persona.id = :personaId AND r.viajeRecurrente IS NOT NULL AND r.estado != 'CANCELADA'")
     List<Viaje> findViajesPadreParticipadosByPersonaId(@Param("personaId") Long personaId);

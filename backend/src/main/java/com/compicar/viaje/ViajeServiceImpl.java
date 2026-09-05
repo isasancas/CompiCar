@@ -106,6 +106,10 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar al menos origen y destino");
         }
 
+        if (viaje.getKilometrosRecorridos() == null || viaje.getKilometrosRecorridos() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar una distancia válida para el viaje");
+        }
+
         Vehiculo vehiculo = vehiculoRepository.findById(viaje.getVehiculo().getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehículo no existe"));
 
@@ -1201,5 +1205,21 @@ public class ViajeServiceImpl implements ViajeService {
             sufijo++;
         }
         return candidato;
+    }
+
+    public Integer contarKilometrosRecorridosPorUsuario(String email) {
+        Persona usuario = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        List<Viaje> viajesFinalizados = viajeRepository
+            .findViajesFinalizadosPorUsuarioIncluyendoConductor(usuario.getId());
+        
+        int totalKilometros = 0;
+        for (Viaje viaje : viajesFinalizados) {
+            if (viaje.getKilometrosRecorridos() != null) {
+                totalKilometros += viaje.getKilometrosRecorridos();
+            }
+        }
+        return totalKilometros;
     }
 }
