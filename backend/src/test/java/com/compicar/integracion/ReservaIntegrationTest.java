@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -465,5 +466,104 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(put("/api/reservas/rechazar")
             .param("reservaId", "1"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anularPagoFallido_ok() throws Exception {
+        String driverToken = registerAndLogin();
+        Long vehiculoId = crearVehiculo(driverToken);
+        
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
+
+        String passengerToken = registerAndLogin();
+
+        Map<String, Object> payload = Map.of(
+            "viajeId", viajeId,
+            "cantidadPlazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
+        );
+
+        MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
+            .header("Authorization", "Bearer " + passengerToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
+
+        mockMvc.perform(put("/api/reservas/anular-pago-fallido")
+            .param("reservaId", String.valueOf(reservaId))
+            .header("Authorization", "Bearer " + passengerToken))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void reservaPresentado_ok() throws Exception {
+        String driverToken = registerAndLogin();
+        Long vehiculoId = crearVehiculo(driverToken);
+        
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
+
+        String passengerToken = registerAndLogin();
+
+        Map<String, Object> payload = Map.of(
+            "viajeId", viajeId,
+            "cantidadPlazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
+        );
+
+        MvcResult createResult = mockMvc.perform(post("/api/reservas/crear")
+            .header("Authorization", "Bearer " + passengerToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
+
+        mockMvc.perform(get("/api/reservas/presentado")
+            .param("reservaId", String.valueOf(reservaId))
+            .header("Authorization", "Bearer " + driverToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("PRESENTE"));
+    }
+
+    @Test
+    void crearReservaLote_ok() throws Exception {
+        String driverToken = registerAndLogin();
+        Long vehiculoId = crearVehiculo(driverToken);
+        
+        MvcResult viajeResult = crearViaje(driverToken, vehiculoId);
+        String viajeJson = viajeResult.getResponse().getContentAsString();
+        Long viajeId = ((Number) JsonPath.read(viajeJson, "$.id")).longValue();
+        Long pSubida = ((Number) JsonPath.read(viajeJson, "$.paradas[0].id")).longValue();
+        Long pBajada = ((Number) JsonPath.read(viajeJson, "$.paradas[1].id")).longValue();
+
+        String passengerToken = registerAndLogin();
+
+        Map<String, Object> payload = Map.of(
+            "viajeId", viajeId,
+            "viajeRecurrenteIds", List.of(),
+            "cantidadPlazas", 1,
+            "paradaSubidaId", pSubida,
+            "paradaBajadaId", pBajada
+        );
+
+        mockMvc.perform(post("/api/reservas/crear-lote")
+            .header("Authorization", "Bearer " + passengerToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(payload)))
+            .andExpect(status().isOk());
     }
 }

@@ -83,7 +83,7 @@ const forwardGeocode = async (query: string): Promise<{ lat: number; lng: number
 
 const diasSemana = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
-const OfrecerTrayecto: React.FC = () => {
+const CrearViaje: React.FC = () => {
   const navigate = useNavigate();
 
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -118,8 +118,7 @@ const OfrecerTrayecto: React.FC = () => {
   const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
 
-  // Dentro del componente OfrecerTrayecto, añade estos estados:
-  const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState(''); // <-- NUEVO ESTADO
+  const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState('');
 
   const token = localStorage.getItem('token') || '';
 
@@ -902,4 +901,4 @@ const OfrecerTrayecto: React.FC = () => {
   );
 };
 
-export default OfrecerTrayecto;
+export default CrearViaje;

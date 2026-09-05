@@ -81,7 +81,7 @@ public class PagoController {
     }
 
     @RequestMapping("/{pagoId}")
-    public Pago obtenerPagoPorId(Long pagoId) {
+    public Pago obtenerPagoPorId(@PathVariable("pagoId") Long pagoId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) {
             throw new org.springframework.web.server.ResponseStatusException(

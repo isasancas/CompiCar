@@ -106,6 +106,10 @@ public abstract class ViajeBase {
     }
 
     // Setters
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
         this.fechaHoraSalida = fechaHoraSalida;
     }
