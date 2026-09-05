@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaRequest;
+import com.compicar.correo.EmailService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.notificacion.TipoNotificacion;
@@ -55,6 +56,7 @@ public class ReservaServiceImpl implements ReservaService {
     private final ViajeRecurrenteRepository viajeRecurrenteRepository;
     private final ViajeRecurrenteService viajeRecurrenteService;
     private final StripeService stripeService;
+    private final EmailService emailService;
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
@@ -66,7 +68,8 @@ public class ReservaServiceImpl implements ReservaService {
                               PagoService pagoService,
                               ViajeRecurrenteRepository viajeRecurrenteRepository,
                               ViajeRecurrenteService viajeRecurrenteService,
-                              StripeService stripeService) {
+                              StripeService stripeService,
+                              EmailService emailService) {
         this.reservaRepository = reservaRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
@@ -77,6 +80,7 @@ public class ReservaServiceImpl implements ReservaService {
         this.viajeRecurrenteRepository = viajeRecurrenteRepository;
         this.viajeRecurrenteService = viajeRecurrenteService;
         this.stripeService = stripeService;
+        this.emailService = emailService;
     }
 
     private ReservaDTO toDTO(Reserva reserva) {
@@ -548,13 +552,57 @@ public class ReservaServiceImpl implements ReservaService {
             mensaje += " Código de checkin: " + viajeBase.getCheckin() + ".";
         }
         
+        // 1. Notificación dentro de la aplicación
         notificacionRepository.save(new Notificacion(
             mensaje,
             reserva.getPersona(),
             TipoNotificacion.RESERVA_ACEPTADA
         ));
-        
-        return reservaRepository.save(reserva);
+
+        Reserva reservaGuardada = reservaRepository.save(reserva);
+
+        // 2. Envío de correo electrónico en segundo plano (@Async)
+        if (reserva.getPersona() != null && reserva.getPersona().getEmail() != null) {
+            String emailPasajero = reserva.getPersona().getEmail();
+            String nombrePasajero = reserva.getPersona().getNombre() != null ? reserva.getPersona().getNombre() : "Pasajero";
+
+            // Obtener y acortar la localización del origen
+            String origen = "Origen";
+            String fechaHoraStr = "fecha pendiente";
+
+            if (reservaGuardada.getParadaSubida() != null) {
+                if (reservaGuardada.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reservaGuardada.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+                
+                // Formatear la fecha y hora de la parada de subida
+                if (reservaGuardada.getParadaSubida().getFechaHora() != null) {
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+                    fechaHoraStr = reservaGuardada.getParadaSubida().getFechaHora().format(formatter);
+                }
+            }
+
+            // Obtener y acortar la localización del destino
+            String destino = "Destino";
+            if (reservaGuardada.getParadaBajada() != null && reservaGuardada.getParadaBajada().getLocalizacion() != null) {
+                String destinoRaw = reservaGuardada.getParadaBajada().getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String codigoCheckin = viajeBase.getCheckin() != null ? viajeBase.getCheckin().toString() : "N/A";
+
+            emailService.sendCheckInCode(
+                emailPasajero,
+                nombrePasajero,
+                origen,
+                destino,
+                fechaHoraStr,
+                codigoCheckin
+            );
+        }
+
+        return reservaGuardada;
     }
 
     @Override

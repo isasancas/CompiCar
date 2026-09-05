@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Código de Check-in - CompiCar</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h2 style="color: #2b6cb0; text-align: center; margin-top: 0;">¡Tu viaje en CompiCar está cerca!</h2>
+        
+        <p>Hola, <b th:text="${nombreUsuario}">Pasajero</b>:</p>
+        
+        <p>Aquí tienes tu código de <b>check-in</b> para el viaje de <span th:text="${origen}">Origen</span> a <span th:text="${destino}">Destino</span> programado para el <b th:text="${fechaHora}">01/01/2026 a las 10:00</b>.</p>        
+        <div style="text-align: center; margin: 30px 0;">
+            <span style="background-color: #ebf8ff; border: 2px dashed #3182ce; color: #2b6cb0; font-size: 32px; font-weight: bold; padding: 15px 30px; border-radius: 6px; letter-spacing: 4px;" 
+                  th:text="${codigoCheckIn}">ABC1234</span>
+        </div>
+        
+        <p style="color: #4a5568; font-size: 14px;">Muestra o facilítale este código al conductor al subir al vehículo para verificar tu reserva de forma segura.</p>
+        
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+        <p style="color: #a0aec0; font-size: 12px; text-align: center;">Este es un mensaje automático de CompiCar. Por favor, no respondas a este correo.</p>
+    </div>
+</body>
+</html>
