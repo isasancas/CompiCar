@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -94,6 +95,7 @@ public class PersonaServiceTest {
         assertEquals("ana@example.com", result.getEmail());
         assertEquals("ana-lopez-2", result.getSlug());
         assertEquals("encoded_pass", result.getContrasena());
+        assertEquals(LocalDate.now(), result.getFechaAntiguedad());
         verify(personaRepository).save(any(Persona.class));
     }
 
