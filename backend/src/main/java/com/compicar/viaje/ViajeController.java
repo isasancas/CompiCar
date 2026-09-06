@@ -170,4 +170,10 @@ public class ViajeController {
         return ResponseEntity.ok(viajes);
     }
 
+    @GetMapping("/kilometros")
+    public ResponseEntity<Object> contarKilometrosRecorridosPorUsuario() {
+        String usuarioEmail = getUsuarioAutenticado();
+        Object kilometrosRecorridos = viajeRouterService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
+        return ResponseEntity.ok(kilometrosRecorridos);
+    }
 }
