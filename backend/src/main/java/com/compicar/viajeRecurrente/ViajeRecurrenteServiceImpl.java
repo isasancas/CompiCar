@@ -100,6 +100,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         dto.setSlug(vr.getSlug());
         dto.setCheckin(vr.getCheckin());
         dto.setFechaHoraSalida(vr.getFechaHoraSalida());
+        dto.setFechaCancelacion(vr.getFechaCancelacion());
         dto.setFechaHoraFin(vr.getFechaHoraFin());
         dto.setEstado(vr.getEstado() != null ? vr.getEstado().toString() : null);
         dto.setPlazasDisponibles(vr.getPlazasDisponibles());
@@ -294,6 +295,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 : "";
 
         for (Reserva reserva : reservasActivas) {
+            reserva.setFechaCancelacion(LocalDateTime.now());
             reserva.setEstado(EstadoReserva.CANCELADA);
             reservaRepository.save(reserva);
 
@@ -342,6 +344,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
             notificacionRepository.save(noti);
         }
 
+        viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
         viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
@@ -411,6 +414,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
 
         // 5. Iterar y reembolsar a los pasajeros (tu lógica original de Stripe que está perfecta)
         for (Reserva reserva : reservasActivas) {
+            reserva.setFechaCancelacion(LocalDateTime.now());
             reserva.setEstado(EstadoReserva.CANCELADA);
             reservaRepository.save(reserva);
 
@@ -455,6 +459,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
             notificacionRepository.save(noti);
         }
 
+        viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
         viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
@@ -552,6 +557,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         }
 
         for (ViajeRecurrente viaje : viajesExpirados) {
+            viaje.setFechaCancelacion(LocalDateTime.now());
             viaje.setEstado(EstadoViaje.CANCELADO);
         }
 
@@ -678,4 +684,15 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         return totalKilometros;
     }
     
+    public List<ViajeRecurrenteDTO> obtenerViajesRecurrentesExitosos(String usuarioEmail) {
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesExitosos = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId());
+
+        return viajesExitosos.stream()
+            .map(this::mapearADTO)
+            .toList();
+    }
 }

@@ -27,5 +27,6 @@ public interface ViajeService {
     ViajeDTO cancelarViajeIncompareceConductor(String usuarioEmail, String slug);
     ViajeDTO cancelarViajeConjunto(String usuarioEmail, String slug);
     Integer contarKilometrosRecorridosPorUsuario(String usuarioEmail);
+    List<ViajeDTO> obtenerViajesExitosos(String usuarioEmail);
 
 }

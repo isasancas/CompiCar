@@ -38,6 +38,8 @@ public class Reserva {
     @Column(nullable = false)
     private LocalDateTime fechaHoraReserva;
 
+    private LocalDateTime fechaCancelacion;
+
     @ManyToOne
     @JoinColumn(name = "persona_id", nullable = false)
     @JsonIgnoreProperties({"reservas", "viajes"})
@@ -113,6 +115,10 @@ public class Reserva {
         return fechaHoraReserva;
     }
 
+    public LocalDateTime getFechaCancelacion() {
+        return fechaCancelacion;
+    }
+
     public Persona getPersona() {
         return persona;
     }
@@ -161,6 +167,10 @@ public class Reserva {
 
     public void setFechaHoraReserva(LocalDateTime fechaHoraReserva) {
         this.fechaHoraReserva = fechaHoraReserva;
+    }
+
+    public void setFechaCancelacion(LocalDateTime fechaCancelacion) {
+        this.fechaCancelacion = fechaCancelacion;
     }
 
     public void setPersona(Persona persona) {

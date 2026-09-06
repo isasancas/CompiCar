@@ -164,4 +164,10 @@ public class ViajeController {
         return ResponseEntity.ok(viajeRouterService.cancelarViajeIncompareceConductor(usuarioEmail, slug));
     }
 
+    @GetMapping("/exitosos")
+    public ResponseEntity<List<ViajeDTO>> obtenerViajesExitosos(Principal principal) {
+        List<ViajeDTO> viajes = viajeService.obtenerViajesExitosos(principal.getName());
+        return ResponseEntity.ok(viajes);
+    }
+
 }

@@ -1,5 +1,7 @@
 package com.compicar.viajeRecurrente;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -62,5 +64,12 @@ public class ViajeRecurrenteController {
         String usuarioEmail = authentication.getName();
         ViajeRecurrenteDTO viajeCancelado = viajeRecurrenteService.cancelarViajeRecurrente(usuarioEmail, slug);
         return ResponseEntity.ok(viajeCancelado);
+    }
+
+    @GetMapping("/exitosos")
+    public ResponseEntity<List<ViajeRecurrenteDTO>> obtenerViajesRecurrentesExitosos(Authentication authentication) {
+        String usuarioEmail = authentication.getName();
+        List<ViajeRecurrenteDTO> viajesExitosos = viajeRecurrenteService.obtenerViajesRecurrentesExitosos(usuarioEmail);
+        return ResponseEntity.ok(viajesExitosos);
     }
 }

@@ -26,6 +26,11 @@ public interface ViajeRepository extends JpaRepository<Viaje, Long> {
     @Query("SELECT r.viaje FROM Reserva r WHERE r.persona.id = :personaId AND r.estado != 'CANCELADA' AND r.estado != 'NO_PRESENTADO' AND r.estado != 'RECHAZADA' AND r.viaje.estado = 'FINALIZADO'")
     List<Viaje> findViajesParticipadosByPersonaId(@Param("personaId") Long personaId);
 
+     @Query("SELECT DISTINCT v FROM Viaje v LEFT JOIN v.reservas r " +
+         "WHERE v.persona.id = :personaId OR r.persona.id = :personaId")
+List<Viaje> findViajesParticipadosConCancelacionPorPersonaId(
+    @Param("personaId") Long personaId);
+
     @Query("SELECT DISTINCT v FROM Viaje v LEFT JOIN v.reservas r "
         + "WHERE v.estado = 'FINALIZADO' AND (v.persona.id = :personaId "
         + "OR (r.persona.id = :personaId AND r.estado != 'CANCELADA' "

@@ -28,6 +28,8 @@ public abstract class ViajeBase {
     @Column(nullable = false)
     private LocalDateTime fechaHoraSalida;
 
+    private LocalDateTime fechaCancelacion;
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private EstadoViaje estado;
@@ -81,6 +83,10 @@ public abstract class ViajeBase {
         return fechaHoraSalida;
     }
 
+    public LocalDateTime getFechaCancelacion() {
+        return fechaCancelacion;
+    }
+
     public EstadoViaje getEstado() {
         return estado;
     }
@@ -120,6 +126,10 @@ public abstract class ViajeBase {
     
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
         this.fechaHoraSalida = fechaHoraSalida;
+    }
+
+    public void setFechaCancelacion(LocalDateTime fechaCancelacion) {
+        this.fechaCancelacion = fechaCancelacion;
     }
 
     public void setEstado(EstadoViaje estado) {

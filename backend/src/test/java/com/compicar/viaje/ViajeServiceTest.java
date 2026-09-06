@@ -446,7 +446,12 @@ class ViajeServiceTest {
     @Test
     void obtenerViajesParticipados_ok_mapeaLista() {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
-        when(viajeRepository.findViajesParticipadosByPersonaId(1L)).thenReturn(List.of(viajeCompleto(3L, "slug-3")));
+        Viaje viajeParticipado = viajeCompleto(3L, "slug-3");
+        viajeParticipado.setEstado(EstadoViaje.FINALIZADO);
+        when(viajeRepository.findViajesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of(viajeParticipado));
+        when(viajeRecurrenteRepository.findViajesRecurrentesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of());
 
         List<ViajeDTO> result = viajeService.obtenerViajesParticipados(conductor.getEmail());
 
@@ -644,7 +649,10 @@ class ViajeServiceTest {
     @Test
     void obtenerViajesParticipados_listaVacia_ok() {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
-        when(viajeRepository.findViajesParticipadosByPersonaId(1L)).thenReturn(List.of());
+        when(viajeRepository.findViajesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of());
+        when(viajeRecurrenteRepository.findViajesRecurrentesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of());
 
         List<ViajeDTO> result = viajeService.obtenerViajesParticipados(conductor.getEmail());
 
