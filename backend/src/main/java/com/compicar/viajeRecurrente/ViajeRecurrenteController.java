@@ -63,4 +63,10 @@ public class ViajeRecurrenteController {
         ViajeRecurrenteDTO viajeCancelado = viajeRecurrenteService.cancelarViajeRecurrente(usuarioEmail, slug);
         return ResponseEntity.ok(viajeCancelado);
     }
+
+    @GetMapping("/kilometros")
+    public ResponseEntity<Integer> contarKilometrosRecorridosPorUsuario(@RequestParam("usuarioEmail") String usuarioEmail) {
+        Integer kilometrosRecorridos = viajeRecurrenteService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
+        return ResponseEntity.ok(kilometrosRecorridos);
+    }
 }
