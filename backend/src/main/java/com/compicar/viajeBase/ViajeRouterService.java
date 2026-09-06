@@ -97,4 +97,10 @@ public class ViajeRouterService {
         Integer kilometrosRecorridosRecurrentes = viajeRecurrenteService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
         return kilometrosRecorridos + kilometrosRecorridosRecurrentes;
     }
+
+    public Object obtenerViajesExitosos(String usuarioEmail) {
+        Integer countViajesExitosos = viajeService.obtenerViajesExitosos(usuarioEmail).size();
+        Integer countViajesRecurrentesExitosos = viajeRecurrenteService.obtenerViajesRecurrentesExitosos(usuarioEmail).size();
+        return countViajesExitosos + countViajesRecurrentesExitosos;
+    }
 }

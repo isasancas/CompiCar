@@ -165,8 +165,8 @@ public class ViajeController {
     }
 
     @GetMapping("/exitosos")
-    public ResponseEntity<List<ViajeDTO>> obtenerViajesExitosos(Principal principal) {
-        List<ViajeDTO> viajes = viajeService.obtenerViajesExitosos(principal.getName());
+    public ResponseEntity<Object> obtenerViajesExitosos(Principal principal) {
+        Object viajes = viajeRouterService.obtenerViajesExitosos(principal.getName());
         return ResponseEntity.ok(viajes);
     }
 
@@ -175,5 +175,12 @@ public class ViajeController {
         String usuarioEmail = getUsuarioAutenticado();
         Object kilometrosRecorridos = viajeRouterService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
         return ResponseEntity.ok(kilometrosRecorridos);
+    }
+
+    @GetMapping("/contador-participados")
+    public ResponseEntity<Object> contarViajesParticipadosPorUsuario() {
+        String usuarioEmail = getUsuarioAutenticado();
+        Integer viajesParticipados = viajeService.obtenerViajesParticipados(usuarioEmail).size();
+        return ResponseEntity.ok(viajesParticipados);
     }
 }

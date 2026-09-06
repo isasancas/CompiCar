@@ -65,11 +65,4 @@ public class ViajeRecurrenteController {
         ViajeRecurrenteDTO viajeCancelado = viajeRecurrenteService.cancelarViajeRecurrente(usuarioEmail, slug);
         return ResponseEntity.ok(viajeCancelado);
     }
-
-    @GetMapping("/exitosos")
-    public ResponseEntity<List<ViajeRecurrenteDTO>> obtenerViajesRecurrentesExitosos(Authentication authentication) {
-        String usuarioEmail = authentication.getName();
-        List<ViajeRecurrenteDTO> viajesExitosos = viajeRecurrenteService.obtenerViajesRecurrentesExitosos(usuarioEmail);
-        return ResponseEntity.ok(viajesExitosos);
-    }
 }
