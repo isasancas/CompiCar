@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Viaje Recurrente Finalizado</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { color: #16a34a; text-align: center; margin-top: 0; }
+        p { color: #333333; line-height: 1.6; }
+        .info-box { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 15px; margin: 20px 0; border-radius: 4px; }
+        .footer { font-size: 12px; color: #888888; text-align: center; margin-top: 30px; border-top: 1px solid #eeeeee; padding-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 25px;">
+            <img src="cid:logoCompiCar" alt="CompiCar" style="height: 48px; width: auto; max-width: 100%; display: block; margin: 0 auto;" />
+        </div>
+        <h2>¡Trayecto finalizado!</h2>
+        <p>Hola, <b th:text="${nombrePasajero}">Pasajero</b>:</p>
+        <p>Te informamos de que el trayecto recurrente conducido por <b th:text="${nombreConductor}">Conductor</b> ha finalizado con éxito.</p>
+        
+        <div class="info-box">
+            <p style="margin: 0;"><b>Trayecto:</b> <span th:text="${origen}">Origen</span> a <span th:text="${destino}">Destino</span></p>
+            <p style="margin: 5px 0 0 0;"><b>Fecha y hora del viaje:</b> <span th:text="${fechaHora}">01/01/2026 a las 10:00</span></p>
+        </div>
+
+        <p>Esperamos que hayas tenido un trayecto agradable. No olvides valorar la experiencia y a tu conductor en la aplicación.</p>
+        <p>¡Gracias por viajar con CompiCar!</p>
+        
+        <div class="footer">
+            Este es un mensaje automático de CompiCar. Por favor, no respondas a este correo.
+        </div>
+    </div>
+</body>
+</html>

@@ -16,7 +16,7 @@ if %errorlevel% neq 0 (
 )
 
 :: 2. Iniciar Mailpit
-docker start mailpit 2>nul || docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+docker start mailpit 2>nul || docker run -d --name mailpit -v mailpit-data:/data -p 1025:1025 -p 8025:8025 axllent/mailpit
 
 :: 3. Levantar el resto del entorno
 start "Backend" cmd /k "cd /d %~dp0backend && mvn spring-boot:run"

@@ -11,6 +11,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.valoracion.dto.ValoracionDTO;
@@ -26,12 +27,15 @@ public class ValoracionServiceImpl implements ValoracionService {
     private final ValoracionRepository valoracionRepository;
     private final PersonaRepository personaRepository;
     private final ViajeRepository viajeRepository;
+    private final CorreoService correoService;
 
     @Autowired
-    public ValoracionServiceImpl(ValoracionRepository valoracionRepository, PersonaRepository personaRepository, ViajeRepository viajeRepository) {
+    public ValoracionServiceImpl(ValoracionRepository valoracionRepository, PersonaRepository personaRepository, ViajeRepository viajeRepository,
+            CorreoService correoService) {
         this.valoracionRepository = valoracionRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
+        this.correoService = correoService;
     }
 
     @Override
@@ -78,7 +82,26 @@ public class ValoracionServiceImpl implements ValoracionService {
         valoracion.setViaje(viaje);
         valoracion.setSlug(generarSlugValoracion(viaje.getId(), valoracion.getAutor().getId()));
 
-        return new ValoracionDTO(valoracionRepository.save(valoracion));
+        Valoracion guardada = valoracionRepository.save(valoracion);
+
+        // Envío de correo electrónico al conductor valorado
+        if (conductor.getEmail() != null) {
+            String nombreValorado = conductor.getNombre() != null ? conductor.getNombre() : "Usuario";
+            String nombreAutor = guardada.getAutor().getNombre() != null ? guardada.getAutor().getNombre() : "Un pasajero";
+            String comentario = (guardada.getComentario() != null && !guardada.getComentario().isBlank()) 
+                    ? guardada.getComentario() 
+                    : "Sin comentario adicional.";
+
+            correoService.sendNuevaValoracionRecibida(
+                conductor.getEmail(),
+                nombreValorado,
+                nombreAutor,
+                guardada.getPuntuacion(),
+                comentario
+            );
+        }
+
+        return new ValoracionDTO(guardada);
     }
 
     @Override
