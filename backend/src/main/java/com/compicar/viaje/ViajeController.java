@@ -165,9 +165,9 @@ public class ViajeController {
     }
 
     @GetMapping("/kilometros")
-    public ResponseEntity<Integer> contarKilometrosRecorridosPorUsuario() {
+    public ResponseEntity<Object> contarKilometrosRecorridosPorUsuario() {
         String usuarioEmail = getUsuarioAutenticado();
-        Integer kilometrosRecorridos = viajeService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
+        Object kilometrosRecorridos = viajeRouterService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
         return ResponseEntity.ok(kilometrosRecorridos);
     }
 }
