@@ -37,7 +37,6 @@ type ResumenActividad = {
   ofrecidosMes: number;
   completados: number;
   cancelados: number;
-  tendenciaPct: number;
 };
 
 // Convierte a número seguro cualquier valor (number, string "16", "16.00", "16,00", null, etc.)
@@ -54,6 +53,7 @@ const parseMonto = (val: unknown): number => {
 const Perfil: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilData | null>(null);
   const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
+  const [kilometrosCompartidos, setKilometrosCompartidos] = useState(0);
   const [vehiculos, setVehiculos] = useState<VehiculoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,8 +93,7 @@ const Perfil: React.FC = () => {
   const [resumenActividad, setResumenActividad] = useState<ResumenActividad>({
     ofrecidosMes: 0,
     completados: 0,
-    cancelados: 0,
-    tendenciaPct: 0
+    cancelados: 0
   });
 
   const misDatosRef = useRef<HTMLDivElement | null>(null);
@@ -224,41 +223,56 @@ const Perfil: React.FC = () => {
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
 
-      const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
-      const prevMonth = prevMonthDate.getMonth();
-      const prevYear = prevMonthDate.getFullYear();
-
       const offeredCurrent = viajes.filter((v) => {
         const d = new Date(v.fechaHoraSalida);
         return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-      }).length;
-
-      const offeredPrev = viajes.filter((v) => {
-        const d = new Date(v.fechaHoraSalida);
-        return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
       }).length;
 
       const completados = viajes.filter((v) =>
         ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
       ).length;
 
-      const tendenciaPct =
-        offeredPrev === 0
-          ? offeredCurrent > 0
-            ? 100
-            : 0
-          : Math.round(((offeredCurrent - offeredPrev) / offeredPrev) * 100);
-
       setResumenActividad({
         ofrecidosMes: offeredCurrent,
         completados,
-        cancelados: perfil?.numeroCancelaciones ?? 0,
-        tendenciaPct
+        cancelados: perfil?.numeroCancelaciones ?? 0
       });
     } catch {
       // Si falla, dejamos valores por defecto.
     }
   }, [clearLocalSession, perfil?.numeroCancelaciones]);
+
+  const fetchKilometrosCompartidos = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/viajes/kilometros'), {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (!response.ok) {
+        return;
+      }
+
+      const total = Number(await response.json());
+      setKilometrosCompartidos(Number.isFinite(total) ? total : 0);
+    } catch {
+      // Si falla, dejamos el valor por defecto.
+    }
+  }, [clearLocalSession]);
 
   const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
     const token = getValidToken();
@@ -345,10 +359,10 @@ const Perfil: React.FC = () => {
   };
 
   useEffect(() => {
-    Promise.all([fetchPerfil(), fetchVehiculos(), fetchResumenActividad()])
+    Promise.all([fetchPerfil(), fetchVehiculos(), fetchResumenActividad(), fetchKilometrosCompartidos()])
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [fetchPerfil, fetchVehiculos, fetchResumenActividad]);
+  }, [fetchPerfil, fetchVehiculos, fetchResumenActividad, fetchKilometrosCompartidos]);
 
   useEffect(() => {
     if (!perfil?.id) {
@@ -944,12 +958,9 @@ const Perfil: React.FC = () => {
                 </div>
 
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Tendencia</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">
-                    {resumenActividad.tendenciaPct > 0 ? '+' : ''}
-                    {resumenActividad.tendenciaPct}%
-                  </p>
-                  <p className="text-sm text-slate-600">vs mes anterior</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Kilómetros compartidos</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{kilometrosCompartidos}</p>
+                  <p className="text-sm text-slate-600">total recorrido</p>
                 </div>
               </div>
 
