@@ -83,6 +83,16 @@ public class ViajeController {
         return viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
     }
 
+    @GetMapping("/publicos/conductor/{conductorSlug}/exitosos")
+    public Integer contarViajesExitososPorConductor(@PathVariable String conductorSlug) {
+        return viajeService.contarViajesExitososPorSlug(conductorSlug);
+    }
+
+    @GetMapping("/publicos/conductor/{conductorSlug}/participados")
+    public Integer contarViajesParticipadosPorConductor(@PathVariable String conductorSlug) {
+        return viajeService.contarViajesParticipadosPorSlug(conductorSlug);
+    }
+
     @GetMapping("/publicos/{slug}")
     public ResponseEntity<Object> obtenerViajePublicoPorSlug(@PathVariable String slug) {
         return ResponseEntity.ok(viajeRouterService.obtenerPorSlug(slug));

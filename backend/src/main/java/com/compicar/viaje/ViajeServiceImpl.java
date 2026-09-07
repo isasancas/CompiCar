@@ -1297,4 +1297,24 @@ public class ViajeServiceImpl implements ViajeService {
             .map(this::convertirADTO)
             .toList();
     }
+
+    @Override
+    public Integer contarViajesExitososPorSlug(String slug) {
+        Persona persona = personaRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        int viajesNormales = viajeRepository
+            .findViajesFinalizadosPorUsuarioIncluyendoConductor(persona.getId()).size();
+        int viajesRecurrentes = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId()).size();
+
+        return viajesNormales + viajesRecurrentes;
+    }
+
+    @Override
+    public Integer contarViajesParticipadosPorSlug(String slug) {
+        Persona persona = personaRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+        return obtenerViajesParticipados(persona.getEmail()).size();
+    }
 }
