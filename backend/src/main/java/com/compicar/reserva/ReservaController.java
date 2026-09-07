@@ -213,4 +213,12 @@ public class ReservaController {
         );
     }
     
+    @GetMapping("/ratio-exito")
+    public ResponseEntity<Double> obtenerRatioExitoReservas(Principal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
+        Double ratio = reservaService.ratioExitoReservas(principal.getName());
+        return ResponseEntity.ok(ratio);
+    }
 }
