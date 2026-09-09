@@ -106,6 +106,10 @@ public class ViajeServiceImpl implements ViajeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar al menos origen y destino");
         }
 
+        if (viaje.getKilometrosRecorridos() == null || viaje.getKilometrosRecorridos() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar una distancia válida para el viaje");
+        }
+
         Vehiculo vehiculo = vehiculoRepository.findById(viaje.getVehiculo().getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehículo no existe"));
 
@@ -237,12 +241,22 @@ public class ViajeServiceImpl implements ViajeService {
     public List<ViajeDTO> obtenerViajesParticipados(String email) {
         Persona persona = personaRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        Long personaId = persona.getId();
+
+        List<Viaje> viajesNormales = viajeRepository
+            .findViajesParticipadosConCancelacionPorPersonaId(personaId)
+            .stream()
+            .filter(viaje -> cumpleCriterioParticipacion(viaje, personaId))
+            .toList();
         
-        // 1. Viajes normales donde participa directamente
-        List<Viaje> viajesNormales = viajeRepository.findViajesParticipadosByPersonaId(persona.getId());
-        
-        // 2. Viajes padre obtenidos a través de las reservas en viajes recurrentes
-        List<Viaje> viajesPadresRecurrentes = viajeRecurrenteRepository.findViajesPadreParticipadosByPersonaId(persona.getId());
+        List<Viaje> viajesPadresRecurrentes = viajeRecurrenteRepository
+            .findViajesRecurrentesParticipadosConCancelacionPorPersonaId(personaId)
+            .stream()
+            .filter(viaje -> cumpleCriterioParticipacion(viaje, personaId))
+            .map(ViajeRecurrente::getViajePadre)
+            .filter(Objects::nonNull)
+            .toList();
 
         // 3. Unir ambos listados usando un Set para evitar duplicados
         Set<Viaje> todosLosViajes = new HashSet<>();
@@ -251,6 +265,49 @@ public class ViajeServiceImpl implements ViajeService {
 
         // 4. Convertir a DTO y retornar
         return todosLosViajes.stream().map(this::convertirADTO).toList();
+    }
+
+    private boolean cumpleCriterioParticipacion(ViajeBase viaje, Long personaId) {
+        if (viaje.getEstado() == EstadoViaje.FINALIZADO) {
+            return true;
+        }
+
+        if (viaje.getPersona() != null
+                && personaId.equals(viaje.getPersona().getId())
+                && estaCanceladoDentroDeLas12Horas(viaje.getFechaCancelacion(), viaje.getFechaHoraSalida())) {
+            return true;
+        }
+
+        if (viaje instanceof Viaje viajeNormal) {
+            return tieneReservaParticipada(viajeNormal.getReservas(), personaId, viaje.getFechaHoraSalida());
+        }
+
+        if (viaje instanceof ViajeRecurrente viajeRecurrente) {
+            return tieneReservaParticipada(viajeRecurrente.getReservas(), personaId, viaje.getFechaHoraSalida());
+        }
+
+        return false;
+    }
+
+    private boolean tieneReservaParticipada(List<Reserva> reservas, Long personaId, LocalDateTime fechaHoraSalida) {
+        return reservas != null && reservas.stream()
+            .filter(reserva -> reserva.getPersona() != null
+                    && personaId.equals(reserva.getPersona().getId()))
+            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.PRESENTE
+                    || reserva.getEstado() == EstadoReserva.NO_PRESENTADO
+                    || estaCanceladoDentroDeLas12Horas(
+                        reserva.getFechaCancelacion(), fechaHoraSalida));
+    }
+
+    private boolean estaCanceladoDentroDeLas12Horas(
+            LocalDateTime fechaCancelacion, LocalDateTime fechaHoraSalida) {
+        if (fechaCancelacion == null || fechaHoraSalida == null) {
+            return false;
+        }
+
+        LocalDateTime fechaLimite = fechaHoraSalida.minusHours(12);
+        return !fechaCancelacion.isBefore(fechaLimite)
+                && fechaCancelacion.isBefore(fechaHoraSalida);
     }
 
     @Override
@@ -330,6 +387,7 @@ public class ViajeServiceImpl implements ViajeService {
 
         cancelarReservasYReembolsar(viaje, true);
 
+        viaje.setFechaCancelacion(LocalDateTime.now());
         viaje.setEstado(EstadoViaje.CANCELADO);
         viajeRepository.save(viaje);
 
@@ -368,6 +426,7 @@ public class ViajeServiceImpl implements ViajeService {
         // 5. Cancelar reservas y reembolsar el viaje padre
         cancelarReservasYReembolsar(viajePadre, true);
 
+        viajePadre.setFechaCancelacion(LocalDateTime.now());
         viajePadre.setEstado(EstadoViaje.CANCELADO);
         viajeRepository.save(viajePadre);
 
@@ -440,6 +499,7 @@ public class ViajeServiceImpl implements ViajeService {
                 notificacionRepository.save(noti);
             }
 
+            viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
             viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
             viajeRecurrenteRepository.save(viajeRecurrente);
         }
@@ -504,6 +564,7 @@ public class ViajeServiceImpl implements ViajeService {
         // 4. Ejecutar reembolso masivo o de la reserva del pasajero (según cómo tengas diseñada tu función auxiliar)
         cancelarReservasYReembolsar(viaje, true);
 
+        viaje.setFechaCancelacion(LocalDateTime.now());
         viaje.setEstado(EstadoViaje.CANCELADO);
         viajeRepository.save(viaje);
 
@@ -528,6 +589,7 @@ public class ViajeServiceImpl implements ViajeService {
 
             cancelarReservasYReembolsar(viaje, true);
 
+            viaje.setFechaCancelacion(LocalDateTime.now());
             viaje.setEstado(EstadoViaje.CANCELADO);
             viajeRepository.save(viaje);
 
@@ -853,6 +915,7 @@ public class ViajeServiceImpl implements ViajeService {
 
         for (Reserva reserva : reservasActivas) {
             if (reserva.getEstado() != EstadoReserva.NO_PRESENTADO) {
+                reserva.setFechaCancelacion(LocalDateTime.now());
                 reserva.setEstado(EstadoReserva.CANCELADA);
                 reservaRepository.save(reserva);
             }
@@ -1076,7 +1139,7 @@ public class ViajeServiceImpl implements ViajeService {
                 .toList()
             : List.of();
 
-        return new ViajeDTO(
+        ViajeDTO dto = new ViajeDTO(
             viaje.getId(),
             viaje.getFechaHoraSalida(),
             viaje.getEstado().toString(),
@@ -1094,6 +1157,8 @@ public class ViajeServiceImpl implements ViajeService {
             viajesRecurrentesDTO,
             viaje.getCheckin()
         );
+        dto.setFechaCancelacion(viaje.getFechaCancelacion());
+        return dto;
     }
 
         private ViajeDTO convertirRecurrenteADTO(ViajeRecurrente viajeRecurrente) {
@@ -1144,7 +1209,7 @@ public class ViajeServiceImpl implements ViajeService {
         String conductorSlug = viajeRecurrente.getPersona() != null ? viajeRecurrente.getPersona().getSlug() : null;
 
         // 5. Retornar el ViajeDTO marcándolo como recurrente (esRecurrente = true)
-        return new ViajeDTO(
+        ViajeDTO dto = new ViajeDTO(
             viajeRecurrente.getId(),
             viajeRecurrente.getFechaHoraSalida(),
             viajeRecurrente.getEstado().toString(),
@@ -1162,6 +1227,8 @@ public class ViajeServiceImpl implements ViajeService {
             List.of(), // lista vacía de sub-recurrentes para evitar recursión infinita
             viajeRecurrente.getCheckin() 
         );
+        dto.setFechaCancelacion(viajeRecurrente.getFechaCancelacion());
+        return dto;
     }
 
     private String construirBaseSlug(Viaje viaje) {
@@ -1201,5 +1268,53 @@ public class ViajeServiceImpl implements ViajeService {
             sufijo++;
         }
         return candidato;
+    }
+
+    public Integer contarKilometrosRecorridosPorUsuario(String email) {
+        Persona usuario = personaRepository.findByEmail(email)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        List<Viaje> viajesFinalizados = viajeRepository
+            .findViajesFinalizadosPorUsuarioIncluyendoConductor(usuario.getId());
+        
+        int totalKilometros = 0;
+        for (Viaje viaje : viajesFinalizados) {
+            if (viaje.getKilometrosRecorridos() != null) {
+                totalKilometros += viaje.getKilometrosRecorridos();
+            }
+        }
+        return totalKilometros;
+    }
+
+    public List<ViajeDTO> obtenerViajesExitosos(String usuarioEmail) {
+        Persona usuario = personaRepository.findByEmail(usuarioEmail)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+
+        List<Viaje> viajesFinalizados = viajeRepository
+            .findViajesFinalizadosPorUsuarioIncluyendoConductor(usuario.getId());
+
+        return viajesFinalizados.stream()
+            .map(this::convertirADTO)
+            .toList();
+    }
+
+    @Override
+    public Integer contarViajesExitososPorSlug(String slug) {
+        Persona persona = personaRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        int viajesNormales = viajeRepository
+            .findViajesFinalizadosPorUsuarioIncluyendoConductor(persona.getId()).size();
+        int viajesRecurrentes = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId()).size();
+
+        return viajesNormales + viajesRecurrentes;
+    }
+
+    @Override
+    public Integer contarViajesParticipadosPorSlug(String slug) {
+        Persona persona = personaRepository.findBySlug(slug)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+        return obtenerViajesParticipados(persona.getEmail()).size();
     }
 }

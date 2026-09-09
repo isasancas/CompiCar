@@ -14,6 +14,7 @@ public class ViajeRecurrenteDTO {
     private String slug;
     private String checkin;
     private LocalDateTime fechaHoraSalida;
+    private LocalDateTime fechaCancelacion;
     private LocalDateTime fechaHoraFin;
     private String estado;
     private Integer plazasDisponibles;
@@ -43,6 +44,9 @@ public class ViajeRecurrenteDTO {
 
     public LocalDateTime getFechaHoraSalida() { return fechaHoraSalida; }
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) { this.fechaHoraSalida = fechaHoraSalida; }
+
+    public LocalDateTime getFechaCancelacion() { return fechaCancelacion; }
+    public void setFechaCancelacion(LocalDateTime fechaCancelacion) { this.fechaCancelacion = fechaCancelacion; }
 
     public LocalDateTime getFechaHoraFin() { return fechaHoraFin; }
     public void setFechaHoraFin(LocalDateTime fechaHoraFin) { this.fechaHoraFin = fechaHoraFin; }

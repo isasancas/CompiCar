@@ -1,6 +1,7 @@
 package com.compicar.persona;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -76,6 +77,9 @@ public class Persona {
 
     @Column(nullable = false)
     private Integer numeroCancelaciones = 0;
+
+    @Column(name = "fecha_antiguedad", nullable = false)
+    private LocalDate fechaAntiguedad = LocalDate.now();
 
     @ElementCollection
     @CollectionTable(
@@ -206,6 +210,10 @@ public class Persona {
         return numeroCancelaciones;
     }
 
+    public LocalDate getFechaAntiguedad() {
+        return fechaAntiguedad;
+    }
+
     public String getStripePasajeroId() {
         return stripePasajeroId;
     }
@@ -298,6 +306,10 @@ public class Persona {
 
     public void setNumeroCancelaciones(Integer numeroCancelaciones) {
         this.numeroCancelaciones = numeroCancelaciones;
+    }
+
+    public void setFechaAntiguedad(LocalDate fechaAntiguedad) {
+        this.fechaAntiguedad = fechaAntiguedad;
     }
 
     public void setStripePasajeroId(String stripePasajeroId) {
