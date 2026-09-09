@@ -1,6 +1,7 @@
 package com.compicar.persona;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -69,6 +70,7 @@ public class PersonaServiceImpl implements PersonaService {
         persona.setSegundoApellido(registro.getSegundoApellido());
         persona.setEmail(registro.getEmail());
         persona.setTelefono(registro.getNumTelefono());
+        persona.setFechaAntiguedad(LocalDate.now());
 
         String contrasenaEncriptada = passwordEncoder.encode(registro.getContrasena());
         persona.setContrasena(contrasenaEncriptada);

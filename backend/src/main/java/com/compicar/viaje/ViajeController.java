@@ -83,6 +83,16 @@ public class ViajeController {
         return viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
     }
 
+    @GetMapping("/publicos/conductor/{conductorSlug}/exitosos")
+    public Integer contarViajesExitososPorConductor(@PathVariable String conductorSlug) {
+        return viajeService.contarViajesExitososPorSlug(conductorSlug);
+    }
+
+    @GetMapping("/publicos/conductor/{conductorSlug}/participados")
+    public Integer contarViajesParticipadosPorConductor(@PathVariable String conductorSlug) {
+        return viajeService.contarViajesParticipadosPorSlug(conductorSlug);
+    }
+
     @GetMapping("/publicos/{slug}")
     public ResponseEntity<Object> obtenerViajePublicoPorSlug(@PathVariable String slug) {
         return ResponseEntity.ok(viajeRouterService.obtenerPorSlug(slug));
@@ -164,4 +174,23 @@ public class ViajeController {
         return ResponseEntity.ok(viajeRouterService.cancelarViajeIncompareceConductor(usuarioEmail, slug));
     }
 
+    @GetMapping("/exitosos")
+    public ResponseEntity<Object> obtenerViajesExitosos(Principal principal) {
+        Object viajes = viajeRouterService.obtenerViajesExitosos(principal.getName());
+        return ResponseEntity.ok(viajes);
+    }
+
+    @GetMapping("/kilometros")
+    public ResponseEntity<Object> contarKilometrosRecorridosPorUsuario() {
+        String usuarioEmail = getUsuarioAutenticado();
+        Object kilometrosRecorridos = viajeRouterService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
+        return ResponseEntity.ok(kilometrosRecorridos);
+    }
+
+    @GetMapping("/contador-participados")
+    public ResponseEntity<Object> contarViajesParticipadosPorUsuario() {
+        String usuarioEmail = getUsuarioAutenticado();
+        Integer viajesParticipados = viajeService.obtenerViajesParticipados(usuarioEmail).size();
+        return ResponseEntity.ok(viajesParticipados);
+    }
 }

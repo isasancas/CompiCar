@@ -93,6 +93,7 @@ public class ReservaServiceImpl implements ReservaService {
         }
         
         dto.setFechaHoraReserva(reserva.getFechaHoraReserva());
+        dto.setFechaCancelacion(reserva.getFechaCancelacion());
         dto.setCantidadPlazas(reserva.getCantidadPlazas());
 
         // Mapeo seguro de Paradas (extrayendo su ID)
@@ -375,6 +376,7 @@ public class ReservaServiceImpl implements ReservaService {
         pasajero.incrementarCancelaciones();
         personaRepository.save(pasajero);
 
+        reserva.setFechaCancelacion(LocalDateTime.now());
         reserva.setEstado(EstadoReserva.CANCELADA);
         return reservaRepository.save(reserva);
     }
@@ -638,6 +640,7 @@ public class ReservaServiceImpl implements ReservaService {
         }
 
         // 2. Marcar la ocurrencia del viaje como CANCELADO (opcional si usas EstadoViaje)
+        vr.setFechaCancelacion(LocalDateTime.now());
         vr.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(vr);
 
