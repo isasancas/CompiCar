@@ -73,6 +73,46 @@ test('Carga y muestra correctamente los datos del perfil público y sus preferen
   expect(screen.getByText(/4.9 \/ 5/i)).toBeInTheDocument();
 });
 
+test('Muestra las valoraciones recibidas con el nombre completo del autor', async () => {
+  server.use(
+    http.get('*/api/valoraciones/valorado/2', () => HttpResponse.json([
+      {
+        id: 101,
+        puntuacion: 5,
+        comentario: 'Excelente pasajera, muy puntual.',
+        fecha: '2026-01-10T10:00:00Z',
+        autorId: 3,
+        autorNombre: 'Carlos García López',
+      },
+    ]))
+  );
+
+  const user = userEvent.setup();
+  renderComponentWithSlug();
+
+  const btnValoraciones = await screen.findByRole('button', { name: 'Ver valoraciones recibidas' });
+  await user.click(btnValoraciones);
+
+  expect(screen.getByText('Carlos García López')).toBeInTheDocument();
+  expect(screen.getByText('Excelente pasajera, muy puntual.')).toBeInTheDocument();
+  expect(screen.getByText('5/5')).toBeInTheDocument();
+  expect(screen.getByLabelText('5 de 5 estrellas')).toBeInTheDocument();
+  expect(screen.getByText(/\(1 reseña\)/)).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Ocultar valoraciones' }));
+  expect(screen.queryByText('Carlos García López')).not.toBeInTheDocument();
+});
+
+test('Muestra el estado vacío cuando el perfil no tiene valoraciones recibidas', async () => {
+  const user = userEvent.setup();
+  renderComponentWithSlug();
+
+  await user.click(await screen.findByRole('button', { name: 'Ver valoraciones recibidas' }));
+
+  expect(screen.getByText('Todavía no tiene valoraciones recibidas.')).toBeInTheDocument();
+  expect(screen.getByText(/\(0 reseñas\)/)).toBeInTheDocument();
+});
+
 test('Permite volver a la página anterior mediante el botón de retorno', async () => {
   const user = userEvent.setup();
   renderComponentWithSlug();

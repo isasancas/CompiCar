@@ -16,6 +16,14 @@ interface PerfilPublicoData {
   fechaAntiguedad?: string;
 }
 
+interface ValoracionRecibida {
+  id: number;
+  puntuacion: number;
+  comentario?: string;
+  fecha?: string;
+  autorNombre?: string;
+}
+
 const formatearFechaAntiguedad = (fecha?: string): string => {
   if (!fecha) return '-';
   const fechaCuenta = new Date(`${fecha}T00:00:00`);
@@ -31,6 +39,8 @@ const PerfilPublico: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
+  const [valoracionesRecibidas, setValoracionesRecibidas] = useState<ValoracionRecibida[]>([]);
+  const [mostrarValoraciones, setMostrarValoraciones] = useState(false);
   const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
   const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
   const [ratioExitoReservas, setRatioExitoReservas] = useState(0);
@@ -75,7 +85,9 @@ const PerfilPublico: React.FC = () => {
 
         if (valoracionesResponse.ok) {
           const valoraciones = await valoracionesResponse.json();
-          setTotalValoracionesRecibidas(Array.isArray(valoraciones) ? valoraciones.length : 0);
+          const recibidas = Array.isArray(valoraciones) ? valoraciones : [];
+          setValoracionesRecibidas(recibidas);
+          setTotalValoracionesRecibidas(recibidas.length);
         }
       } catch {
         setError('Error de conexión al cargar el perfil');
@@ -269,6 +281,43 @@ const PerfilPublico: React.FC = () => {
                 Puntuación media: {Number(perfil.reputacion ?? 0).toFixed(1)} / 5 &nbsp;
                 ({totalValoracionesRecibidas} {totalValoracionesRecibidas === 1 ? 'reseña' : 'reseñas'})
               </p>
+              <button
+                type="button"
+                className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow hover:opacity-90"
+                onClick={() => setMostrarValoraciones((visible) => !visible)}
+              >
+                {mostrarValoraciones ? 'Ocultar valoraciones' : 'Ver valoraciones recibidas'}
+              </button>
+
+              {mostrarValoraciones && (
+                <div className="mt-4 space-y-3">
+                  {valoracionesRecibidas.length === 0 ? (
+                    <p className="text-sm italic text-slate-500">Todavía no tiene valoraciones recibidas.</p>
+                  ) : (
+                    valoracionesRecibidas.map((valoracion) => (
+                      <article key={valoracion.id} className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-800">
+                            {valoracion.autorNombre || 'Usuario'}
+                          </p>
+                          <p className="font-semibold text-amber-600" aria-label={`${valoracion.puntuacion} de 5 estrellas`}>
+                            {'★'.repeat(Math.max(0, Math.min(5, valoracion.puntuacion)))}
+                            <span className="ml-1 text-slate-600">{valoracion.puntuacion}/5</span>
+                          </p>
+                        </div>
+                        {valoracion.comentario && (
+                          <p className="mt-2 text-slate-700">{valoracion.comentario}</p>
+                        )}
+                        {valoracion.fecha && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            {new Date(valoracion.fecha).toLocaleDateString('es-ES')}
+                          </p>
+                        )}
+                      </article>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </section>
           </div>
