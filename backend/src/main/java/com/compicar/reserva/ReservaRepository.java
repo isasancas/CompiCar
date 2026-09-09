@@ -90,5 +90,35 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
         @Param("estadoViajeCancelado") EstadoViaje estadoViajeCancelado
     );
 
+    // 13. Buscar todas las reservas que ha tenido un conductor
+    @Query("SELECT r FROM Reserva r " +
+           "LEFT JOIN r.viaje v " +
+           "LEFT JOIN v.persona p1 " +
+           "LEFT JOIN r.viajeRecurrente vr " +
+           "LEFT JOIN vr.persona p2 " +
+           "LEFT JOIN vr.viajePadre vp " +
+           "LEFT JOIN vp.persona p3 " +
+           "WHERE (" +
+           "  p1.email = :email " +
+           "  OR p2.email = :email " +
+           "  OR p3.email = :email" +
+           ") AND (r.estado = CONFIRMADA OR r.estado = PRESENTE OR r.estado = NO_PRESENTADO OR r.estado = RECHAZADA)")
+    List<Reserva> findReservasDeConductor(@Param("email") String email);
+
+       // 14. Buscar reservas de un conductor que cuentan como exitosas
+    @Query("SELECT r FROM Reserva r " +
+           "LEFT JOIN r.viaje v " +
+           "LEFT JOIN v.persona p1 " +
+           "LEFT JOIN r.viajeRecurrente vr " +
+           "LEFT JOIN vr.persona p2 " +
+           "LEFT JOIN vr.viajePadre vp " +
+           "LEFT JOIN vp.persona p3 " +
+           "WHERE (" +
+           "  p1.email = :email " +
+           "  OR p2.email = :email " +
+           "  OR p3.email = :email" +
+           ") AND (r.estado = CONFIRMADA OR r.estado = PRESENTE OR r.estado = NO_PRESENTADO)")
+    List<Reserva> findReservasExitosasDeConductor(@Param("email") String email);
+
 }
 
