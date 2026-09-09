@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
+import { server } from '../../setupTests';
 import PerfilPublico from '../autenticacion/PerfilPublico';
 
 const mockNavigate = vi.fn();
@@ -26,21 +26,26 @@ const mockPerfilPublicoData = {
   preferenciasViaje: ['Mascotas permitidas', 'Silencioso'],
 };
 
-const server = setupServer(
-  http.get('*/api/personas/laura-martinez-2/perfil-publico', () => {
-    return HttpResponse.json(mockPerfilPublicoData);
-  }),
-  http.get('*/api/viajes/publicos/conductor/laura-martinez-2', () => {
-    return HttpResponse.json([]);
-  })
-);
-
-beforeAll(() => server.listen());
-afterEach(() => {
-  server.resetHandlers();
+beforeEach(() => {
+  server.use(
+    http.get('*/api/personas/laura-martinez-2/perfil-publico', () => {
+      return HttpResponse.json(mockPerfilPublicoData);
+    }),
+    http.get('*/api/valoraciones/valorado/2', () => {
+      return HttpResponse.json([]);
+    }),
+    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/exitosos', () => {
+      return HttpResponse.json(0);
+    }),
+    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/participados', () => {
+      return HttpResponse.json(0);
+    }),
+    http.get('*/api/reservas/ratio-exito', () => {
+      return HttpResponse.json(0);
+    })
+  );
   vi.clearAllMocks();
 });
-afterAll(() => server.close());
 
 const renderComponentWithSlug = (slugRoute: string = '/perfil/laura-martinez-2') => {
   return render(
@@ -78,11 +83,7 @@ test('Permite volver a la página anterior mediante el botón de retorno', async
   expect(mockNavigate).toHaveBeenCalledWith(-1);
 });
 
-test('Muestra segundo apellido, procesa estados COMPLETADO/CANCELADA y calcula la tendencia respecto al mes anterior', async () => {
-  const now = new Date();
-  const fechaEsteMes = new Date(now.getFullYear(), now.getMonth(), 10).toISOString();
-  const fechaMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 10).toISOString();
-
+test('Muestra el segundo apellido y las estadísticas del perfil público', async () => {
   server.use(
     http.get('*/api/personas/laura-martinez-2/perfil-publico', () => {
       return HttpResponse.json({
@@ -90,20 +91,18 @@ test('Muestra segundo apellido, procesa estados COMPLETADO/CANCELADA y calcula l
         segundoApellido: 'García',
       });
     }),
-    http.get('*/api/viajes/publicos/conductor/laura-martinez-2', () => {
-      return HttpResponse.json([
-        { id: 1, fechaHoraSalida: fechaEsteMes, estado: 'COMPLETADO' },
-        { id: 2, fechaHoraSalida: fechaEsteMes, estado: 'COMPLETADO' },
-        { id: 3, fechaHoraSalida: fechaMesAnterior, estado: 'CANCELADA' },
-      ]);
-    })
+    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/exitosos', () => HttpResponse.json(2)),
+    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/participados', () => HttpResponse.json(3)),
+    http.get('*/api/reservas/ratio-exito?slug=laura-martinez-2', () => HttpResponse.json(75))
   );
 
   renderComponentWithSlug();
 
   expect(await screen.findByText('Laura Martínez García')).toBeInTheDocument();
 
-  expect(await screen.findByText('+100%')).toBeInTheDocument();
+  expect(screen.getByText('Viajes completados').parentElement).toHaveTextContent('2');
+  expect(screen.getByText('Viajes participados').parentElement).toHaveTextContent('3');
+  expect(screen.getByText('Ratio de éxito reservas').parentElement).toHaveTextContent('75%');
 });
 
 test('Muestra "Sin preferencias" y reputación por defecto si no vienen informadas', async () => {
@@ -165,7 +164,7 @@ test('Muestra mensaje de error de conexión si fetchPerfilPublico lanza una exce
 
 test('Soporta un fallo en fetchResumenActividad sin interrumpir la visualización del perfil', async () => {
   server.use(
-    http.get('*/api/viajes/publicos/conductor/laura-martinez-2', () => {
+    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/exitosos', () => {
       return new HttpResponse(null, { status: 500 });
     })
   );
@@ -177,7 +176,7 @@ test('Soporta un fallo en fetchResumenActividad sin interrumpir la visualizació
 
 test('Soporta una excepción de red en fetchResumenActividad sin bloquear el componente', async () => {
   server.use(
-    http.get('*/api/viajes/publicos/conductor/laura-martinez-2', () => {
+    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/exitosos', () => {
       return HttpResponse.error();
     })
   );

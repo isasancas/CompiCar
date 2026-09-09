@@ -403,6 +403,7 @@ const Perfil: React.FC = () => {
     fetchTotalValoracionesRecibidas(personaId);
 
     const refreshOnFocus = () => {
+      fetchPerfil();
       fetchTotalValoracionesRecibidas(personaId);
     };
 
@@ -410,7 +411,7 @@ const Perfil: React.FC = () => {
     return () => {
       window.removeEventListener('focus', refreshOnFocus);
     };
-  }, [perfil?.id, fetchTotalValoracionesRecibidas]);
+  }, [perfil?.id, fetchPerfil, fetchTotalValoracionesRecibidas]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
