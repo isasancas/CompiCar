@@ -214,11 +214,20 @@ public class ReservaController {
     }
     
     @GetMapping("/ratio-exito")
-    public ResponseEntity<Double> obtenerRatioExitoReservas(Principal principal) {
-        if (principal == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+    public ResponseEntity<Double> obtenerRatioExitoReservas(Principal principal, @RequestParam(required = false) String slug) {
+        String email;
+        if (slug != null && !slug.isBlank()) {
+            Persona persona = personaRepository.findBySlug(slug)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Perfil no encontrado"));
+            email = persona.getEmail();
+        } else {
+            if (principal == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+            }
+            email = principal.getName();
         }
-        Double ratio = reservaService.ratioExitoReservas(principal.getName());
+
+        Double ratio = reservaService.ratioExitoReservas(email);
         return ResponseEntity.ok(ratio);
     }
 }

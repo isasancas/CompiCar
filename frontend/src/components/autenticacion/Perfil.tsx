@@ -52,6 +52,7 @@ const Perfil: React.FC = () => {
   const [kilometrosCompartidos, setKilometrosCompartidos] = useState(0);
   const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
   const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
+  const [ratioExitoReservas, setRatioExitoReservas] = useState(0);
 
   const porcentajeViajesCompletados = totalViajesParticipados > 0
     ? Math.round((totalViajesExitosos / totalViajesParticipados) * 100)
@@ -276,6 +277,32 @@ const Perfil: React.FC = () => {
     }
   }, [clearLocalSession]);
 
+  const fetchRatioExitoReservas = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/reservas/ratio-exito'), {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (response.ok) {
+        const ratio = Number(await response.json());
+        setRatioExitoReservas(Number.isFinite(ratio) ? Math.round(ratio) : 0);
+      }
+    } catch {
+      // Si falla, dejamos el valor por defecto.
+    }
+  }, [clearLocalSession]);
+
   const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
     const token = getValidToken();
     if (!token) {
@@ -361,10 +388,10 @@ const Perfil: React.FC = () => {
   };
 
   useEffect(() => {
-    Promise.all([fetchPerfil(), fetchVehiculos(), fetchViajesExitosos(), fetchViajesParticipados(), fetchKilometrosCompartidos()])
+    Promise.all([fetchPerfil(), fetchVehiculos(), fetchViajesExitosos(), fetchViajesParticipados(), fetchKilometrosCompartidos(), fetchRatioExitoReservas()])
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [fetchPerfil, fetchVehiculos, fetchViajesExitosos, fetchViajesParticipados, fetchKilometrosCompartidos]);
+  }, [fetchPerfil, fetchVehiculos, fetchViajesExitosos, fetchViajesParticipados, fetchKilometrosCompartidos, fetchRatioExitoReservas]);
 
   useEffect(() => {
     if (!perfil?.id) {
@@ -976,6 +1003,12 @@ const Perfil: React.FC = () => {
                 </div>
 
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito reservas</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{ratioExitoReservas}%</p>
+                  <p className="text-sm text-slate-600">aceptadas sobre solicitudes</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
                   <p className="text-xs font-semibold uppercase text-slate-500">Kilómetros compartidos</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{kilometrosCompartidos}</p>
                   <p className="text-sm text-slate-600">total recorrido</p>
@@ -1000,7 +1033,7 @@ const Perfil: React.FC = () => {
             >
               <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
 
-              <div className="mt-3 flex-1 min-h-0 text-slate-700">
+              <div className="mt-3 flex-1 min-h-0 overflow-hidden text-slate-700">
                 {vehiculosError && (
                   <p className="mb-3 text-red-600">{vehiculosError}</p>
                 )}
@@ -1011,7 +1044,7 @@ const Perfil: React.FC = () => {
                 {vehiculos.length === 0 && !vehiculosError ? (
                   <p>No tienes vehículos registrados aún.</p>
                 ) : (
-                  <div className="h-full overflow-y-auto pr-2 space-y-4">
+                  <div className="h-full min-h-0 overflow-y-auto pr-2 space-y-4">
                     {vehiculos.map((vehiculo) => (
                       <div key={vehiculo.id} className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
                         <p className="font-semibold text-slate-900">
@@ -1053,7 +1086,7 @@ const Perfil: React.FC = () => {
             </div>
 
             {/* BLOQUE 3: PREFERENCIAS DE VIAJE */}
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="self-stretch rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold mb-2 text-slate-800">Preferencias de viaje</h3>
               <div className="flex flex-wrap gap-2 my-3">
                 {preferencias.length > 0 ? (
@@ -1111,7 +1144,7 @@ const Perfil: React.FC = () => {
             </div>
 
             {/* BLOQUE 4: VALORACIONES */}
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="self-stretch rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
               <p className="mt-6 text-xl text-slate-700">
                 Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp;

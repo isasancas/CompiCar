@@ -33,6 +33,7 @@ const PerfilPublico: React.FC = () => {
   const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
   const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
   const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
+  const [ratioExitoReservas, setRatioExitoReservas] = useState(0);
 
   const porcentajeViajesCompletados = totalViajesParticipados > 0
     ? Math.round((totalViajesExitosos / totalViajesParticipados) * 100)
@@ -123,7 +124,25 @@ const PerfilPublico: React.FC = () => {
       }
     };
 
-    Promise.all([fetchPerfilPublico(), fetchViajesExitosos(), fetchViajesParticipados()]).finally(() => setLoading(false));
+    const fetchRatioExitoReservas = async () => {
+      if (!slug) return;
+
+      try {
+        const response = await fetch(buildApiUrl(`/api/reservas/ratio-exito?slug=${encodeURIComponent(slug)}`), {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+          const ratio = Number(await response.json());
+          setRatioExitoReservas(Number.isFinite(ratio) ? Math.round(ratio) : 0);
+        }
+      } catch {
+        // No bloqueamos la carga del perfil si fallan estadisticas.
+      }
+    };
+
+    Promise.all([fetchPerfilPublico(), fetchViajesExitosos(), fetchViajesParticipados(), fetchRatioExitoReservas()]).finally(() => setLoading(false));
   }, [slug]);
 
   if (loading) {
@@ -222,6 +241,11 @@ const PerfilPublico: React.FC = () => {
                   <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito viajes</p>
                   <p className="mt-1 text-2xl font-bold text-slate-900">{porcentajeViajesCompletados}%</p>
                   <p className="text-sm text-slate-600">completados sobre participados</p>
+                </div>
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito reservas</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{ratioExitoReservas}%</p>
+                  <p className="text-sm text-slate-600">aceptadas sobre solicitudes</p>
                 </div>
               </div>
             </div>
