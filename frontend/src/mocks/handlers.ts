@@ -63,12 +63,29 @@ export const handlers = [
     return HttpResponse.json([]);
   }),
 
-  // 7. Valoraciones recibidas por defecto
+  // 7. Estadísticas del perfil
+  http.get('*/api/viajes/exitosos', () => {
+    return HttpResponse.json(0);
+  }),
+
+  http.get('*/api/viajes/contador-participados', () => {
+    return HttpResponse.json(0);
+  }),
+
+  http.get('*/api/viajes/kilometros', () => {
+    return HttpResponse.json(0);
+  }),
+
+  http.get('*/api/reservas/ratio-exito', () => {
+    return HttpResponse.json(0);
+  }),
+
+  // 8. Valoraciones recibidas por defecto
   http.get('*/api/valoraciones/valorado/*', () => {
     return HttpResponse.json([]);
   }),
 
-  // 8. Autenticación y Cierre de sesión
+  // 9. Autenticación y Cierre de sesión
   http.post('*/api/login', async ({ request }) => {
     const body = (await request.clone().json()) as { email?: string; contrasena?: string };
 

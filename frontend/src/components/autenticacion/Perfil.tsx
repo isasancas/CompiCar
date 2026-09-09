@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildApiUrl } from '../../apiConfig';
 
@@ -97,24 +97,6 @@ const Perfil: React.FC = () => {
     anio: '',
     tipo: 'COCHE'
   });
-  const misDatosRef = useRef<HTMLDivElement | null>(null);
-  const [misDatosHeight, setMisDatosHeight] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const updateHeight = () => {
-      if (misDatosRef.current) {
-        setMisDatosHeight(misDatosRef.current.offsetHeight);
-      }
-    };
-
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-    };
-  }, [perfil]);
-
   const navigate = useNavigate();
 
   const getValidToken = () => {
@@ -967,7 +949,7 @@ const Perfil: React.FC = () => {
           {/* GRID PRINCIPAL 2x2 */}
           <section className="grid gap-4 md:grid-cols-2 items-start">
             {/* BLOQUE 1: MIS DATOS Y ACTIVIDAD */}
-            <div ref={misDatosRef} className="self-start rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="self-start rounded-xl border border-slate-500 bg-gray-100 p-5 md:h-[640px]">
               <h3 className="text-3xl font-semibold text-slate-800">Mis datos y actividad</h3>
 
               <div className="mt-3 space-y-1 text-lg text-slate-700">
@@ -1029,12 +1011,11 @@ const Perfil: React.FC = () => {
 
             {/* BLOQUE 2: MIS VEHÍCULOS */}
             <div
-              className="rounded-xl border border-slate-500 bg-gray-100 p-5 flex flex-col"
-              style={misDatosHeight ? { height: `${misDatosHeight}px` } : undefined}
+              className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-xl border border-slate-500 bg-gray-100 p-5 md:h-[640px]"
             >
               <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
 
-              <div className="mt-3 flex-1 min-h-0 overflow-hidden text-slate-700">
+              <div className="mt-3 min-h-0 overflow-hidden text-slate-700">
                 {vehiculosError && (
                   <p className="mb-3 text-red-600">{vehiculosError}</p>
                 )}
@@ -1045,7 +1026,7 @@ const Perfil: React.FC = () => {
                 {vehiculos.length === 0 && !vehiculosError ? (
                   <p>No tienes vehículos registrados aún.</p>
                 ) : (
-                  <div className="h-full min-h-0 overflow-y-auto pr-2 space-y-4">
+                  <div className="min-h-0 h-full overflow-y-auto pr-2 space-y-4">
                     {vehiculos.map((vehiculo) => (
                       <div key={vehiculo.id} className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
                         <p className="font-semibold text-slate-900">
