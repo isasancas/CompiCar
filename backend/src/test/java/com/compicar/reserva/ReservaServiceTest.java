@@ -29,7 +29,6 @@ import com.compicar.parada.TipoParada;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
-import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaRequest;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;

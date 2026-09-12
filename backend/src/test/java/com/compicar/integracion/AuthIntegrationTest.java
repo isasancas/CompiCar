@@ -48,7 +48,6 @@ class AuthIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void loginPasswordIncorrecta_devuelve500SegunManejadorActual() throws Exception {
-        String token = registerAndLogin();
         // El token se usa para asegurar que el usuario existe; luego intentamos login con pass mala.
         String email = "authbad+" + System.nanoTime() + "@compicar.test";
 
