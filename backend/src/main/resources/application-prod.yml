@@ -6,6 +6,6 @@ spring:
     password: ${DB_PASSWORD}
   
   jpa:
-    show-sql: false # En producción mejor no llenar los logs de SQL
+    show-sql: false
     hibernate:
       ddl-auto: validate

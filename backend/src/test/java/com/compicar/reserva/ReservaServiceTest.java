@@ -4,9 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -17,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.pago.EstadoPago;
@@ -74,6 +79,9 @@ class ReservaServiceTest {
 
     @Mock
     private ViajeRecurrenteRepository viajeRecurrenteRepository;
+
+    @Mock
+    private CorreoService correoService;
 
     @InjectMocks
     private ReservaServiceImpl reservaService;
@@ -260,6 +268,9 @@ class ReservaServiceTest {
         assertEquals(20L, result.getId());
         assertEquals(2, result.getCantidadPlazas());
         assertEquals(idSubida, result.getParadaSubida().getId());
+        verify(correoService, times(1)).sendReservaModificadaConductor(
+            anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -414,6 +425,9 @@ class ReservaServiceTest {
         verify(viajeRepository).save(viaje);
         verify(reservaRepository).save(reserva);
         verify(pagoService).cancelarPago(any(String.class));
+        verify(correoService).sendReservaCanceladaConductor(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -444,6 +458,9 @@ class ReservaServiceTest {
         verify(personaRepository).save(pasajero);
         verify(viajeRepository).save(viaje);
         verify(notificacionRepository).save(any(Notificacion.class));
+        verify(correoService).sendReservaCanceladaConductor(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -471,6 +488,9 @@ class ReservaServiceTest {
         verify(viajeRepository).save(viaje);
         verify(pagoService, never()).capturarPago(any(String.class));
         verify(pagoService, never()).cancelarPago(any(String.class));
+        verify(correoService).sendReservaCanceladaConductor(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -995,5 +1015,8 @@ class ReservaServiceTest {
         assertNotNull(response);
         assertEquals("client_secret_lote", response.clientSecret());
         verify(pagoService).crearIntentoDePago(any(Reserva.class));
+        verify(correoService).sendReservaLoteConductor(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyList(), anyInt(), any(BigDecimal.class)
+        );
     }
 }

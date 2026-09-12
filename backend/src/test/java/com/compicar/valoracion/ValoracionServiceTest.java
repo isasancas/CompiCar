@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -26,6 +28,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.Reserva;
@@ -44,6 +47,9 @@ class ValoracionServiceTest {
 
     @Mock
     private ViajeRepository viajeRepository;
+
+    @Mock
+    private CorreoService correoService;
 
     @InjectMocks
     private ValoracionServiceImpl valoracionService;
@@ -113,6 +119,10 @@ class ValoracionServiceTest {
         assertEquals("Excelente viaje", resultado.getComentario());
         assertEquals(100L, resultado.getId());
         assertTrue(resultado.getSlug().contains("valoracion-10-1-"));
+
+        verify(correoService).sendNuevaValoracionRecibida(
+                anyString(), anyString(), anyString(), anyInt(), anyString()
+        );
     }
 
     @Test

@@ -2,14 +2,15 @@ package com.compicar.pago;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.notificacion.TipoNotificacion;
@@ -43,19 +44,22 @@ public class PagoServiceImpl implements PagoService {
     private final StripeService stripeService;
     private final ViajeRepository viajeRepository;
     private final NotificacionRepository notificacionRepository;
+    private final CorreoService correoService;
 
     @Value("${stripe.webhook.secret}")
     private String endpointSecret;
 
     @Autowired
     public PagoServiceImpl(PagoRepository pagoRepository, PersonaRepository personaRepository, 
-        ReservaRepository reservaRepository, StripeService stripeService, ViajeRepository viajeRepository, NotificacionRepository notificacionRepository) {
+        ReservaRepository reservaRepository, StripeService stripeService, ViajeRepository viajeRepository, NotificacionRepository notificacionRepository,
+         CorreoService correoService) {
         this.pagoRepository = pagoRepository;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
         this.stripeService = stripeService;
         this.viajeRepository = viajeRepository;
         this.notificacionRepository = notificacionRepository;
+        this.correoService = correoService;
     }
 
     @Override
@@ -344,6 +348,8 @@ public class PagoServiceImpl implements PagoService {
         // 1. Obtener las reservas asociadas a este viaje (o viaje recurrente)
         List<Reserva> reservasDelViaje = reservaRepository.findByViajeId(viajeId);
 
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+
         for (Reserva reserva : reservasDelViaje) {
             if (reserva.getEstado() != EstadoReserva.PAGADA && reserva.getEstado() != EstadoReserva.CONFIRMADA) {
                 continue;
@@ -363,13 +369,16 @@ public class PagoServiceImpl implements PagoService {
             // 3. Obtener el precio por plaza según el tipo de viaje
             BigDecimal precioPorPlaza;
             Persona conductor;
+            LocalDateTime fechaSalida = null;
 
             if (reserva.getViaje() != null) {
                 precioPorPlaza = reserva.getViaje().getPrecio();
                 conductor = reserva.getViaje().getPersona();
+                fechaSalida = reserva.getViaje().getFechaHoraSalida();
             } else if (reserva.getViajeRecurrente() != null) {
                 precioPorPlaza = reserva.getViajeRecurrente().getPrecio();
                 conductor = reserva.getViajeRecurrente().getPersona();
+                fechaSalida = reserva.getViajeRecurrente().getFechaHoraSalida();
             } else {
                 continue;
             }
@@ -380,12 +389,17 @@ public class PagoServiceImpl implements PagoService {
             BigDecimal parteConductorEstaReserva = subtotal.subtract(comisionReserva); // Ej: 13.50 €
 
             // 5. Acumular en el pago el saldo liberado al conductor
-            BigDecimal nuevoSaldoLiberado = pago.getImporteLiberadoConductor().add(parteConductorEstaReserva);
-            pago.setImporteLiberadoConductor(nuevoSaldoLiberado);
+            BigDecimal saldoLiberadoPrevio = pago.getImporteLiberadoConductor() != null 
+                    ? pago.getImporteLiberadoConductor() 
+                    : BigDecimal.ZERO;
+            pago.setImporteLiberadoConductor(saldoLiberadoPrevio.add(parteConductorEstaReserva));
 
             // 6. Incrementar los fondos en la entidad Persona del conductor
-            conductor.setFondosActuales(conductor.getFondosActuales().add(parteConductorEstaReserva));
-            conductor.setFondosTotales(conductor.getFondosTotales().add(parteConductorEstaReserva));
+            BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
+            BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
+
+            conductor.setFondosActuales(actuales.add(parteConductorEstaReserva));
+            conductor.setFondosTotales(totales.add(parteConductorEstaReserva));
             personaRepository.save(conductor);
 
             // 7. Si usa Stripe Connect, transferir el dinero neto a su cuenta bancaria
@@ -395,9 +409,36 @@ public class PagoServiceImpl implements PagoService {
 
             pagoRepository.save(pago);
 
-            // 8. Notificar al conductor el importe neto abonado
+            // 8. Notificar al conductor el importe neto abonado (In-App)
             String msj = String.format("Se te han liberado %.2f € netos por la finalización del viaje.", parteConductorEstaReserva);
             notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.NUEVA_RESERVA));
+
+            // 9. Envío de correo electrónico al conductor
+            if (conductor != null && conductor.getEmail() != null) {
+                String origen = "Origen";
+                if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "Conductor";
+                String fechaFormateada = fechaSalida != null ? fechaSalida.format(formatter) : "Fecha no especificada";
+
+                correoService.sendPagoLiberadoConductor(
+                    conductor.getEmail(),
+                    nombreConductor,
+                    parteConductorEstaReserva,
+                    origen,
+                    destino,
+                    fechaFormateada
+                );
+            }
         }
     }
 

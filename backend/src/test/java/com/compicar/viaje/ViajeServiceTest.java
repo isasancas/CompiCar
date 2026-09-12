@@ -2,8 +2,7 @@ package com.compicar.viaje;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -15,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.pago.EstadoPago;
@@ -73,6 +73,8 @@ class ViajeServiceTest {
     private ViajeRecurrenteService viajeRecurrenteService;
     @Mock
     private StripeService stripeService;
+    @Mock
+    private CorreoService correoService;
 
     @InjectMocks
     private ViajeServiceImpl viajeService;
@@ -1155,7 +1157,7 @@ class ViajeServiceTest {
         when(reservaRepository.findByViajeRecurrenteIdAndEstadoNot(500L, EstadoReserva.CANCELADA))
                 .thenReturn(List.of(reservaRecurrente));
         when(reservaRepository.findByPagoIdAndEstadoNot(99L, EstadoReserva.CANCELADA))
-                .thenReturn(List.of()); // No quedan más reservas tras esta cancelación
+                .thenReturn(List.of());
 
         ViajeDTO result = viajeService.cancelarViajeConjunto(conductor.getEmail(), slugPadre);
 
@@ -1167,6 +1169,9 @@ class ViajeServiceTest {
         verify(viajeRepository).save(viajeBase);
         verify(viajeRecurrenteRepository).save(vr);
         verify(notificacionRepository).save(any(Notificacion.class));
+        verify(correoService).sendViajeRecurrenteCanceladoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -1286,6 +1291,9 @@ class ViajeServiceTest {
         verify(notificacionRepository).save(any(Notificacion.class));
         verify(viajeRepository).save(viajeBase);
         verify(personaRepository).save(conductor);
+        verify(correoService).sendViajeFinalizadoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
     }
 
     @Test
@@ -1434,6 +1442,9 @@ class ViajeServiceTest {
 
         assertEquals("FINALIZADO", resultado.getEstado());
         verify(stripeService).confirmarCaptura("pi_test_123");
+        verify(correoService).sendViajeFinalizadoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
     }
 
     @Test

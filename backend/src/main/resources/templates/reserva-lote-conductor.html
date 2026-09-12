@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva Reserva Múltiple</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { color: #0284c7; text-align: center; margin-top: 0; }
+        p { color: #333333; line-height: 1.6; }
+        .info-box { background: #f0f9ff; border-left: 4px solid #0284c7; padding: 15px; margin: 20px 0; border-radius: 4px; }
+        .fechas-list { margin: 5px 0 0 0; padding-left: 20px; color: #333333; }
+        .footer { font-size: 12px; color: #888888; text-align: center; margin-top: 30px; border-top: 1px solid #eeeeee; padding-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 25px;">
+            <img src="cid:logoCompiCar" alt="CompiCar" style="height: 48px; width: auto; max-width: 100%; display: block; margin: 0 auto;" />
+        </div>
+        <h2>Nueva reserva múltiple</h2>
+        <p>Hola, <b th:text="${nombreConductor}">Conductor</b>:</p>
+        <p>El pasajero <b th:text="${nombrePasajero}">Pasajero</b> ha realizado una reserva en lote para varias fechas de tus viajes recurrentes.</p>
+        
+        <div class="info-box">
+            <p style="margin: 0;"><b>Paradas:</b> <span th:text="${origen}">Origen</span> a <span th:text="${destino}">Destino</span></p>
+            <p style="margin: 5px 0 0 0;"><b>Plazas por fecha:</b> <span th:text="${plazas}">1</span></p>
+            <p style="margin: 5px 0 0 0;"><b>Importe total acumulado:</b> <span th:text="${#numbers.formatDecimal(totalAcumulado, 1, 'POINT', 2, 'COMMA')} + ' €'">0,00 €</span></p>
+            <p style="margin: 10px 0 0 0;"><b>Fechas reservadas:</b></p>
+            <ul class="fechas-list">
+                <li th:each="fecha : ${fechas}" th:text="${fecha}">01/01/2026 a las 10:00</li>
+            </ul>
+        </div>
+
+        <p>Puedes consultar y gestionar todos los detalles de estas reservas directamente desde la aplicación.</p>
+        
+        <div class="footer">
+            Este es un mensaje automático de CompiCar. Por favor, no respondas a este correo.
+        </div>
+    </div>
+</body>
+</html>
