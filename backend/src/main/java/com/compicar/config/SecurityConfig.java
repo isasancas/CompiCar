@@ -90,6 +90,8 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.GET, "/api/viajes/publicos/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/personas/*/perfil-publico").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/paradas/top5-localizaciones").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/contaminacion/actual").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/valoraciones/valorado/*").permitAll()
 
                 .requestMatchers("/api/logout").authenticated()
