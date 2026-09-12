@@ -6,6 +6,7 @@ const HeroCarpooling: React.FC = () => {
   const [origen, setOrigen] = useState('');
   const [destino, setDestino] = useState('');
   const [fecha, setFecha] = useState('');
+  const [conductor, setConductor] = useState('');
 
   const handleBuscar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,6 +15,7 @@ const HeroCarpooling: React.FC = () => {
     if (origen.trim()) params.set('origen', origen.trim());
     if (destino.trim()) params.set('destino', destino.trim());
     if (fecha) params.set('fecha', fecha);
+    if (conductor.trim()) params.set('conductor', conductor.trim());
 
     navigate('/buscar?' + params.toString());
   };
@@ -81,6 +83,17 @@ const HeroCarpooling: React.FC = () => {
                 className="py-4 text-base focus:outline-none w-full bg-transparent text-slate-700"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center flex-1 px-5 gap-3 w-full border-b md:border-b-0 md:border-r border-gray-100">
+              <span className="text-slate-500 text-lg">👤</span>
+              <input
+                type="text"
+                placeholder="Conductor"
+                className="py-4 text-base focus:outline-none w-full bg-transparent text-slate-800 placeholder:text-gray-400"
+                value={conductor}
+                onChange={(e) => setConductor(e.target.value)}
               />
             </div>
 

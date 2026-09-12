@@ -442,28 +442,6 @@ class ViajeControllerTest {
         }
 
         @Test
-        void obtenerViajesPendientesPorNombreConductor_ok() throws Exception {
-                when(viajeService.obtenerViajesPendientesPorNombreConductor("Ana")).thenReturn(List.of());
-
-                mockMvc.perform(get("/api/viajes/publicos/pendientes/conductor")
-                                .param("nombre", "Ana"))
-                        .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.length()").value(0));
-
-                verify(viajeService).obtenerViajesPendientesPorNombreConductor("Ana");
-        }
-
-        @Test
-        void obtenerViajesPendientesPorNombreConductor_nombreInvalido_400() throws Exception {
-                when(viajeService.obtenerViajesPendientesPorNombreConductor(" "))
-                        .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nombre de conductor invalido"));
-
-                mockMvc.perform(get("/api/viajes/publicos/pendientes/conductor")
-                                .param("nombre", " "))
-                        .andExpect(status().isBadRequest());
-        }
-
-        @Test
         void obtenerViajePublicoPorSlug_ok() throws Exception {
                 ViajeDTO dto = new ViajeDTO(
                         9L,

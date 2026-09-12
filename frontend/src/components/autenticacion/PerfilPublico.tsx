@@ -246,6 +246,7 @@ const PerfilPublico: React.FC = () => {
                 ({totalValoracionesRecibidas} {totalValoracionesRecibidas === 1 ? 'reseña' : 'reseñas'})
               </p>
             </div>
+
           </section>
           </div>
       </div>

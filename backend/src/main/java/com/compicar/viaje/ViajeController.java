@@ -73,20 +73,17 @@ public class ViajeController {
     public List<ViajeDTO> buscarViajesPublicos(
         @RequestParam(required = false) String origen,
         @RequestParam(required = false) String destino,
-        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+        @RequestParam(required = false) String conductor
     ) {
-        return viajeService.buscarViajesPublicos(origen, destino, fecha);
+        return conductor == null || conductor.isBlank()
+            ? viajeService.buscarViajesPublicos(origen, destino, fecha)
+            : viajeService.buscarViajesPublicos(origen, destino, fecha, conductor);
     }
 
     @GetMapping("/publicos/conductor/{conductorSlug}")
     public List<ViajeDTO> obtenerViajesPublicosPorConductor(@PathVariable String conductorSlug) {
         return viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
-    }
-
-    @GetMapping("/publicos/pendientes/conductor")
-    public List<ViajeDTO> obtenerViajesPendientesPorNombreConductor(
-            @RequestParam("nombre") String nombreConductor) {
-        return viajeService.obtenerViajesPendientesPorNombreConductor(nombreConductor);
     }
 
     @GetMapping("/publicos/conductor/{conductorSlug}/exitosos")
