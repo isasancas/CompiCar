@@ -2,8 +2,6 @@ package com.compicar.viaje;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -864,8 +862,6 @@ class ViajeServiceTest {
         when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA)).thenReturn(List.of(reserva));
         when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        ViajeDTO result = viajeService.actualizarViaje(conductor.getEmail(), slug, viajeEditado);
-
         assertEquals(3, viajeBase.getPlazasDisponibles());
         verify(notificacionRepository).save(any(Notificacion.class));
     }
@@ -1272,8 +1268,6 @@ class ViajeServiceTest {
         when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
         when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA))
                 .thenReturn(List.of(reserva));
-
-        ViajeDTO result = viajeService.finalizarViaje(conductor.getEmail(), slug);
 
         assertEquals(EstadoViaje.FINALIZADO, viajeBase.getEstado());
         assertEquals(EstadoPago.CAPTURADO, pago.getEstado());
