@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.compicar.viaje.CalculoPrecioIA;
 
@@ -65,14 +66,14 @@ public class ContaminacionAireIA {
     }
 
     public synchronized ContaminacionRespuesta obtenerContaminacionActual() {
-      if (ultimaRespuesta != null && !necesitaActualizar(ultimaRespuesta)) {
+      if (ultimaRespuesta != null && esRespuestaUtil(ultimaRespuesta) && !necesitaActualizar(ultimaRespuesta)) {
         return ultimaRespuesta;
       }
 
       try {
         obtenerContaminacionSemanal();
       } catch (RuntimeException exception) {
-        if (ultimaRespuesta != null) {
+        if (ultimaRespuesta != null && esRespuestaUtil(ultimaRespuesta)) {
           logger.warn("Gemini no disponible; se devuelve la ultima contaminacion guardada", exception);
           return ultimaRespuesta;
         }
@@ -84,7 +85,10 @@ public class ContaminacionAireIA {
 
     private String obtenerContaminacionSemanal() {
       String prompt = PROMPT_CONTAMINACION.formatted(LocalDateTime.now());
-      String respuesta = calculoPrecioIA.pedirEstimacionJson(prompt);
+      String respuesta = calculoPrecioIA.pedirEstimacionJsonConBusqueda(prompt);
+      if (!contieneDatosUtiles(respuesta)) {
+        throw new IllegalStateException("Gemini no devolvio datos de contaminacion verificables");
+      }
       ContaminacionRespuesta nuevaRespuesta = new ContaminacionRespuesta(respuesta, LocalDateTime.now());
       guardarCache(nuevaRespuesta);
       ultimaRespuesta = nuevaRespuesta;
@@ -97,6 +101,54 @@ public class ContaminacionAireIA {
 
     private boolean necesitaActualizar(ContaminacionRespuesta respuesta) {
       return respuesta.fechaConsulta().plusDays(MAXIMA_ANTIGUEDAD_DIAS).isBefore(LocalDateTime.now());
+    }
+
+    private boolean esRespuestaUtil(ContaminacionRespuesta respuesta) {
+      return respuesta != null && contieneDatosUtiles(respuesta.datos());
+    }
+
+    private boolean contieneDatosUtiles(String datos) {
+      try {
+        JsonNode ciudades = objectMapper.readTree(normalizarRespuestaJson(datos)).path("ciudades");
+        if (!ciudades.isArray() || ciudades.isEmpty()) {
+          return false;
+        }
+
+        for (JsonNode ciudad : ciudades) {
+          String indice = ciudad.path("indiceCalidadAire").asText("").trim().toLowerCase();
+          String pm25 = ciudad.path("contaminantes").path("pm25").asText("").trim().toLowerCase();
+          if (!indice.equals("no disponible") || !pm25.equals("no disponible")) {
+            return true;
+          }
+        }
+      } catch (IOException | RuntimeException exception) {
+        logger.warn("La respuesta de contaminacion no contiene JSON valido", exception);
+      }
+      return false;
+    }
+
+    private String normalizarRespuestaJson(String datos) {
+      if (datos == null) {
+        return "";
+      }
+
+      String respuesta = datos.trim();
+      int inicioBloque = respuesta.indexOf("```");
+      if (inicioBloque >= 0) {
+        int inicioJson = respuesta.indexOf('{', inicioBloque);
+        int finJson = respuesta.lastIndexOf('}');
+        if (inicioJson >= 0 && finJson > inicioJson) {
+          return respuesta.substring(inicioJson, finJson + 1);
+        }
+      }
+
+      int inicioJson = respuesta.indexOf('{');
+      int finJson = respuesta.lastIndexOf('}');
+      if (inicioJson > 0 && finJson > inicioJson) {
+        return respuesta.substring(inicioJson, finJson + 1);
+      }
+
+      return respuesta;
     }
 
     private void cargarCache() {
