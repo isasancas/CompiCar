@@ -123,6 +123,7 @@ class ViajeServiceTest {
         viajeBase.setEstado(EstadoViaje.PENDIENTE);
         viajeBase.setPlazasDisponibles(3);
         viajeBase.setPrecio(new BigDecimal("8.50"));
+        viajeBase.setKilometrosRecorridos(125);
 
         Vehiculo v = new Vehiculo();
         v.setId(vehiculoConductor.getId());
@@ -147,6 +148,7 @@ class ViajeServiceTest {
         assertEquals(vehiculoConductor, result.getVehiculo());
         assertEquals("sevilla-cadiz-2026-05-01", result.getSlug());
         assertEquals(2, result.getParadas().size());
+        assertEquals(125, result.getKilometrosRecorridos());
         assertEquals(salida, result.getParadas().get(0).getFechaHora());
         assertEquals(1, result.getParadas().get(0).getOrden());
         assertEquals(2, result.getParadas().get(1).getOrden());
@@ -444,7 +446,12 @@ class ViajeServiceTest {
     @Test
     void obtenerViajesParticipados_ok_mapeaLista() {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
-        when(viajeRepository.findViajesParticipadosByPersonaId(1L)).thenReturn(List.of(viajeCompleto(3L, "slug-3")));
+        Viaje viajeParticipado = viajeCompleto(3L, "slug-3");
+        viajeParticipado.setEstado(EstadoViaje.FINALIZADO);
+        when(viajeRepository.findViajesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of(viajeParticipado));
+        when(viajeRecurrenteRepository.findViajesRecurrentesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of());
 
         List<ViajeDTO> result = viajeService.obtenerViajesParticipados(conductor.getEmail());
 
@@ -642,7 +649,10 @@ class ViajeServiceTest {
     @Test
     void obtenerViajesParticipados_listaVacia_ok() {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
-        when(viajeRepository.findViajesParticipadosByPersonaId(1L)).thenReturn(List.of());
+        when(viajeRepository.findViajesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of());
+        when(viajeRecurrenteRepository.findViajesRecurrentesParticipadosConCancelacionPorPersonaId(1L))
+            .thenReturn(List.of());
 
         List<ViajeDTO> result = viajeService.obtenerViajesParticipados(conductor.getEmail());
 
