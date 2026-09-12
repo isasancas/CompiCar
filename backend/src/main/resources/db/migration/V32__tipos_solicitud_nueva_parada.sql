@@ -1,0 +1,14 @@
+ALTER TABLE notificacion
+    ADD CONSTRAINT chk_notificacion_tipo
+    CHECK (tipo IN (
+        'NUEVA_RESERVA',
+        'RESERVA_CANCELADA',
+        'VIAJE_CANCELADO',
+        'RESERVA_ACEPTADA',
+        'RESERVA_RECHAZADA',
+        'VIAJE_MODIFICADO',
+        'RESERVA_MODIFICADA',
+        'SOLICITUD_NUEVA_PARADA',
+        'SOLICITUD_NUEVA_PARADA_ACEPTADA',
+        'SOLICITUD_NUEVA_PARADA_RECHAZADA'
+    ));

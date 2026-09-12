@@ -3,6 +3,7 @@ package com.compicar.reserva;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -63,6 +64,13 @@ public interface ReservaRepository extends JpaRepository<Reserva, Long> {
 
     // 10. Comprobar si un pasajero ya tiene reserva activa en un viaje RECURRENTE concreto
     boolean existsByPersonaIdAndViajeRecurrenteIdAndEstadoNot(Long personaId, Long viajeRecurrenteId, EstadoReserva estado);
+
+    @Query("SELECT r FROM Reserva r WHERE r.viajeRecurrente.viajePadre.id = :viajePadreId "
+        + "AND r.persona.id = :personaId AND r.estado IN :estados")
+    List<Reserva> findReservasConfirmadasDeRecurrencia(
+        @Param("viajePadreId") Long viajePadreId,
+        @Param("personaId") Long personaId,
+        @Param("estados") Collection<EstadoReserva> estados);
 
     // 11. Próximo viaje simple como pasajero
     @Query("SELECT r FROM Reserva r WHERE r.persona = :persona " +

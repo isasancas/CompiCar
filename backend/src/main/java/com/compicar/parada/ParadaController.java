@@ -1,6 +1,7 @@
 package com.compicar.parada;
 
 import java.util.List;
+import java.security.Principal;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,7 +10,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 
+import com.compicar.notificacion.Notificacion;
+import com.compicar.parada.dto.SolicitudNuevaParadaRequest;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
 
@@ -41,5 +45,21 @@ public class ParadaController {
         Viaje viaje = viajeRepository.findById(viajeId)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
         return paradaService.obtenerParadasPorViaje(viaje);
+    }
+
+    @PostMapping("/solicitud-nueva-parada")
+    public Notificacion solicitarNuevaParada(
+            @RequestBody SolicitudNuevaParadaRequest request, Principal principal) {
+        return paradaService.solicitarNuevaParada(principal.getName(), request);
+    }
+
+    @PutMapping("/{id}/aceptar-solicitud-parada")
+    public Notificacion aceptarSolicitudNuevaParada(@PathVariable Long id, Principal principal) {
+        return paradaService.aceptarSolicitudNuevaParada(principal.getName(), id);
+    }
+
+    @PutMapping("/{id}/rechazar-solicitud-parada")
+    public Notificacion rechazarSolicitudNuevaParada(@PathVariable Long id, Principal principal) {
+        return paradaService.rechazarSolicitudNuevaParada(principal.getName(), id);
     }
 }
