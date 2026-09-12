@@ -83,6 +83,12 @@ public class ViajeController {
         return viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
     }
 
+    @GetMapping("/publicos/pendientes/conductor")
+    public List<ViajeDTO> obtenerViajesPendientesPorNombreConductor(
+            @RequestParam("nombre") String nombreConductor) {
+        return viajeService.obtenerViajesPendientesPorNombreConductor(nombreConductor);
+    }
+
     @GetMapping("/publicos/conductor/{conductorSlug}/exitosos")
     public Integer contarViajesExitososPorConductor(@PathVariable String conductorSlug) {
         return viajeService.contarViajesExitososPorSlug(conductorSlug);

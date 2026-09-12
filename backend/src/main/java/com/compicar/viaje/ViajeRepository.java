@@ -41,6 +41,11 @@ List<Viaje> findViajesParticipadosConCancelacionPorPersonaId(
     boolean existsBySlug(String slug);
     List<Viaje> findByPersonaSlugOrderByFechaHoraSalidaDesc(String personaSlug);
 
+    @Query("SELECT v FROM Viaje v WHERE v.persona.nombre = :nombre "
+        + "AND v.estado = com.compicar.viaje.EstadoViaje.PENDIENTE "
+        + "ORDER BY v.fechaHoraSalida ASC")
+    List<Viaje> findViajesPendientesByNombreConductor(@Param("nombre") String nombre);
+
     List<Viaje> findByEstadoAndFechaHoraSalidaBefore(EstadoViaje estado, LocalDateTime limite);
 
     @Query("""

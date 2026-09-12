@@ -364,6 +364,19 @@ public class ViajeServiceImpl implements ViajeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> obtenerViajesPendientesPorNombreConductor(String nombreConductor) {
+        if (nombreConductor == null || nombreConductor.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nombre de conductor invalido");
+        }
+
+        return viajeRepository.findViajesPendientesByNombreConductor(nombreConductor.trim())
+            .stream()
+            .map(this::convertirADTO)
+            .toList();
+    }
+
+    @Override
     @Transactional
     public ViajeDTO cancelarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)

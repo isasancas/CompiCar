@@ -159,6 +159,25 @@ class ViajeServiceTest {
     }
 
     @Test
+    void obtenerViajesPendientesPorNombreConductor_ok() {
+        when(viajeRepository.findViajesPendientesByNombreConductor("Ana"))
+                .thenReturn(List.of());
+
+        assertTrue(viajeService.obtenerViajesPendientesPorNombreConductor(" Ana ").isEmpty());
+
+        verify(viajeRepository).findViajesPendientesByNombreConductor("Ana");
+    }
+
+    @Test
+    void obtenerViajesPendientesPorNombreConductor_nombreInvalido_lanza400() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> viajeService.obtenerViajesPendientesPorNombreConductor("  "));
+
+        assertEquals(400, ex.getStatusCode().value());
+        verifyNoInteractions(viajeRepository);
+    }
+
+    @Test
     void crearViaje_slugDuplicado_generaSufijo() {
         when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
         when(vehiculoRepository.findById(vehiculoConductor.getId())).thenReturn(Optional.of(vehiculoConductor));
