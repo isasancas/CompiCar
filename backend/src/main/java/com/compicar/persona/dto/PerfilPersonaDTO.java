@@ -1,6 +1,7 @@
 package com.compicar.persona.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import com.compicar.persona.Persona;
@@ -19,6 +20,7 @@ public class PerfilPersonaDTO {
     private BigDecimal fondosTotales;
     private BigDecimal fondosActuales;
     private int numeroCancelaciones;
+    private LocalDate fechaAntiguedad;
 
     public PerfilPersonaDTO() {
     }
@@ -36,6 +38,7 @@ public class PerfilPersonaDTO {
         this.fondosTotales = persona.getFondosTotales();
         this.fondosActuales = persona.getFondosActuales();
         this.numeroCancelaciones = persona.getNumeroCancelaciones();
+        this.fechaAntiguedad = persona.getFechaAntiguedad();
     }
 
     public PerfilPersonaDTO(Long id, String nombre, String primerApellido, String segundoApellido, String email,
@@ -102,6 +105,10 @@ public class PerfilPersonaDTO {
         return numeroCancelaciones;
     }
 
+    public LocalDate getFechaAntiguedad() {
+        return fechaAntiguedad;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -148,6 +155,10 @@ public class PerfilPersonaDTO {
 
     public void setNumeroCancelaciones(int numeroCancelaciones) {
         this.numeroCancelaciones = numeroCancelaciones;
+    }
+
+    public void setFechaAntiguedad(LocalDate fechaAntiguedad) {
+        this.fechaAntiguedad = fechaAntiguedad;
     }
 
     @Override

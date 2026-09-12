@@ -16,4 +16,6 @@ public interface ViajeRecurrenteService {
     void cancelarViajesRecurrentesPendientesExpirados();
     ViajeRecurrenteDTO actualizarViajeRecurrente(String usuarioEmail, String slug, Viaje viajeEditado);
     ViajeRecurrenteDTO cancelarViajeRecurrenteIncompareceConductor(String usuarioEmail, String slug);
+    Integer contarKilometrosRecorridosPorUsuario(String email);
+    List<ViajeRecurrenteDTO> obtenerViajesRecurrentesExitosos(String usuarioEmail);
 }

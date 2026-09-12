@@ -104,6 +104,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         dto.setSlug(vr.getSlug());
         dto.setCheckin(vr.getCheckin());
         dto.setFechaHoraSalida(vr.getFechaHoraSalida());
+        dto.setFechaCancelacion(vr.getFechaCancelacion());
         dto.setFechaHoraFin(vr.getFechaHoraFin());
         dto.setEstado(vr.getEstado() != null ? vr.getEstado().toString() : null);
         dto.setPlazasDisponibles(vr.getPlazasDisponibles());
@@ -154,6 +155,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 vr.setEstado(EstadoViaje.PENDIENTE);
                 vr.setPlazasDisponibles(viajePadre.getPlazasDisponibles());
                 vr.setPrecio(viajePadre.getPrecio());
+                vr.setKilometrosRecorridos(viajePadre.getKilometrosRecorridos());
                 vr.setPersona(viajePadre.getPersona());
                 vr.setVehiculo(viajePadre.getVehiculo());
                 vr.setCheckin(generarCheckin());
@@ -320,6 +322,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 : "Fecha no especificada";
 
         for (Reserva reserva : reservasActivas) {
+            reserva.setFechaCancelacion(LocalDateTime.now());
             reserva.setEstado(EstadoReserva.CANCELADA);
             reservaRepository.save(reserva);
 
@@ -397,6 +400,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
             }
         }
 
+        viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
         viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
@@ -468,6 +472,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
 
         // 5. Iterar y reembolsar a los pasajeros
         for (Reserva reserva : reservasActivas) {
+            reserva.setFechaCancelacion(LocalDateTime.now());
             reserva.setEstado(EstadoReserva.CANCELADA);
             reservaRepository.save(reserva);
 
@@ -540,6 +545,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
             }
         }
 
+        viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
         viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
@@ -636,6 +642,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         }
 
         for (ViajeRecurrente viaje : viajesExpirados) {
+            viaje.setFechaCancelacion(LocalDateTime.now());
             viaje.setEstado(EstadoViaje.CANCELADO);
         }
 
@@ -777,5 +784,32 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         }
         return candidato;
     }
+
+    public Integer contarKilometrosRecorridosPorUsuario(String usuarioEmail) {
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesRecurrentes = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId());
+        
+        Integer totalKilometros = 0;
+        for (ViajeRecurrente viaje : viajesRecurrentes) {
+            if (viaje.getKilometrosRecorridos() != null) {
+                totalKilometros += viaje.getKilometrosRecorridos();
+            }
+        }
+        return totalKilometros;
+    }
     
+    public List<ViajeRecurrenteDTO> obtenerViajesRecurrentesExitosos(String usuarioEmail) {
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesExitosos = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId());
+
+        return viajesExitosos.stream()
+            .map(this::mapearADTO)
+            .toList();
+    }
 }
