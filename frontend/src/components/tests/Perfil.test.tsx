@@ -550,28 +550,20 @@ test('Maneja el cierre de sesión incluso si el endpoint de logout falla con err
   });
 });
 
-test('Calcula correctamente el resumen de actividad y tendencia del mes anterior', async () => {
-  const now = new Date();
-  const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 15).toISOString();
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString();
-
-  const mockViajes = [
-    { id: 1, fechaHoraSalida: currentMonthDate, estado: 'COMPLETADO' },
-    { id: 2, fechaHoraSalida: currentMonthDate, estado: 'FINALIZADO' },
-    { id: 3, fechaHoraSalida: prevMonthDate, estado: 'FINALIZADO' }
-  ];
-
+test('Muestra correctamente el resumen de viajes usando los contadores actuales', async () => {
   server.use(
     http.get('*/api/personas/perfil', () => HttpResponse.json(mockPerfilData)),
     http.get('*/api/vehiculos/propios', () => HttpResponse.json([])),
-    http.get('*/api/viajes/mis-viajes', () => HttpResponse.json(mockViajes)),
+    http.get('*/api/viajes/exitosos', () => HttpResponse.json(2)),
+    http.get('*/api/viajes/contador-participados', () => HttpResponse.json(3)),
+    http.get('*/api/viajes/kilometros', () => HttpResponse.json(120)),
     http.get('*/api/valoraciones/valorado/1', () => HttpResponse.json([]))
   );
 
   renderComponent();
 
   expect(await screen.findByText('2')).toBeInTheDocument();
-  expect(screen.getByText('+100%')).toBeInTheDocument();
+  expect(screen.getByText('67%')).toBeInTheDocument();
 });
 
 test('Valida campos requeridos y formato en el formulario de edición de perfil', async () => {
@@ -783,17 +775,17 @@ test('Muestra un error al fallar la subida de la foto de perfil en el servidor',
   });
 });
 
-test('Recarga los datos de perfil al enfocar la ventana (focus event)', async () => {
+test('Recarga las valoraciones al enfocar la ventana (focus event)', async () => {
   let fetchCount = 0;
 
   server.use(
-    http.get('*/api/personas/perfil', () => {
-      fetchCount++;
-      return HttpResponse.json(mockPerfilData);
-    }),
+    http.get('*/api/personas/perfil', () => HttpResponse.json(mockPerfilData)),
     http.get('*/api/vehiculos/propios', () => HttpResponse.json([])),
     http.get('*/api/viajes/mis-viajes', () => HttpResponse.json([])),
-    http.get('*/api/valoraciones/valorado/1', () => HttpResponse.json([]))
+    http.get('*/api/valoraciones/valorado/1', () => {
+      fetchCount++;
+      return HttpResponse.json([]);
+    })
   );
 
   renderComponent();

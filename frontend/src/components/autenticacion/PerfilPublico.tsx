@@ -16,6 +16,11 @@ interface PerfilPublicoData {
   fechaAntiguedad?: string;
 }
 
+interface ViajeActividad {
+  fechaHoraSalida?: string;
+  estado?: string;
+}
+
 const formatearFechaAntiguedad = (fecha?: string): string => {
   if (!fecha) return '-';
   const fechaCuenta = new Date(`${fecha}T00:00:00`);
@@ -33,6 +38,7 @@ const PerfilPublico: React.FC = () => {
   const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
   const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
   const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
+  const [tendenciaActividad, setTendenciaActividad] = useState<number | null>(null);
 
   const porcentajeViajesCompletados = totalViajesParticipados > 0
     ? Math.round((totalViajesExitosos / totalViajesParticipados) * 100)
@@ -67,14 +73,18 @@ const PerfilPublico: React.FC = () => {
         const data = await response.json();
         setPerfil(data);
 
-        const valoracionesResponse = await fetch(buildApiUrl(`/api/valoraciones/valorado/${data.id}`), {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        try {
+          const valoracionesResponse = await fetch(buildApiUrl(`/api/valoraciones/valorado/${data.id}`), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          });
 
-        if (valoracionesResponse.ok) {
-          const valoraciones = await valoracionesResponse.json();
-          setTotalValoracionesRecibidas(Array.isArray(valoraciones) ? valoraciones.length : 0);
+          if (valoracionesResponse.ok) {
+            const valoraciones = await valoracionesResponse.json();
+            setTotalValoracionesRecibidas(Array.isArray(valoraciones) ? valoraciones.length : 0);
+          }
+        } catch {
+          // Las valoraciones son información complementaria y no bloquean el perfil.
         }
       } catch {
         setError('Error de conexión al cargar el perfil');
@@ -123,7 +133,48 @@ const PerfilPublico: React.FC = () => {
       }
     };
 
-    Promise.all([fetchPerfilPublico(), fetchViajesExitosos(), fetchViajesParticipados()]).finally(() => setLoading(false));
+    const fetchResumenActividad = async () => {
+      if (!slug) return;
+
+      try {
+        const response = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}`), {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) return;
+
+        const viajes = (await response.json()) as ViajeActividad[];
+        const ahora = new Date();
+        const mesActual = ahora.getMonth();
+        const anoActual = ahora.getFullYear();
+        const fechaMesAnterior = new Date(anoActual, mesActual - 1, 1);
+
+        const actividadPorMes = (mes: number, ano: number) => viajes.filter((viaje) => {
+          if (!viaje.fechaHoraSalida) return false;
+          const fecha = new Date(viaje.fechaHoraSalida);
+          return fecha.getMonth() === mes && fecha.getFullYear() === ano;
+        }).length;
+
+        const actividadActual = actividadPorMes(mesActual, anoActual);
+        const actividadAnterior = actividadPorMes(fechaMesAnterior.getMonth(), fechaMesAnterior.getFullYear());
+
+        if (actividadAnterior > 0) {
+          setTendenciaActividad(Math.round(((actividadActual - actividadAnterior) / actividadAnterior) * 100));
+        } else if (actividadActual > 0) {
+          setTendenciaActividad(100);
+        }
+      } catch {
+        // La tendencia es información complementaria y no bloquea el perfil.
+      }
+    };
+
+    Promise.all([
+      fetchPerfilPublico(),
+      fetchViajesExitosos(),
+      fetchViajesParticipados(),
+      fetchResumenActividad()
+    ]).finally(() => setLoading(false));
   }, [slug]);
 
   if (loading) {
@@ -223,6 +274,15 @@ const PerfilPublico: React.FC = () => {
                   <p className="mt-1 text-2xl font-bold text-slate-900">{porcentajeViajesCompletados}%</p>
                   <p className="text-sm text-slate-600">completados sobre participados</p>
                 </div>
+                {tendenciaActividad !== null && (
+                  <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Tendencia mensual</p>
+                    <p className="mt-1 text-2xl font-bold text-emerald-600">
+                      {tendenciaActividad >= 0 ? '+' : ''}{tendenciaActividad}%
+                    </p>
+                    <p className="text-sm text-slate-600">respecto al mes anterior</p>
+                  </div>
+                )}
               </div>
             </div>
 
