@@ -139,7 +139,6 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
         Long reservaId = ((Number) JsonPath.read(createResult.getResponse().getContentAsString(), "$.reservaId")).longValue();
 
-        // SIMULAR PAGO EXITOSO: Cambiamos el estado a PAGADA en la BDD para avanzar en el flujo
         Reserva reserva = reservaRepository.findById(reservaId).orElseThrow();
         reserva.setEstado(EstadoReserva.PAGADA);
         reservaRepository.save(reserva);

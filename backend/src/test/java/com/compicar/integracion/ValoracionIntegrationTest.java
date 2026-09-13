@@ -235,7 +235,6 @@ class ValoracionIntegrationTest extends BaseIntegrationTest {
             "viajeId", viajeId, "cantidadPlazas", 1, "paradaSubidaId", pSubida, "paradaBajadaId", pBajada
         );
 
-        // Pasajero 1
         String passenger1Token = registerAndLogin();
         MvcResult res1Result = mockMvc.perform(post("/api/reservas/crear")
             .header("Authorization", "Bearer " + passenger1Token)
@@ -257,7 +256,6 @@ class ValoracionIntegrationTest extends BaseIntegrationTest {
                 "autorId", pass1Id, "valoradoId", driverId, "viajeId", viajeId, "puntuacion", 5, "comentario", "Genial"
             )))).andExpect(status().isOk());
 
-        // Pasajero 2
         String passenger2Token = registerAndLogin();
         MvcResult res2Result = mockMvc.perform(post("/api/reservas/crear")
             .header("Authorization", "Bearer " + passenger2Token)
@@ -278,7 +276,6 @@ class ValoracionIntegrationTest extends BaseIntegrationTest {
                 "autorId", pass2Id, "valoradoId", driverId, "viajeId", viajeId, "puntuacion", 4, "comentario", "Bien"
             )))).andExpect(status().isOk());
 
-        // Calcular reputación (Promedio de 5 y 4 = 4.5)
         mockMvc.perform(get("/api/valoraciones/reputacion/" + driverId)
             .header("Authorization", "Bearer " + driverToken))
             .andExpect(status().isOk())

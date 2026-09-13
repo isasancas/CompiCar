@@ -42,14 +42,12 @@ class NotificacionIntegrationTest extends BaseIntegrationTest {
     void marcarComoLeida_ok() throws Exception {
         String token = registerAndLogin();
         
-        // Obtenemos la persona autenticada para asociarla como receptor
         Persona persona = personaRepository.findAll().get(0);
 
-        // Creamos una notificación válida rellenando los campos obligatorios
         Notificacion notificacion = new Notificacion(
             "Mensaje de prueba", 
             persona, 
-            TipoNotificacion.NUEVA_RESERVA // O el tipo que corresponda en tu enum
+            TipoNotificacion.NUEVA_RESERVA
         );
         notificacion = notificacionRepository.save(notificacion);
 
