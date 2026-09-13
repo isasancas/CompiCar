@@ -1273,7 +1273,7 @@ class ViajeServiceTest {
         when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA))
                 .thenReturn(List.of(reserva));
 
-        ViajeDTO result = viajeService.finalizarViaje(conductor.getEmail(), slug);
+        viajeService.finalizarViaje(conductor.getEmail(), slug);
 
         assertEquals(EstadoViaje.FINALIZADO, viajeBase.getEstado());
         assertEquals(EstadoPago.CAPTURADO, pago.getEstado());
@@ -1559,6 +1559,177 @@ class ViajeServiceTest {
         });
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
         assertTrue(exception.getReason().contains("Checkin inválido"));
+    }
+
+    @Test
+    void iniciarViaje_ok_cambiaEstadoAIniciado() {
+        String slug = "sevilla-cadiz-2026-05-01";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().minusMinutes(5));
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ViajeDTO result = viajeService.iniciarViaje(conductor.getEmail(), slug);
+
+        assertEquals("INICIADO", result.getEstado());
+        verify(viajeRepository).save(viajeBase);
+    }
+
+    @Test
+    void iniciarViaje_error_antesDeHoraSalida_lanza400() {
+        String slug = "sevilla-cadiz-2026-05-01";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(2));
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.iniciarViaje(conductor.getEmail(), slug));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("Aún no ha llegado la fecha u hora de salida"));
+    }
+
+    @Test
+    void iniciarViaje_error_usuarioNoEsConductor_lanza403() {
+        String slug = "sevilla-cadiz-2026-05-01";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+
+        when(personaRepository.findByEmail(otroUsuario.getEmail())).thenReturn(Optional.of(otroUsuario));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.iniciarViaje(otroUsuario.getEmail(), slug));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void confirmarCheckin_error_checkinInvalido_lanza400() {
+        String slug = "sevilla-cadiz-2026-05-01";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.INICIADO);
+        viajeBase.setCheckin("ABC123");
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.confirmarCheckin(conductor.getEmail(), slug, "INVAL1"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals("Checkin inválido", ex.getReason());
+    }
+
+    @Test
+    void ponerEnCursoAutomatico_ok_cambiaEstadoAEnCurso() {
+        String slug = "viaje-iniciado";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.INICIADO);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+        when(viajeRepository.save(any(Viaje.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ViajeDTO result = viajeService.ponerEnCursoAutomatico(conductor.getEmail(), slug);
+
+        assertEquals("EN_CURSO", result.getEstado());
+        verify(viajeRepository).save(viajeBase);
+    }
+
+    @Test
+    void ponerEnCursoAutomatico_error_estadoNoIniciado_lanza400() {
+        String slug = "viaje-pendiente";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.ponerEnCursoAutomatico(conductor.getEmail(), slug));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("El viaje debe estar iniciado"));
+    }
+
+    @Test
+    void obtenerProximoViajeUsuario_ok_devuelveProximoViaje() {
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(3));
+        viajeBase.setPersona(conductor);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findProximoViajeConductor(eq(conductor), any(LocalDateTime.class), eq(EstadoViaje.CANCELADO)))
+            .thenReturn(Optional.of(viajeBase));
+
+        ViajeDTO dto = viajeService.obtenerProximoViajeUsuario(conductor.getEmail());
+
+        assertNotNull(dto);
+    }
+
+    @Test
+    void obtenerProximoViajeUsuario_sinProximoViaje_devuelveNull() {
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findProximoViajeConductor(any(), any(), any())).thenReturn(Optional.empty());
+        when(viajeRecurrenteRepository.findProximoViajeRecurrenteConductor(any(), any(), any())).thenReturn(Optional.empty());
+        when(reservaRepository.findProximaReservaViaje(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(reservaRepository.findProximaReservaViajeRecurrente(any(), any(), any(), any())).thenReturn(Optional.empty());
+
+        ViajeDTO dto = viajeService.obtenerProximoViajeUsuario(conductor.getEmail());
+
+        assertNull(dto);
+    }
+
+    @Test
+    void obtenerViajesPublicosPorConductor_ok_devuelveLista() {
+        String conductorSlug = "juan-perez";
+        
+        // Asignar atributos mínimos requeridos por convertirADTO
+        viajeBase.setSlug("sevilla-cadiz-2026-05-01");
+        viajeBase.setPersona(conductor); 
+        viajeBase.setVehiculo(vehiculoConductor); 
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+        viajeBase.setParadas(List.of());
+
+        when(viajeRepository.findByPersonaSlugOrderByFechaHoraSalidaDesc(conductorSlug))
+            .thenReturn(List.of(viajeBase));
+
+        List<ViajeDTO> result = viajeService.obtenerViajesPublicosPorConductor(conductorSlug);
+
+        assertEquals(1, result.size());
+        assertEquals("sevilla-cadiz-2026-05-01", result.get(0).getSlug());
+    }
+
+    @Test
+    void obtenerViajesPublicosPorConductor_slugVacio_lanza400() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.obtenerViajesPublicosPorConductor("  "));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    }
+
+    @Test
+    void contarKilometrosRecorridosPorUsuario_ok_sumaCorrectamente() {
+        viajeBase.setKilometrosRecorridos(150);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findViajesFinalizadosPorUsuarioIncluyendoConductor(conductor.getId()))
+            .thenReturn(List.of(viajeBase));
+
+        Integer totalKm = viajeService.contarKilometrosRecorridosPorUsuario(conductor.getEmail());
+
+        assertEquals(150, totalKm);
     }
 
     private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
