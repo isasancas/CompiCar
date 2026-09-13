@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import PrivacyModal from './PrivacyModal';
-import TermsModal from './TermsModal'; // Importamos el nuevo modal
+import TermsModal from './TermsModal';
+import FaqModal from './FaqModal';
 
 const Footer: React.FC = () => {
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isFaqOpen, setIsFaqOpen] = useState(false);
 
   return (
     <footer id="contacto" className="bg-slate-950 text-white py-16 px-6 md:px-12 border-t border-slate-800">
@@ -30,10 +32,15 @@ const Footer: React.FC = () => {
           </ul>
         </div>
 
-        {/* Columna 3: Legal Modificada */}
+        {/* Columna 3: Legal y Ayuda */}
         <div>
-          <h4 className="font-bold mb-6 text-base text-white">Legal</h4>
+          <h4 className="font-bold mb-6 text-base text-white">Legal y Ayuda</h4>
           <ul className="space-y-4 text-slate-400 text-sm">
+            <li>
+              <button onClick={() => setIsFaqOpen(true)} className="hover:text-[#00BF63] transition-colors">
+                Preguntas Frecuentes
+              </button>
+            </li>
             <li>
               <button onClick={() => setIsPrivacyOpen(true)} className="hover:text-[#00BF63] transition-colors">
                 Política de Privacidad
@@ -61,6 +68,7 @@ const Footer: React.FC = () => {
       {/* Modales */}
       <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
       <TermsModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+      <FaqModal isOpen={isFaqOpen} onClose={() => setIsFaqOpen(false)} />
     </footer>
   );
 };
