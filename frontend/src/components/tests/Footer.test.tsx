@@ -21,6 +21,16 @@ vi.mock('../TermsModal', () => ({
     ) : null,
 }));
 
+vi.mock('../FaqModal', () => ({
+  default: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) =>
+    isOpen ? (
+      <div data-testid="faq-modal">
+        <span>Modal de FAQ</span>
+        <button onClick={onClose}>Cerrar FAQ</button>
+      </div>
+    ) : null,
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -67,4 +77,20 @@ test('Gestiona la apertura y cierre del modal de Términos y Condiciones', () =>
   fireEvent.click(btnCerrar);
 
   expect(screen.queryByTestId('terms-modal')).not.toBeInTheDocument();
+});
+
+test('Gestiona la apertura y cierre del modal de Preguntas Frecuentes', () => {
+  render(<Footer />);
+
+  expect(screen.queryByTestId('faq-modal')).not.toBeInTheDocument();
+
+  const btnFaq = screen.getByRole('button', { name: /preguntas frecuentes/i });
+  fireEvent.click(btnFaq);
+
+  expect(screen.getByTestId('faq-modal')).toBeInTheDocument();
+
+  const btnCerrar = screen.getByRole('button', { name: /cerrar faq/i });
+  fireEvent.click(btnCerrar);
+
+  expect(screen.queryByTestId('faq-modal')).not.toBeInTheDocument();
 });
