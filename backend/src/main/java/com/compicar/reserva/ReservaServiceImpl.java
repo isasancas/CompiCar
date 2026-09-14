@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.compicar.reserva.dto.ReservaDTO;
 import com.compicar.reserva.dto.ReservaCreadaResponse;
 import com.compicar.reserva.dto.ReservaRequest;
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.notificacion.TipoNotificacion;
@@ -31,6 +32,7 @@ import com.compicar.persona.PersonaRepository;
 import com.compicar.viaje.EstadoViaje;
 import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
+import com.compicar.viajeBase.ViajeBase;
 import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrenteService;
@@ -55,6 +57,7 @@ public class ReservaServiceImpl implements ReservaService {
     private final ViajeRecurrenteRepository viajeRecurrenteRepository;
     private final ViajeRecurrenteService viajeRecurrenteService;
     private final StripeService stripeService;
+    private final CorreoService emailService;
 
     @Autowired
     public ReservaServiceImpl(ReservaRepository reservaRepository,
@@ -66,7 +69,8 @@ public class ReservaServiceImpl implements ReservaService {
                               PagoService pagoService,
                               ViajeRecurrenteRepository viajeRecurrenteRepository,
                               ViajeRecurrenteService viajeRecurrenteService,
-                              StripeService stripeService) {
+                              StripeService stripeService,
+                              CorreoService emailService) {
         this.reservaRepository = reservaRepository;
         this.personaRepository = personaRepository;
         this.viajeRepository = viajeRepository;
@@ -77,6 +81,7 @@ public class ReservaServiceImpl implements ReservaService {
         this.viajeRecurrenteRepository = viajeRecurrenteRepository;
         this.viajeRecurrenteService = viajeRecurrenteService;
         this.stripeService = stripeService;
+        this.emailService = emailService;
     }
 
     private ReservaDTO toDTO(Reserva reserva) {
@@ -105,16 +110,10 @@ public class ReservaServiceImpl implements ReservaService {
             dto.setParadaBajadaId(reserva.getParadaBajada().getId());
         }
 
-        // Mapeo seguro de la Persona / Pasajero
         if (reserva.getPersona() != null) {
             dto.setPersonaId(reserva.getPersona().getId());
-            // Ajusta estos getters según los nombres reales en tu entidad Persona
-            // dto.setNombrePasajero(reserva.getPersona().getNombre()); 
-            // dto.setPasajeroSlug(reserva.getPersona().getSlug());
         }
 
-        // 🔍 SOLUCIÓN CLAVE PARA EL VIAJE: 
-        // Aprovechamos tu método getViajeBase() o evaluamos ambos campos de manera segura
         if (reserva.getViaje() != null) {
             dto.setViajeId(reserva.getViaje().getId());
         } else if (reserva.getViajeRecurrente() != null) {
@@ -145,7 +144,6 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalArgumentException("El viaje no está disponible (estado: " + viaje.getEstado() + ")");
         }
 
-        // Novedad: Validar que la fecha/hora de salida no haya transcurrido
         if (viaje.getFechaHoraSalida() != null && viaje.getFechaHoraSalida().isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException("La hora prevista de salida del viaje ya ha pasado.");
         }
@@ -286,7 +284,6 @@ public class ReservaServiceImpl implements ReservaService {
             conductor = viaje.getPersona();
             precioUnitario = viaje.getPrecio();
 
-            // Si la reserva estaba pagada o confirmada, devolver las plazas
             if (reserva.getEstado() == EstadoReserva.PAGADA || reserva.getEstado() == EstadoReserva.CONFIRMADA) {
                 viaje.setPlazasDisponibles(viaje.getPlazasDisponibles() + reserva.getCantidadPlazas());
                 viajeRepository.save(viaje);
@@ -297,7 +294,6 @@ public class ReservaServiceImpl implements ReservaService {
             conductor = vr.getPersona();
             precioUnitario = vr.getPrecio();
 
-            // Si la reserva estaba pagada o confirmada, devolver las plazas
             if (reserva.getEstado() == EstadoReserva.PAGADA || reserva.getEstado() == EstadoReserva.CONFIRMADA) {
                 vr.setPlazasDisponibles(vr.getPlazasDisponibles() + reserva.getCantidadPlazas());
                 viajeRecurrenteRepository.save(vr);
@@ -306,19 +302,47 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalStateException("La reserva no tiene un viaje ni viaje recurrente asociado.");
         }
 
-        // 2. Notificar al conductor con fecha y slug del viaje
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-        String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "";
+        // 2. Notificar al conductor dentro de la app
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "Fecha no especificada";
         
-        com.compicar.viajeBase.ViajeBase viajeBase = reserva.getViajeBase();
+        ViajeBase viajeBase = reserva.getViajeBase();
         String slugViaje = (viajeBase != null && viajeBase.getSlug() != null) ? " (" + viajeBase.getSlug() + ")" : "";
 
         String msj = String.format("%s ha cancelado su reserva para el viaje del %s%s.",
-                pasajero.getNombre(), fechaFormateada, slugViaje);
+                pasajero.getNombre() != null ? pasajero.getNombre() : "Un pasajero", fechaFormateada, slugViaje);
 
         notificacionRepository.save(new Notificacion(msj, conductor, TipoNotificacion.RESERVA_CANCELADA));
 
-        // 3. Evaluar política de cancelación y Stripe
+        // 3. Envío de correo electrónico al conductor
+        if (conductor != null && conductor.getEmail() != null) {
+            String origen = "Origen";
+            if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "Conductor";
+            String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Un pasajero";
+
+            emailService.sendReservaCanceladaConductor(
+                conductor.getEmail(),
+                nombreConductor,
+                nombrePasajero,
+                origen,
+                destino,
+                fechaFormateada,
+                reserva.getCantidadPlazas()
+            );
+        }
+
+        // 4. Evaluar política de cancelación y Stripe
         LocalDateTime ahora = LocalDateTime.now();
         long horasHastaSalida = Duration.between(ahora, fechaHoraSalida).toHours();
 
@@ -326,31 +350,25 @@ public class ReservaServiceImpl implements ReservaService {
 
         if (pago != null && pago.getStripePaymentIntentId() != null) {
             try {
-                // Si falta MENOS de 12 horas: Penalización (no se devuelve el importe de esta fecha)
                 if (horasHastaSalida < HORAS_LIMITE_CANCELACION) {
                     System.out.println("[CANCELACIÓN] Fuera de plazo (<12h). No se reembolsa el importe de esta fecha.");
-                // Si se cancela A TIEMPO (>= 12 horas): Procesar devolución proporcional
                 } else {
                     BigDecimal importeADevolver = precioUnitario.multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
 
-                    // 1. Marcamos la reserva actual como CANCELADA en memoria
                     reserva.setEstado(EstadoReserva.CANCELADA);
 
-                    // 2. Usamos la QUERY 9 existente y filtramos en Java para ignorar la reserva actual
                     List<Reserva> reservasRestantes = reservaRepository.findByPagoIdAndEstadoNot(pago.getId(), EstadoReserva.CANCELADA)
                             .stream()
                             .filter(r -> !r.getId().equals(reserva.getId()))
                             .toList();
 
                     if (reservasRestantes.isEmpty()) {
-                        // CASO A: Era la única fecha activa del paquete/reserva -> Reembolso total
                         pagoService.cancelarPago(pago.getStripePaymentIntentId());
                         pago.setEstado(EstadoPago.REEMBOLSADO);
                         pago.setImporteTotal(BigDecimal.ZERO);
                         pago.setComision(BigDecimal.ZERO);
                         pago.setImporteConductor(BigDecimal.ZERO);
                     } else {
-                        // CASO B: Aún tiene otras fechas activas -> Ajuste proporcional
                         BigDecimal nuevoTotal = pago.getImporteTotal().subtract(importeADevolver);
                         if (nuevoTotal.compareTo(BigDecimal.ZERO) < 0) {
                             nuevoTotal = BigDecimal.ZERO;
@@ -390,7 +408,6 @@ public class ReservaServiceImpl implements ReservaService {
         Reserva reserva = reservaRepository.findById(reservaId)
             .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada"));
 
-        // Obtenemos de forma segura el viaje base (sea Viaje normal o ViajeRecurrente)
         com.compicar.viajeBase.ViajeBase viajeBase = reserva.getViajeBase();
 
         if (viajeBase == null || viajeBase.getPersona() == null || !viajeBase.getPersona().getId().equals(conductor.getId())) {
@@ -402,10 +419,9 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalStateException("Solo puedes rechazar reservas que están pendientes de tu confirmación.");
         }
         
-        // 2. Devolver las plazas al viaje correspondiente de forma polimórfica
+        // 2. Devolver las plazas al viaje correspondiente
         viajeBase.setPlazasDisponibles(viajeBase.getPlazasDisponibles() + reserva.getCantidadPlazas());
         
-        // Guardamos dependiendo de qué tipo de instancia sea
         if (viajeBase instanceof com.compicar.viaje.Viaje) {
             viajeRepository.save((com.compicar.viaje.Viaje) viajeBase);
         } else if (viajeBase instanceof com.compicar.viajeRecurrente.ViajeRecurrente) {
@@ -423,14 +439,52 @@ public class ReservaServiceImpl implements ReservaService {
             }
         }
 
-        // 4. Notificar al pasajero
+        // 4. Notificar al pasajero en la app
+        Persona pasajero = reserva.getPersona();
         notificacionRepository.save(new Notificacion(
                 "El conductor ha rechazado tu reserva en el viaje " + (viajeBase.getSlug() != null ? viajeBase.getSlug() : "") + ".",
-                reserva.getPersona(),
+                pasajero,
                 TipoNotificacion.RESERVA_RECHAZADA
         ));
 
-        // 5. Actualizar estado final
+        // 5. Enviar correo al pasajero
+        if (pasajero != null && pasajero.getEmail() != null) {
+            LocalDateTime fechaHoraSalida = null;
+            if (reserva.getViaje() != null) {
+                fechaHoraSalida = reserva.getViaje().getFechaHoraSalida();
+            } else if (reserva.getViajeRecurrente() != null) {
+                fechaHoraSalida = reserva.getViajeRecurrente().getFechaHoraSalida();
+            }
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+            String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "Fecha no especificada";
+
+            String origen = "Origen";
+            if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+            String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+            emailService.sendReservaRechazadaPasajero(
+                pasajero.getEmail(),
+                nombrePasajero,
+                nombreConductor,
+                origen,
+                destino,
+                fechaFormateada
+            );
+        }
+
+        // 6. Actualizar estado final
         reserva.setEstado(EstadoReserva.RECHAZADA);
         return reservaRepository.save(reserva);
     }
@@ -505,9 +559,10 @@ public class ReservaServiceImpl implements ReservaService {
 
         Reserva actualizada = reservaRepository.save(reservaExistente);
 
+        // 1. Notificación en la aplicación
         String msj = "El pasajero " + actualizada.getPersona().getNombre() + 
-                     " ha modificado su reserva para el viaje " + actualizada.getViaje().getSlug() + 
-                     ". Revisa los cambios.";
+                    " ha modificado su reserva para el viaje " + actualizada.getViaje().getSlug() + 
+                    ". Revisa los cambios.";
 
         Notificacion noti = new Notificacion(
                 msj, 
@@ -515,6 +570,40 @@ public class ReservaServiceImpl implements ReservaService {
                 TipoNotificacion.RESERVA_MODIFICADA
         );        
         notificacionRepository.save(noti);
+
+        // 2. Envío de correo electrónico al conductor
+        Persona conductor = viaje.getPersona();
+        if (conductor != null && conductor.getEmail() != null) {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+            String fechaFormateada = viaje.getFechaHoraSalida() != null 
+                    ? viaje.getFechaHoraSalida().format(formatter) 
+                    : "Fecha no especificada";
+
+            String origen = "Origen";
+            if (subida.getLocalizacion() != null) {
+                String origenRaw = subida.getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (bajada.getLocalizacion() != null) {
+                String destinoRaw = bajada.getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "Conductor";
+            String nombrePasajero = persona.getNombre() != null ? persona.getNombre() : "Un pasajero";
+
+            emailService.sendReservaModificadaConductor(
+                conductor.getEmail(),
+                nombreConductor,
+                nombrePasajero,
+                origen,
+                destino,
+                fechaFormateada,
+                plazasNuevas
+            );
+        }
 
         return actualizada;
     }
@@ -550,13 +639,55 @@ public class ReservaServiceImpl implements ReservaService {
             mensaje += " Código de checkin: " + viajeBase.getCheckin() + ".";
         }
         
+        // 1. Notificación dentro de la aplicación
         notificacionRepository.save(new Notificacion(
             mensaje,
             reserva.getPersona(),
             TipoNotificacion.RESERVA_ACEPTADA
         ));
-        
-        return reservaRepository.save(reserva);
+
+        Reserva reservaGuardada = reservaRepository.save(reserva);
+
+        // 2. Envío de correo electrónico en segundo plano (@Async)
+        if (reserva.getPersona() != null && reserva.getPersona().getEmail() != null) {
+            String emailPasajero = reserva.getPersona().getEmail();
+            String nombrePasajero = reserva.getPersona().getNombre() != null ? reserva.getPersona().getNombre() : "Pasajero";
+
+            String origen = "Origen";
+            String fechaHoraStr = "fecha pendiente";
+
+            if (reservaGuardada.getParadaSubida() != null) {
+                if (reservaGuardada.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reservaGuardada.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+                
+                // Formatear la fecha y hora de la parada de subida
+                if (reservaGuardada.getParadaSubida().getFechaHora() != null) {
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+                    fechaHoraStr = reservaGuardada.getParadaSubida().getFechaHora().format(formatter);
+                }
+            }
+
+            String destino = "Destino";
+            if (reservaGuardada.getParadaBajada() != null && reservaGuardada.getParadaBajada().getLocalizacion() != null) {
+                String destinoRaw = reservaGuardada.getParadaBajada().getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String codigoCheckin = viajeBase.getCheckin() != null ? viajeBase.getCheckin().toString() : "N/A";
+
+            emailService.sendCheckInCode(
+                emailPasajero,
+                nombrePasajero,
+                origen,
+                destino,
+                fechaHoraStr,
+                codigoCheckin
+            );
+        }
+
+        return reservaGuardada;
     }
 
     @Override
@@ -639,7 +770,7 @@ public class ReservaServiceImpl implements ReservaService {
             throw new IllegalArgumentException("Solo el conductor del viaje puede realizar esta cancelación.");
         }
 
-        // 2. Marcar la ocurrencia del viaje como CANCELADO (opcional si usas EstadoViaje)
+        // 2. Marcar la ocurrencia del viaje como CANCELADO
         vr.setFechaCancelacion(LocalDateTime.now());
         vr.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(vr);
@@ -649,10 +780,15 @@ public class ReservaServiceImpl implements ReservaService {
                 viajeRecurrenteId, EstadoReserva.CANCELADA
         );
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-        String fechaFormateada = vr.getFechaHoraSalida().format(formatter);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = vr.getFechaHoraSalida() != null 
+                ? vr.getFechaHoraSalida().format(formatter) 
+                : "Fecha no especificada";
 
-        // 4. Procesar el reembolso e independizar la lógica para CADA PASAJERO
+        Persona conductor = vr.getPersona();
+        String nombreConductor = conductor != null && conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+        // 4. Procesar reembolso e independizar la lógica para CADA PASAJERO
         for (Reserva reserva : reservasAfectadas) {
             
             // Marcar la reserva individual como CANCELADA
@@ -663,24 +799,22 @@ public class ReservaServiceImpl implements ReservaService {
 
             if (pagoPasajero != null && pagoPasajero.getStripePaymentIntentId() != null) {
                 
-                // Importe a devolver a ESTE pasajero = precioUnitario * plazasReservadasPorEl
                 BigDecimal importeDevolucionPasajero = vr.getPrecio()
                         .multiply(BigDecimal.valueOf(reserva.getCantidadPlazas()));
 
-                // Comprobar si al pasajero le quedan OTRAS reservas activas vinculadas a este mismo pago
                 List<Reserva> reservasRestantesPasajero = reservaRepository.findByPagoIdAndEstadoNot(
                         pagoPasajero.getId(), EstadoReserva.CANCELADA
                 );
 
                 if (reservasRestantesPasajero.isEmpty()) {
-                    // Caso A: Era la única fecha que tenía reservada el pasajero -> Reembolsar/Liberar el 100% de su Pago
+                    // Caso A: Era la única fecha reservada por el pasajero -> Reembolso total
                     stripeService.liberarFondos(pagoPasajero.getStripePaymentIntentId());
                     pagoPasajero.setEstado(EstadoPago.REEMBOLSADO);
                     pagoPasajero.setImporteTotal(BigDecimal.ZERO);
                     pagoPasajero.setComision(BigDecimal.ZERO);
                     pagoPasajero.setImporteConductor(BigDecimal.ZERO);
                 } else {
-                    // Caso B: El pasajero reservó varias fechas en paquete -> Reembolso Parcial de esta fecha
+                    // Caso B: El pasajero reservó varias fechas -> Reembolso parcial
                     BigDecimal nuevoTotalPago = pagoPasajero.getImporteTotal().subtract(importeDevolucionPasajero);
                     
                     if (nuevoTotalPago.compareTo(BigDecimal.ZERO) < 0) {
@@ -692,7 +826,6 @@ public class ReservaServiceImpl implements ReservaService {
                     pagoPasajero.setComision(nuevaComision);
                     pagoPasajero.setImporteConductor(nuevoTotalPago.subtract(nuevaComision));
 
-                    // Si Stripe ya había cobrado el dinero (succeeded), hacemos el reembolso parcial
                     if (pagoPasajero.getEstado() == EstadoPago.CAPTURADO) {
                         stripeService.reembolsarParcial(
                             pagoPasajero.getStripePaymentIntentId(), 
@@ -704,20 +837,48 @@ public class ReservaServiceImpl implements ReservaService {
                 pagoRepository.save(pagoPasajero);
             }
 
-            // 5. Notificar de manera individual a cada pasajero afectado
+            // 5. Notificación dentro de la aplicación
+            Persona pasajero = reserva.getPersona();
             notificacionRepository.save(new Notificacion(
                     String.format("El conductor ha cancelado el viaje del %s. Se ha procesado el reembolso de tus %d plaza(s).",
                             fechaFormateada, reserva.getCantidadPlazas()),
-                    reserva.getPersona(),
+                    pasajero,
                     TipoNotificacion.RESERVA_CANCELADA
             ));
+
+            // 6. Envío de correo electrónico al pasajero
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+
+                emailService.sendViajeRecurrenteCanceladoPasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaFormateada,
+                    reserva.getCantidadPlazas()
+                );
+            }
         }
     }
 
     @Override
     @Transactional
     public ReservaCreadaResponse crearReservaLote(String usuarioEmail, Long viajeId, List<Long> viajeRecurrenteIds, 
-                                                  Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
+                                                Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId) {
 
         if (plazasSolicitadas == null || plazasSolicitadas < 1) {
             throw new IllegalArgumentException("Debes reservar al menos 1 plaza.");
@@ -738,8 +899,9 @@ public class ReservaServiceImpl implements ReservaService {
         List<Reserva> reservasCreadas = new ArrayList<>();
         BigDecimal totalAcumulado = BigDecimal.ZERO;
         Persona conductor = null;
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
         StringBuilder detalleFechas = new StringBuilder();
+        List<String> listaFechasFormateadas = new ArrayList<>();
 
         // --- 1. PROCESAR VIAJE PADRE ---
         if (viajeId != null) {
@@ -764,7 +926,10 @@ public class ReservaServiceImpl implements ReservaService {
 
             reservasCreadas.add(reservaPadre);
             totalAcumulado = totalAcumulado.add(viaje.getPrecio().multiply(new BigDecimal(plazasSolicitadas)));
-            detalleFechas.append("\n• ").append(viaje.getFechaHoraSalida().format(formatter)).append(" (Viaje principal)");
+            
+            String fechaTexto = viaje.getFechaHoraSalida().format(formatter) + " (Viaje principal)";
+            detalleFechas.append("\n• ").append(fechaTexto);
+            listaFechasFormateadas.add(fechaTexto);
         }
 
         // --- 2. PROCESAR VIAJES RECURRENTES ---
@@ -791,7 +956,10 @@ public class ReservaServiceImpl implements ReservaService {
 
                 reservasCreadas.add(reservaRecurrente);
                 totalAcumulado = totalAcumulado.add(vr.getPrecio().multiply(new BigDecimal(plazasSolicitadas)));
-                detalleFechas.append("\n• ").append(vr.getFechaHoraSalida().format(formatter));
+                
+                String fechaTexto = vr.getFechaHoraSalida().format(formatter);
+                detalleFechas.append("\n• ").append(fechaTexto);
+                listaFechasFormateadas.add(fechaTexto);
             }
         }
 
@@ -819,10 +987,39 @@ public class ReservaServiceImpl implements ReservaService {
             reservaRepository.save(r);
         }
 
-        // Enviar 1 sola notificación al conductor
-        String msjNotificación = String.format("El usuario %s ha reservado %d viaje(s):%s\nImporte total: %.2f €",
-            pasajero.getNombre(), reservasCreadas.size(), detalleFechas.toString(), totalAcumulado);
-        notificacionRepository.save(new Notificacion(msjNotificación, conductor, TipoNotificacion.NUEVA_RESERVA));
+        // Enviar 1 sola notificación interna al conductor
+        String msjNotificacion = String.format("El usuario %s ha reservado %d viaje(s):%s\nImporte total: %.2f €",
+                pasajero.getNombre(), reservasCreadas.size(), detalleFechas.toString(), totalAcumulado);
+        notificacionRepository.save(new Notificacion(msjNotificacion, conductor, TipoNotificacion.NUEVA_RESERVA));
+
+        // Envío de correo electrónico al conductor
+        if (conductor != null && conductor.getEmail() != null) {
+            String origen = "Origen";
+            if (paradaSubida.getLocalizacion() != null) {
+                String origenRaw = paradaSubida.getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (paradaBajada.getLocalizacion() != null) {
+                String destinoRaw = paradaBajada.getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "Conductor";
+            String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Un pasajero";
+
+            emailService.sendReservaLoteConductor(
+                conductor.getEmail(),
+                nombreConductor,
+                nombrePasajero,
+                origen,
+                destino,
+                listaFechasFormateadas,
+                plazasSolicitadas,
+                totalAcumulado
+            );
+        }
 
         // --- 4. LLAMAR A STRIPE ---
         try {
