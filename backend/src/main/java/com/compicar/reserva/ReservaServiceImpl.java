@@ -833,4 +833,19 @@ public class ReservaServiceImpl implements ReservaService {
         }
     }
 
+    @Override
+    public Double ratioExitoReservas(String usuarioEmail) {
+        Persona conductor = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        List<Reserva> totalReservas = reservaRepository.findReservasDeConductor(conductor.getEmail());
+        List<Reserva> reservasExitosas = reservaRepository.findReservasExitosasDeConductor(conductor.getEmail());
+
+        if (totalReservas == null || totalReservas.isEmpty() || reservasExitosas == null || reservasExitosas.isEmpty()) {
+            return 0.0;
+        }
+
+        return (double) reservasExitosas.size() / totalReservas.size() * 100;
+    }
+
 }

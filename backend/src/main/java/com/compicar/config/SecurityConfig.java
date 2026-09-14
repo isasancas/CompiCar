@@ -93,6 +93,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/paradas/top5-localizaciones").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/contaminacion/actual").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/valoraciones/valorado/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/reservas/ratio-exito").permitAll()
 
                 .requestMatchers("/api/logout").authenticated()
                 .requestMatchers("/api/personas/**").authenticated()
