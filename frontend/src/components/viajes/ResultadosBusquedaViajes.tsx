@@ -46,6 +46,7 @@ const ResultadosBusquedaViajes: React.FC = () => {
   const [origen, setOrigen] = useState(searchParams.get('origen') || '');
   const [destino, setDestino] = useState(searchParams.get('destino') || '');
   const [fecha, setFecha] = useState(searchParams.get('fecha') || '');
+  const [conductor, setConductor] = useState(searchParams.get('conductor') || '');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -56,6 +57,7 @@ const ResultadosBusquedaViajes: React.FC = () => {
     setOrigen(searchParams.get('origen') || '');
     setDestino(searchParams.get('destino') || '');
     setFecha(searchParams.get('fecha') || '');
+    setConductor(searchParams.get('conductor') || '');
   }, [searchParams]);
 
   // Función encargada de pedir los datos al servidor
@@ -94,6 +96,7 @@ const ResultadosBusquedaViajes: React.FC = () => {
     if (origen.trim()) params.set('origen', origen.trim());
     if (destino.trim()) params.set('destino', destino.trim());
     if (fecha) params.set('fecha', fecha);
+    if (conductor.trim()) params.set('conductor', conductor.trim());
 
     // Si los parámetros no cambian, forzar la búsqueda manualmente
     if (params.toString() === searchParams.toString()) {
@@ -121,7 +124,7 @@ const ResultadosBusquedaViajes: React.FC = () => {
               e.preventDefault();
               lanzarBusqueda();
             }}
-            className="grid gap-3 md:grid-cols-4"
+            className="grid gap-3 md:grid-cols-5"
           >
             <input
               type="text"
@@ -142,6 +145,13 @@ const ResultadosBusquedaViajes: React.FC = () => {
               className="rounded-xl border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
+            />
+            <input
+              type="text"
+              className="rounded-xl border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+              placeholder="Conductor"
+              value={conductor}
+              onChange={(e) => setConductor(e.target.value)}
             />
             <button
               type="submit"

@@ -778,17 +778,17 @@ test('Muestra un error al fallar la subida de la foto de perfil en el servidor',
   });
 });
 
-test('Recarga los datos de perfil al enfocar la ventana (focus event)', async () => {
+test('Recarga las valoraciones al enfocar la ventana (focus event)', async () => {
   let fetchCount = 0;
 
   server.use(
-    http.get('*/api/personas/perfil', () => {
-      fetchCount++;
-      return HttpResponse.json(mockPerfilData);
-    }),
+    http.get('*/api/personas/perfil', () => HttpResponse.json(mockPerfilData)),
     http.get('*/api/vehiculos/propios', () => HttpResponse.json([])),
     http.get('*/api/viajes/mis-viajes', () => HttpResponse.json([])),
-    http.get('*/api/valoraciones/valorado/1', () => HttpResponse.json([]))
+    http.get('*/api/valoraciones/valorado/1', () => {
+      fetchCount++;
+      return HttpResponse.json([]);
+    })
   );
 
   renderComponent();

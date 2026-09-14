@@ -16,6 +16,11 @@ interface PerfilPublicoData {
   fechaAntiguedad?: string;
 }
 
+/*interface ViajeActividad {
+  fechaHoraSalida?: string;
+  estado?: string;
+}*/
+
 interface ValoracionRecibida {
   id: number;
   puntuacion: number;
@@ -43,6 +48,7 @@ const PerfilPublico: React.FC = () => {
   const [mostrarValoraciones, setMostrarValoraciones] = useState(false);
   const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
   const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
+  ///const [tendenciaActividad, setTendenciaActividad] = useState<number | null>(null);
   const [ratioExitoReservas, setRatioExitoReservas] = useState(0);
 
   const porcentajeViajesCompletados = totalViajesParticipados > 0
@@ -78,18 +84,23 @@ const PerfilPublico: React.FC = () => {
         const data = await response.json();
         setPerfil(data);
 
-        const valoracionesResponse = await fetch(buildApiUrl(`/api/valoraciones/valorado/${data.id}`), {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
+        try {
+          const valoracionesResponse = await fetch(buildApiUrl(`/api/valoraciones/valorado/${data.id}`), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          });
 
-        if (valoracionesResponse.ok) {
-          const valoraciones = await valoracionesResponse.json();
-          const recibidas = Array.isArray(valoraciones) ? valoraciones : [];
-          setValoracionesRecibidas(recibidas);
-          setTotalValoracionesRecibidas(recibidas.length);
-        }
+          if (valoracionesResponse.ok) {
+            const valoraciones = await valoracionesResponse.json();
+            const recibidas = Array.isArray(valoraciones) ? valoraciones : [];
+            setValoracionesRecibidas(recibidas);
+            setTotalValoracionesRecibidas(recibidas.length);
+          }
       } catch {
+          setError('Error de conexión al cargar el perfil');
+        }
+      }
+      catch {
         setError('Error de conexión al cargar el perfil');
       }
     };
@@ -319,6 +330,7 @@ const PerfilPublico: React.FC = () => {
                 </div>
               )}
             </div>
+
           </section>
           </div>
       </div>
