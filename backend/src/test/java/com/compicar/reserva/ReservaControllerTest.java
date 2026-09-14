@@ -1,5 +1,7 @@
 package com.compicar.reserva;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -52,6 +54,9 @@ class ReservaControllerTest {
 
     @Mock
     private PersonaRepository personaRepository;
+
+    @Mock
+    private ReservaRepository reservaRepository;
 
     @InjectMocks
     private ReservaController reservaController;
@@ -424,6 +429,57 @@ class ReservaControllerTest {
                 .andExpect(status().isOk());
 
         verify(reservaService).cancelarOcurrenciaPorConductor(5L, "driver@compicar.com");
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_conSlugExistente_devuelveRatio() throws Exception {
+        Persona persona = new Persona();
+        Field emailField = Persona.class.getDeclaredField("email");
+        emailField.setAccessible(true);
+        emailField.set(persona, "driver@compicar.com");
+
+        when(personaRepository.findBySlug("driver-slug")).thenReturn(Optional.of(persona));
+        when(reservaService.ratioExitoReservas("driver@compicar.com")).thenReturn(85.0);
+
+        mockMvc.perform(get("/api/reservas/ratio-exito")
+                .param("slug", "driver-slug"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(85.0));
+
+        verify(personaRepository).findBySlug("driver-slug");
+        verify(reservaService).ratioExitoReservas("driver@compicar.com");
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_conSlugNoExistente_404() throws Exception {
+        when(personaRepository.findBySlug("unknown-slug")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/reservas/ratio-exito")
+                .param("slug", "unknown-slug"))
+                .andExpect(status().isNotFound());
+
+        verify(personaRepository).findBySlug("unknown-slug");
+        verifyNoInteractions(reservaService);
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_sinSlugAutenticado_devuelveRatio() throws Exception {
+        when(reservaService.ratioExitoReservas("user@compicar.com")).thenReturn(50.0);
+
+        mockMvc.perform(get("/api/reservas/ratio-exito")
+                .principal(new TestingAuthenticationToken("user@compicar.com", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").value(50.0));
+
+        verify(reservaService).ratioExitoReservas("user@compicar.com");
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_sinSlugNiAutenticacion_401() throws Exception {
+        mockMvc.perform(get("/api/reservas/ratio-exito"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(reservaService);
     }
 
     private void autenticar(String email) {

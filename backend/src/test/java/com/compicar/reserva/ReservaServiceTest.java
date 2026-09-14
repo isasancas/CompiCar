@@ -1018,4 +1018,42 @@ class ReservaServiceTest {
                 anyString(), anyString(), anyString(), anyString(), anyString(), anyList(), anyInt(), any(BigDecimal.class)
         );
     }
+
+    @Test
+    void ratioExitoReservas_usuarioNoEncontrado_lanzaExcepcion() {
+        when(personaRepository.findByEmail("missing@compicar.com")).thenReturn(Optional.empty());
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                reservaService.ratioExitoReservas("missing@compicar.com")
+        );
+
+        assertEquals("Usuario no encontrado", ex.getMessage());
+    }
+
+    @Test
+    void ratioExitoReservas_sinReservas_devuelveCero() {
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(conductor));
+        when(reservaRepository.findReservasDeConductor("driver@compicar.com")).thenReturn(List.of());
+        when(reservaRepository.findReservasExitosasDeConductor("driver@compicar.com")).thenReturn(List.of());
+
+        Double ratio = reservaService.ratioExitoReservas("driver@compicar.com");
+
+        assertEquals(0.0, ratio);
+    }
+
+    @Test
+    void ratioExitoReservas_calculoCorrecto_devuelvePorcentaje() {
+        Reserva r1 = new Reserva();
+        Reserva r2 = new Reserva();
+        Reserva r3 = new Reserva();
+        Reserva r4 = new Reserva();
+
+        when(personaRepository.findByEmail("driver@compicar.com")).thenReturn(Optional.of(conductor));
+        when(reservaRepository.findReservasDeConductor("driver@compicar.com")).thenReturn(List.of(r1, r2, r3, r4));
+        when(reservaRepository.findReservasExitosasDeConductor("driver@compicar.com")).thenReturn(List.of(r1, r2));
+
+        Double ratio = reservaService.ratioExitoReservas("driver@compicar.com");
+
+        assertEquals(50.0, ratio);
+    }
 }

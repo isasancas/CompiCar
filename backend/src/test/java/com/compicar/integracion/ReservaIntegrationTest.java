@@ -1,5 +1,7 @@
 package com.compicar.integracion;
 
+import com.compicar.persona.Persona;
+import com.compicar.persona.PersonaRepository;
 import com.compicar.reserva.EstadoReserva;
 import com.compicar.reserva.Reserva;
 import com.compicar.reserva.ReservaRepository;
@@ -22,6 +24,9 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private ReservaRepository reservaRepository;
+
+    @Autowired
+    private PersonaRepository personaRepository;
 
     @Test
     void crearReservaYObtenerPorId_ok() throws Exception {
@@ -564,5 +569,41 @@ class ReservaIntegrationTest extends BaseIntegrationTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(payload)))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_usuarioAutenticado_ok() throws Exception {
+        String driverToken = registerAndLogin();
+
+        mockMvc.perform(get("/api/reservas/ratio-exito")
+            .header("Authorization", "Bearer " + driverToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_porSlug_ok() throws Exception {
+        registerAndLogin();
+
+        List<Persona> personas = personaRepository.findAll();
+        Persona conductor = personas.get(personas.size() - 1);
+
+        mockMvc.perform(get("/api/reservas/ratio-exito")
+            .param("slug", conductor.getSlug()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_slugNoExistente_404() throws Exception {
+        mockMvc.perform(get("/api/reservas/ratio-exito")
+            .param("slug", "slug-inexistente-12345"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void obtenerRatioExitoReservas_sinTokenNiSlug_unauthorized() throws Exception {
+        mockMvc.perform(get("/api/reservas/ratio-exito"))
+            .andExpect(status().isUnauthorized());
     }
 }
