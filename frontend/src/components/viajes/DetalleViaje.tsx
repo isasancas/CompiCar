@@ -138,8 +138,14 @@ const DetalleViaje: React.FC = () => {
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
-  const usuarioActual = JSON.parse(localStorage.getItem('perfil') || '{}');
-  const usuarioIdActual = usuarioActual.id;
+  const usuarioActual = navState.usuarioActual || JSON.parse(localStorage.getItem('perfil') || '{}');
+  const usuarioIdActual = navState.usuarioId ?? usuarioActual.id;
+
+  const esConductor = navState.rol?.toUpperCase() === 'CONDUCTOR' || (
+    viaje?.conductorId != null &&
+    usuarioIdActual != null &&
+    Number(viaje.conductorId) === Number(usuarioIdActual)
+  );
 
   const esInstanciaRecurrente = Boolean(navState.esInstanciaRecurrente);
 
@@ -1025,7 +1031,7 @@ const DetalleViaje: React.FC = () => {
           </div>
 
           {/* Lista de Pasajeros (Solo visible para el conductor) */}
-          {navState.rol === 'conductor' && viaje.reservas && viaje.reservas.length > 0 && (
+          {esConductor && viaje.reservas && viaje.reservas.length > 0 && (
             <div className="mb-6 border-t border-slate-100 pt-6">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <span className="bg-blue-100 text-blue-600 p-1 rounded-md">👤</span>
@@ -1217,7 +1223,7 @@ const DetalleViaje: React.FC = () => {
 
           {/* SECCIÓN DE BOTONES DINÁMICOS */}
           <div className="space-y-3">
-            {navState.rol !== 'conductor' && (
+            {!esConductor && (
               <>
                 {viaje.estado === 'FINALIZADO' ? (
                   <div className="text-center p-4 bg-slate-100 rounded-xl text-slate-600 text-sm italic border border-slate-200">
@@ -1322,7 +1328,7 @@ const DetalleViaje: React.FC = () => {
             )}
 
 
-            {navState.rol === 'conductor' && (
+            {esConductor && (
               <div className="space-y-3">
                 {viaje.estado !== 'CANCELADO' && viaje.estado !== 'FINALIZADO' && viaje.estado !== 'INICIADO' && viaje.estado !== 'EN_CURSO' && (
                   <div>

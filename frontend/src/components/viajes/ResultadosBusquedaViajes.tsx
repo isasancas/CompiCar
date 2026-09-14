@@ -23,6 +23,7 @@ type ViajeDTO = {
   estado: string;
   plazasDisponibles: number;
   precio: number;
+  conductorId?: number;
   vehiculo: VehiculoDTO;
   paradas: ParadaDTO[];
 };
@@ -42,6 +43,27 @@ const getParadasOrdenadas = (paradas: ParadaDTO[]) =>
 const ResultadosBusquedaViajes: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [usuarioActual, setUsuarioActual] = useState<Record<string, unknown>>(() =>
+    JSON.parse(localStorage.getItem('perfil') || '{}')
+  );
+  const usuarioId = usuarioActual.id;
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || token === 'undefined' || token === 'null' || token.trim() === '') return;
+
+    fetch(buildApiUrl('/api/personas/perfil'), {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((perfil) => {
+        if (perfil) {
+          setUsuarioActual(perfil);
+          localStorage.setItem('perfil', JSON.stringify(perfil));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [origen, setOrigen] = useState(searchParams.get('origen') || '');
   const [destino, setDestino] = useState(searchParams.get('destino') || '');
@@ -200,7 +222,12 @@ const ResultadosBusquedaViajes: React.FC = () => {
                       navigate('/viajes/' + viaje.slug, {
                         state: {
                           backTo: '/buscar?' + searchParams.toString(),
-                          backLabel: 'Volver a resultados'
+                          backLabel: 'Volver a resultados',
+                          usuarioActual,
+                          usuarioId,
+                          rol: viaje.conductorId != null && Number(viaje.conductorId) === Number(usuarioId)
+                            ? 'conductor'
+                            : 'pasajero'
                         }
                       })
                     }
