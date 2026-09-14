@@ -1743,6 +1743,235 @@ class ViajeServiceTest {
         assertEquals(150, totalKm);
     }
 
+    @Test
+    void iniciarViaje_error_horaSalidaNoAlcanzada_lanza400() {
+        String slug = "sevilla-cadiz-futuro";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+        viajeBase.setFechaHoraSalida(LocalDateTime.now().plusHours(2));
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.iniciarViaje(conductor.getEmail(), slug));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("Aún no ha llegado la fecha u hora de salida"));
+    }
+
+    @Test
+    void confirmarCheckin_ok_validaCodigoYEnCurso() {
+        String slug = "sevilla-cadiz-iniciado";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.INICIADO);
+        viajeBase.setCheckin("ABC123");
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ViajeDTO result = viajeService.confirmarCheckin(conductor.getEmail(), slug, "abc123");
+
+        assertEquals("EN_CURSO", result.getEstado());
+        verify(viajeRepository).save(viajeBase);
+    }
+
+    @Test
+    void confirmarCheckin_error_codigoIncorrecto_lanza400() {
+        String slug = "sevilla-cadiz-iniciado";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.INICIADO);
+        viajeBase.setCheckin("ABC123");
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.confirmarCheckin(conductor.getEmail(), slug, "WRONG9"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals("Checkin inválido", ex.getReason());
+    }
+
+    @Test
+    void ponerEnCursoAutomatico_ok() {
+        String slug = "sevilla-cadiz-curso";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.INICIADO);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+
+        ViajeDTO result = viajeService.ponerEnCursoAutomatico(conductor.getEmail(), slug);
+
+        assertEquals("EN_CURSO", result.getEstado());
+        verify(viajeRepository).save(viajeBase);
+    }
+
+    @Test
+    void finalizarViaje_ok_capturaPagoActualizaFondosYNotifica() throws StripeException {
+        String slug = "sevilla-cadiz-finalizar";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.EN_CURSO);
+        viajeBase.setPrecio(new BigDecimal("15.00"));
+
+        Reserva reserva = new Reserva();
+        reserva.setCantidadPlazas(2);
+        reserva.setPersona(otroUsuario);
+        reserva.setParadaSubida(viajeBase.getParadas().get(0));
+        reserva.setParadaBajada(viajeBase.getParadas().get(1));
+
+        Pago pago = new Pago();
+        pago.setStripePaymentIntentId("pi_test_capture");
+        pago.setEstado(EstadoPago.PENDIENTE);
+        reserva.setPago(pago);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+        when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA))
+                .thenReturn(List.of(reserva));
+
+        ViajeDTO result = viajeService.finalizarViaje(conductor.getEmail(), slug);
+
+        assertEquals("FINALIZADO", result.getEstado());
+        assertEquals(EstadoPago.CAPTURADO, pago.getEstado());
+        assertEquals(new BigDecimal("30.00"), conductor.getFondosActuales());
+        assertEquals(new BigDecimal("30.00"), conductor.getFondosTotales());
+
+        verify(stripeService).confirmarCaptura("pi_test_capture");
+        verify(correoService).sendViajeFinalizadoPasajero(eq(otroUsuario.getEmail()), any(), any(), any(), any(), any());
+        verify(personaRepository).save(conductor);
+    }
+
+    @Test
+    void finalizarViaje_errorStripe_lanza402() throws StripeException {
+        String slug = "sevilla-cadiz-stripe-error";
+        viajeBase.setSlug(slug);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.EN_CURSO);
+
+        Reserva reserva = new Reserva();
+        Pago pago = new Pago();
+        pago.setStripePaymentIntentId("pi_fail");
+        pago.setEstado(EstadoPago.PENDIENTE);
+        reserva.setPago(pago);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slug)).thenReturn(Optional.of(viajeBase));
+        when(reservaRepository.findByViajeAndEstadoNot(viajeBase, EstadoReserva.CANCELADA))
+                .thenReturn(List.of(reserva));
+        doThrow(new StripeException("Tarjeta rechazada", "req_123", "card_declined", 400, null) {})
+                .when(stripeService).confirmarCaptura("pi_fail");
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.finalizarViaje(conductor.getEmail(), slug));
+
+        assertEquals(HttpStatus.PAYMENT_REQUIRED, ex.getStatusCode());
+    }
+
+    @Test
+    void cancelarViajeConjunto_ok_cancelaPadreYRecurrentesConReembolso() throws StripeException {
+        String slugPadre = "viaje-padre-recurrente";
+        viajeBase.setSlug(slugPadre);
+        viajeBase.setPersona(conductor);
+        viajeBase.setEstado(EstadoViaje.PENDIENTE);
+
+        ViajeRecurrente vr = new ViajeRecurrente();
+        ReflectionTestUtils.setField(vr, "id", 500L);
+        vr.setEstado(EstadoViaje.PENDIENTE);
+        vr.setPrecio(new BigDecimal("10.00"));
+        vr.setFechaHoraSalida(LocalDateTime.now().plusDays(2));
+        vr.setParadas(viajeBase.getParadas());
+
+        Reserva reservaRecurrente = new Reserva();
+        reservaRecurrente.setCantidadPlazas(1);
+        reservaRecurrente.setPersona(otroUsuario);
+        reservaRecurrente.setParadaSubida(viajeBase.getParadas().get(0));
+        reservaRecurrente.setParadaBajada(viajeBase.getParadas().get(1));
+
+        Pago pago = new Pago();
+        pago.setId(99L);
+        pago.setStripePaymentIntentId("pi_rec_123");
+        pago.setImporteTotal(new BigDecimal("10.00"));
+        reservaRecurrente.setPago(pago);
+
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+        when(viajeRepository.findBySlug(slugPadre)).thenReturn(Optional.of(viajeBase));
+        when(viajeRecurrenteRepository.findByViaje(viajeBase)).thenReturn(List.of(vr));
+        when(reservaRepository.findByViajeRecurrenteIdAndEstadoNot(500L, EstadoReserva.CANCELADA))
+                .thenReturn(List.of(reservaRecurrente));
+        when(reservaRepository.findByPagoIdAndEstadoNot(99L, EstadoReserva.CANCELADA))
+                .thenReturn(List.of());
+
+        ViajeDTO result = viajeService.cancelarViajeConjunto(conductor.getEmail(), slugPadre);
+
+        assertEquals("CANCELADO", result.getEstado());
+        assertEquals(EstadoViaje.CANCELADO, vr.getEstado());
+        assertEquals(EstadoReserva.CANCELADA, reservaRecurrente.getEstado());
+
+        verify(stripeService).liberarFondos("pi_rec_123");
+        verify(correoService).sendViajeRecurrenteCanceladoPasajero(eq(otroUsuario.getEmail()), any(), any(), any(), any(), any(), eq(1));
+    }
+
+    @Test
+    void obtenerProximoViajeUsuario_devuelveElMasCercano() {
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+
+        Viaje viajeProximo = viajeCompleto(100L, "sevilla-cadiz-proximo");
+        viajeProximo.setFechaHoraSalida(LocalDateTime.now().plusHours(5));
+
+        when(viajeRepository.findProximoViajeConductor(eq(conductor), any(), eq(EstadoViaje.CANCELADO)))
+                .thenReturn(Optional.of(viajeProximo));
+        when(viajeRecurrenteRepository.findProximoViajeRecurrenteConductor(eq(conductor), any(), eq(EstadoViaje.CANCELADO)))
+                .thenReturn(Optional.empty());
+
+        ViajeDTO result = viajeService.obtenerProximoViajeUsuario(conductor.getEmail());
+
+        assertNotNull(result);
+        assertEquals("sevilla-cadiz-proximo", result.getSlug());
+    }
+
+    @Test
+    void contarKilometrosRecorridosPorUsuario_calculaSumaCorrecta() {
+        when(personaRepository.findByEmail(conductor.getEmail())).thenReturn(Optional.of(conductor));
+
+        Viaje v1 = new Viaje();
+        v1.setKilometrosRecorridos(150);
+        Viaje v2 = new Viaje();
+        v2.setKilometrosRecorridos(200);
+
+        when(viajeRepository.findViajesFinalizadosPorUsuarioIncluyendoConductor(1L))
+                .thenReturn(List.of(v1, v2));
+
+        Integer totalKm = viajeService.contarKilometrosRecorridosPorUsuario(conductor.getEmail());
+
+        assertEquals(350, totalKm);
+    }
+
+    @Test
+    void obtenerViajesPublicosPorConductor_error_slugVacio_lanza400() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+            () -> viajeService.obtenerViajesPublicosPorConductor(" "));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+    }
+
+    @Test
+    void tieneReservasActivas_evaluaCorrectamente() {
+        Viaje vSinReservas = new Viaje();
+        assertFalse(viajeService.tieneReservasActivas(vSinReservas));
+
+        Reserva r = new Reserva();
+        r.setEstado(EstadoReserva.CONFIRMADA);
+        vSinReservas.setReservas(List.of(r));
+        assertTrue(viajeService.tieneReservasActivas(vSinReservas));
+    }
+
     private Parada parada(TipoParada tipo, String loc, LocalDateTime fecha, Integer orden) {
         Parada p = new Parada();
         p.setTipo(tipo);
