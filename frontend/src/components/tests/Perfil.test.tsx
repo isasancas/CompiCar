@@ -550,20 +550,23 @@ test('Maneja el cierre de sesión incluso si el endpoint de logout falla con err
   });
 });
 
-test('Muestra correctamente el resumen de viajes usando los contadores actuales', async () => {
+test('Muestra correctamente el resumen de actividad del perfil', async () => {
   server.use(
     http.get('*/api/personas/perfil', () => HttpResponse.json(mockPerfilData)),
     http.get('*/api/vehiculos/propios', () => HttpResponse.json([])),
-    http.get('*/api/viajes/exitosos', () => HttpResponse.json(2)),
-    http.get('*/api/viajes/contador-participados', () => HttpResponse.json(3)),
+    http.get('*/api/viajes/exitosos', () => HttpResponse.json(1)),
+    http.get('*/api/viajes/contador-participados', () => HttpResponse.json(2)),
     http.get('*/api/viajes/kilometros', () => HttpResponse.json(120)),
+    http.get('*/api/reservas/ratio-exito', () => HttpResponse.json(78)),
     http.get('*/api/valoraciones/valorado/1', () => HttpResponse.json([]))
   );
 
   renderComponent();
 
-  expect(await screen.findByText('2')).toBeInTheDocument();
-  expect(screen.getByText('67%')).toBeInTheDocument();
+  const viajesParticipados = await screen.findByText('Viajes participados');
+  expect(viajesParticipados.parentElement).toHaveTextContent('2');
+  expect(screen.getByText('Viajes completados').parentElement).toHaveTextContent('1');
+  expect(screen.getByText('Ratio de éxito reservas').parentElement).toHaveTextContent('78%');
 });
 
 test('Valida campos requeridos y formato en el formulario de edición de perfil', async () => {

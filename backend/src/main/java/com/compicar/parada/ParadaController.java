@@ -42,4 +42,9 @@ public class ParadaController {
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado"));
         return paradaService.obtenerParadasPorViaje(viaje);
     }
+
+    @GetMapping("/top5-localizaciones")
+    public List<Object[]> obtenerTop5Localizaciones() {
+        return paradaService.obtenerTop5Localizaciones();
+    }
 }
