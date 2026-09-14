@@ -17,6 +17,7 @@ vi.mock('react-router-dom', async () => {
 const mockViaje = {
   id: 101,
   slug: 'madrid-valencia-express',
+  conductorId: 5,
   fechaHoraSalida: '2026-10-15T09:00:00Z',
   estado: 'PENDIENTE',
   plazasDisponibles: 2,
@@ -31,6 +32,7 @@ const mockViaje = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.setItem('perfil', JSON.stringify({ id: 5, nombre: 'Carlos' }));
 });
 
 const renderComponente = (initialUrl = '/buscar') => {
@@ -151,6 +153,9 @@ test('Redirige a la pantalla de detalle del viaje transmitiendo los parámetros 
     state: {
       backTo: '/buscar?origen=Madrid',
       backLabel: 'Volver a resultados',
+      usuarioActual: { id: 5, nombre: 'Carlos' },
+      usuarioId: 5,
+      rol: 'conductor',
     },
   });
 });

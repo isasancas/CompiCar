@@ -293,7 +293,9 @@ public class ViajeServiceImpl implements ViajeService {
         return reservas != null && reservas.stream()
             .filter(reserva -> reserva.getPersona() != null
                     && personaId.equals(reserva.getPersona().getId()))
-            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.PRESENTE
+            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.PAGADA
+                || reserva.getEstado() == EstadoReserva.CONFIRMADA
+                || reserva.getEstado() == EstadoReserva.PRESENTE
                     || reserva.getEstado() == EstadoReserva.NO_PRESENTADO
                     || estaCanceladoDentroDeLas12Horas(
                         reserva.getFechaCancelacion(), fechaHoraSalida));
