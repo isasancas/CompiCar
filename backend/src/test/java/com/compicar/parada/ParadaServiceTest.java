@@ -151,6 +151,32 @@ class ParadaServiceTest {
         verify(paradaRepository).findByViaje(viaje);
     }
 
+    @Test
+    void obtenerTop5Localizaciones_ok_devuelveLista() {
+        Object[] loc1 = new Object[]{"Madrid", 15L};
+        Object[] loc2 = new Object[]{"Barcelona", 10L};
+        when(paradaRepository.findTop5Localizaciones()).thenReturn(List.of(loc1, loc2));
+
+        List<Object[]> result = paradaService.obtenerTop5Localizaciones();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        assertEquals("Madrid", result.get(0)[0]);
+        assertEquals(15L, result.get(0)[1]);
+        verify(paradaRepository).findTop5Localizaciones();
+    }
+
+    @Test
+    void obtenerTop5Localizaciones_vacio_devuelveListaVacia() {
+        when(paradaRepository.findTop5Localizaciones()).thenReturn(List.of());
+
+        List<Object[]> result = paradaService.obtenerTop5Localizaciones();
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+        verify(paradaRepository).findTop5Localizaciones();
+    }
+
     private Parada parada(String localizacion, TipoParada tipo, Integer orden) {
         Parada p = new Parada();
         p.setLocalizacion(localizacion);
