@@ -317,6 +317,12 @@ public class ViajeServiceImpl implements ViajeService {
     @Override
     @Transactional(readOnly = true)
     public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha) {
+        return buscarViajesPublicos(origen, destino, fecha, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha, String conductor) {
         LocalDateTime inicio = fecha != null ? fecha.atStartOfDay() : null;
         LocalDateTime fin = fecha != null ? fecha.plusDays(1).atStartOfDay() : null;
 
@@ -334,10 +340,12 @@ public class ViajeServiceImpl implements ViajeService {
 
         String origenNorm = normalizar(origen);
         String destinoNorm = normalizar(destino);
+        String conductorNorm = normalizar(conductor);
 
         // 3. Procesar y convertir viajes normales a DTO
         List<ViajeDTO> resultadosNormales = base.stream()
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
+            .filter(v -> coincideConductor(v.getPersona(), conductorNorm))
             .map(this::convertirADTO) // Asegúrate de que esRecurrente sea false o null aquí
             .toList();
 
@@ -345,6 +353,7 @@ public class ViajeServiceImpl implements ViajeService {
         // (Asegúrate de marcar esRecurrente = true en tu conversor o método de mapeo)
         List<ViajeDTO> resultadosRecurrentes = baseRecurrentes.stream()
             .filter(vr -> coincideEnParadasRecurrente(vr, origenNorm, destinoNorm)) // O tu método de paradas adaptado
+            .filter(vr -> coincideConductor(vr.getPersona(), conductorNorm))
             .map(this::convertirRecurrenteADTO) 
             .toList();
 
@@ -1150,6 +1159,20 @@ public class ViajeServiceImpl implements ViajeService {
             .anyMatch(locNorm -> locNorm.contains(destinoNorm));
 
         return origenOk && destinoOk;
+    }
+
+    private boolean coincideConductor(Persona conductor, String conductorNorm) {
+        if (conductorNorm.isBlank()) {
+            return true;
+        }
+        if (conductor == null) {
+            return false;
+        }
+
+        return Stream.of(conductor.getNombre(), conductor.getPrimerApellido(), conductor.getSegundoApellido(), conductor.getSlug())
+            .filter(Objects::nonNull)
+            .map(this::normalizar)
+            .anyMatch(valor -> valor.contains(conductorNorm));
     }
 
     private boolean coincideEnParadasRecurrente(ViajeRecurrente viaje, String origenNorm, String destinoNorm) {

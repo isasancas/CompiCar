@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import EstadisticasPortada from './EstadisticasPortada';
 
 const HeroCarpooling: React.FC = () => {
   const navigate = useNavigate();
   const [origen, setOrigen] = useState('');
   const [destino, setDestino] = useState('');
   const [fecha, setFecha] = useState('');
+  const [conductor, setConductor] = useState('');
 
   const handleBuscar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,13 +16,15 @@ const HeroCarpooling: React.FC = () => {
     if (origen.trim()) params.set('origen', origen.trim());
     if (destino.trim()) params.set('destino', destino.trim());
     if (fecha) params.set('fecha', fecha);
+    if (conductor.trim()) params.set('conductor', conductor.trim());
 
     navigate('/buscar?' + params.toString());
   };
 
   return (
-    <header className="bg-white px-6 md:px-12 py-12 md:py-24 overflow-hidden">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
+    <>
+      <header className="bg-white px-6 md:px-12 py-12 md:py-24 overflow-hidden">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
         <div className="w-full md:w-[55%] shrink-0">
           <div className="flex items-center gap-2 mb-6 bg-green-50 w-fit px-3.5 py-1.5 rounded-full border border-green-100">
             <span className="h-2.5 w-2.5 rounded-full bg-[#00BF63]"></span>
@@ -84,6 +88,17 @@ const HeroCarpooling: React.FC = () => {
               />
             </div>
 
+            <div className="flex items-center flex-1 px-5 gap-3 w-full border-b md:border-b-0 md:border-r border-gray-100">
+              <span className="text-slate-500 text-lg">👤</span>
+              <input
+                type="text"
+                placeholder="Conductor"
+                className="py-4 text-base focus:outline-none w-full bg-transparent text-slate-800 placeholder:text-gray-400"
+                value={conductor}
+                onChange={(e) => setConductor(e.target.value)}
+              />
+            </div>
+
             <button
               type="submit"
               className="bg-gradient-compi hover:opacity-90 text-white px-9 py-4 rounded-full font-bold flex items-center gap-2 transition-all w-full md:w-auto justify-center text-sm shadow-md active:scale-95"
@@ -100,8 +115,10 @@ const HeroCarpooling: React.FC = () => {
             className="rounded-[3rem] shadow-2xl w-full h-auto object-cover max-w-[500px] lg:max-w-none"
           />
         </div>
-      </div>
-    </header>
+        </div>
+      </header>
+      <EstadisticasPortada />
+    </>
   );
 };
 

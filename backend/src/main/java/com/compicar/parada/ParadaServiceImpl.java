@@ -54,5 +54,10 @@ public class ParadaServiceImpl implements ParadaService {
     public List<Parada> obtenerParadasPorViaje(Viaje viaje) {
         return paradaRepository.findByViaje(viaje);
     }
+
+    @Override
+    public List<Object[]> obtenerTop5Localizaciones() {
+        return paradaRepository.findTop5Localizaciones();
+    }
     
 }
