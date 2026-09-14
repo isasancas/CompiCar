@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva Valoración Recibida</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { color: #f59e0b; text-align: center; margin-top: 0; }
+        p { color: #333333; line-height: 1.6; }
+        .stars { font-size: 20px; color: #f59e0b; font-weight: bold; }
+        .info-box { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
+        .footer { font-size: 12px; color: #888888; text-align: center; margin-top: 30px; border-top: 1px solid #eeeeee; padding-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 25px;">
+            <img src="cid:logoCompiCar" alt="CompiCar" style="height: 48px; width: auto; max-width: 100%; display: block; margin: 0 auto;" />
+        </div>
+        <h2>¡Nueva valoración recibida!</h2>
+        <p>Hola, <b th:text="${nombreValorado}">Conductor</b>:</p>
+        <p>El pasajero <b th:text="${nombreAutor}">Pasajero</b> ha dejado una opinión sobre el viaje que realizasteis juntos:</p>
+        
+        <div class="info-box">
+            <p style="margin: 0;"><b>Puntuación:</b> <span class="stars" th:text="${puntuacion} + ' / 5 ★'">5 / 5 ★</span></p>
+            <p style="margin: 10px 0 0 0;"><b>Comentario:</b></p>
+            <p style="margin: 5px 0 0 0; font-style: italic; color: #555555;" th:text="'&quot;' + ${comentario} + '&quot;'">"Excelente viaje"</p>
+        </div>
+
+        <p>Puedes consultar tus opiniones y tu nota media acumulada en tu perfil de CompiCar.</p>
+        
+        <div class="footer">
+            Este es un mensaje automático de CompiCar. Por favor, no respondas a este correo.
+        </div>
+    </div>
+</body>
+</html>
