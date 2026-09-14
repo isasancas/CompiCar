@@ -58,6 +58,19 @@ class CalculoPrecioIATest {
     }
 
     @Test
+    void pedirEstimacionJson_respuestaEnBloqueMarkdown_devuelveJsonLimpio() throws Exception {
+        server = levantarServidor(200,
+            "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"```json\\n{\\\"ciudades\\\":[]}\\n```\"}]}}]}");
+
+        CalculoPrecioIA sut = new CalculoPrecioIA();
+        ReflectionTestUtils.setField(sut, "apiKey", "abc");
+        ReflectionTestUtils.setField(sut, "model", "test-model");
+        ReflectionTestUtils.setField(sut, "endpoint", "http://localhost:" + server.getAddress().getPort());
+
+        assertEquals("{\"ciudades\":[]}", sut.pedirEstimacionJson("prompt"));
+    }
+
+    @Test
     void pedirEstimacionJson_httpError_lanzaBadGateway() throws Exception {
         server = levantarServidor(500, "{\"error\":\"boom\"}");
 

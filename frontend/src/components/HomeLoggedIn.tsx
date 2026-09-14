@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildApiUrl } from '../apiConfig';
+import EstadisticasPortada from './EstadisticasPortada';
 
 interface PerfilData {
   id?: number;
@@ -139,7 +140,8 @@ const HomeLoggedIn: React.FC = () => {
   const nombreMostrado = perfil?.nombre?.trim() || 'usuario';
 
   return (
-    <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
+    <>
+      <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Hola, {nombreMostrado}</h1>
 
@@ -303,7 +305,9 @@ const HomeLoggedIn: React.FC = () => {
 
         </div>
       </div>
-    </section>
+      </section>
+      <EstadisticasPortada />
+    </>
   );
 };
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import EstadisticasPortada from './EstadisticasPortada';
 
 const HeroCarpooling: React.FC = () => {
   const navigate = useNavigate();
@@ -19,8 +20,9 @@ const HeroCarpooling: React.FC = () => {
   };
 
   return (
-    <header className="bg-white px-6 md:px-12 py-12 md:py-24 overflow-hidden">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
+    <>
+      <header className="bg-white px-6 md:px-12 py-12 md:py-24 overflow-hidden">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
         <div className="w-full md:w-[55%] shrink-0">
           <div className="flex items-center gap-2 mb-6 bg-green-50 w-fit px-3.5 py-1.5 rounded-full border border-green-100">
             <span className="h-2.5 w-2.5 rounded-full bg-[#00BF63]"></span>
@@ -100,8 +102,10 @@ const HeroCarpooling: React.FC = () => {
             className="rounded-[3rem] shadow-2xl w-full h-auto object-cover max-w-[500px] lg:max-w-none"
           />
         </div>
-      </div>
-    </header>
+        </div>
+      </header>
+      <EstadisticasPortada />
+    </>
   );
 };
 
