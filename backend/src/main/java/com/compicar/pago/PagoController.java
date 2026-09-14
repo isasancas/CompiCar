@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.compicar.persona.Persona;
 import com.compicar.persona.PersonaRepository;
-import com.compicar.reserva.ReservaRepository;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -26,13 +25,11 @@ public class PagoController {
 
     private final PagoService pagoService;
     private final PersonaRepository personaRepository;
-    private final ReservaRepository reservaRepository;
 
     @Autowired
-    public PagoController(PagoService pagoService, PersonaRepository personaRepository, ReservaRepository reservaRepository) {
+    public PagoController(PagoService pagoService, PersonaRepository personaRepository) {
         this.pagoService = pagoService;
         this.personaRepository = personaRepository;
-        this.reservaRepository = reservaRepository;
     }
 
     @PutMapping("/completar")

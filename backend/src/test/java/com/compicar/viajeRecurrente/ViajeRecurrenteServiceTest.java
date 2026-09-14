@@ -2,6 +2,7 @@ package com.compicar.viajeRecurrente;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.pago.EstadoPago;
@@ -56,6 +58,8 @@ class ViajeRecurrenteServiceTest {
     private NotificacionRepository notificacionRepository;
     @Mock
     private StripeService stripeService;
+    @Mock
+    private CorreoService correoService;
 
     @InjectMocks
     private ViajeRecurrenteServiceImpl viajeRecurrenteService;
@@ -369,6 +373,9 @@ class ViajeRecurrenteServiceTest {
         verify(stripeService).confirmarCaptura("pi_123");
         verify(pagoRepository).save(pago);
         verify(notificacionRepository).save(any(Notificacion.class));
+        verify(correoService).sendViajeRecurrenteFinalizadoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
     }
 
     @Test
@@ -464,6 +471,9 @@ class ViajeRecurrenteServiceTest {
         assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
         verify(stripeService).liberarFondos("pi_123");
         verify(pagoRepository).save(pago);
+        verify(correoService).sendViajeRecurrenteCanceladoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -495,6 +505,9 @@ class ViajeRecurrenteServiceTest {
         assertNotNull(dto);
         verify(stripeService).reembolsarParcial(eq("pi_123"), eq(new BigDecimal("15.00")));
         verify(pagoRepository).save(pago);
+        verify(correoService).sendViajeRecurrenteCanceladoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -647,6 +660,9 @@ class ViajeRecurrenteServiceTest {
         assertEquals(EstadoViaje.CANCELADO.toString(), dto.getEstado());
         verify(stripeService).liberarFondos("pi_456");
         verify(personaRepository).save(conductor);
+        verify(correoService).sendIncomparecenciaConductorRecurrentePasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
     }
 
     @Test
@@ -696,6 +712,9 @@ class ViajeRecurrenteServiceTest {
         assertEquals(new BigDecimal("20.00"), dto.getPrecio());
         assertEquals(4, dto.getPlazasDisponibles());
         verify(notificacionRepository).save(any(Notificacion.class));
+        verify(correoService).sendViajeRecurrenteModificadoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), any(BigDecimal.class)
+        );
     }
 
     @Test

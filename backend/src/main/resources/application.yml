@@ -28,3 +28,7 @@ gemini:
 pricing:
   fallback:
     fuel-price-eur-per-liter: 1.65
+
+contaminacion:
+  aire:
+    cache-file: data/contaminacion-aire.json
