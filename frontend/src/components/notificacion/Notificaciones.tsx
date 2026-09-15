@@ -6,6 +6,7 @@ const Notificaciones: React.FC = () => {
   const navigate = useNavigate();
   const [reservas, setReservas] = useState<any[]>([]);
   const [avisos, setAvisos] = useState<any[]>([]);
+  const [resolviendoParada, setResolviendoParada] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem('token');
 
@@ -54,6 +55,22 @@ const Notificaciones: React.FC = () => {
     }
   };
 
+  const resolverSolicitudParada = async (id: number, accion: 'aceptar' | 'rechazar') => {
+    setResolviendoParada(id);
+    try {
+      const response = await fetch(buildApiUrl(`/api/paradas/${id}/${accion}-solicitud-parada`), {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('No se pudo resolver la solicitud');
+      setAvisos(prev => prev.map(aviso => aviso.id === id ? { ...aviso, tipo: accion === 'aceptar' ? 'SOLICITUD_NUEVA_PARADA_ACEPTADA' : 'SOLICITUD_NUEVA_PARADA_RECHAZADA', leida: true } : aviso));
+    } catch (error) {
+      console.error('Error resolviendo solicitud de parada', error);
+    } finally {
+      setResolviendoParada(null);
+    }
+  };
+
   const formatFecha = (fecha: string) => {
     if (!fecha) return '';
     return new Date(fecha).toLocaleString('es-ES', {
@@ -63,6 +80,15 @@ const Notificaciones: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const detalleSolicitudParada = (mensaje: string) => {
+    try {
+      const solicitud = JSON.parse(mensaje) as { localizacion?: string; fechaHora?: string };
+      return `El pasajero solicita añadir una parada en ${solicitud.localizacion || 'una ubicación indicada'}.${solicitud.fechaHora ? ` Hora prevista: ${formatFecha(solicitud.fechaHora)}.` : ''}`;
+    } catch {
+      return mensaje;
+    }
   };
 
   // Filtrar notificaciones con menos de 7 días de antigüedad
@@ -161,11 +187,33 @@ const Notificaciones: React.FC = () => {
                           <span className="font-bold">
                             {aviso.tipo === 'VIAJE_CANCELADO' ? '⚠️ Viaje cancelado: ' : 'ℹ️ '}
                           </span>
-                          {aviso.mensaje}
+                          {aviso.tipo === 'SOLICITUD_NUEVA_PARADA'
+                            ? detalleSolicitudParada(aviso.mensaje)
+                            : aviso.mensaje}
                         </p>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
                           {new Date(aviso.fechaCreacion).toLocaleDateString()}
                         </p>
+                        {aviso.tipo === 'SOLICITUD_NUEVA_PARADA' && (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => resolverSolicitudParada(aviso.id, 'aceptar')}
+                              disabled={resolviendoParada === aviso.id}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              Aceptar parada
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => resolverSolicitudParada(aviso.id, 'rechazar')}
+                              disabled={resolviendoParada === aviso.id}
+                              className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Rechazar parada
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -1112,7 +1112,9 @@ public class ViajeServiceImpl implements ViajeService {
                 parada.getId(),
                 parada.getLocalizacion(),
                 parada.getTipo().toString(),
-                parada.getOrden()
+                parada.getOrden(),
+                parada.getLatitud(),
+                parada.getLongitud()
             ))
             .toList();
 
@@ -1180,7 +1182,9 @@ public class ViajeServiceImpl implements ViajeService {
                     parada.getId(),
                     parada.getLocalizacion(),
                     parada.getTipo().toString(),
-                    parada.getOrden()
+                    parada.getOrden(),
+                    parada.getLatitud(),
+                    parada.getLongitud()
                 ))
                 .toList()
             : List.of();

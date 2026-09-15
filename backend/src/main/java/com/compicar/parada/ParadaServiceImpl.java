@@ -1,8 +1,10 @@
 package com.compicar.parada;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -89,7 +91,7 @@ public class ParadaServiceImpl implements ParadaService {
     }
 
     @Override
-    public Notificacion solicitarNuevaParada(String pasajeroEmail, SolicitudNuevaParadaRequest request) {
+    public List<Notificacion> solicitarNuevaParada(String pasajeroEmail, SolicitudNuevaParadaRequest request) {
         if (request == null || request.reservaId() == null || request.localizacion() == null
                 || request.localizacion().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -109,17 +111,104 @@ public class ParadaServiceImpl implements ParadaService {
         if (viaje == null && recurrente == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La reserva no esta asociada a un viaje");
         }
-        if (request.todaRecurrencia() && recurrente == null) {
+        Viaje viajePadre = recurrente != null ? recurrente.getViajePadre() : viaje;
+        boolean tieneOcurrenciasRecurrentes = viajePadre != null
+            && !viajeRecurrenteRepository.findByViajePadreId(viajePadre.getId()).isEmpty();
+        if (request.todaRecurrencia() && !tieneOcurrenciasRecurrentes) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Toda la recurrencia solo esta disponible para viajes recurrentes");
         }
 
-        LocalDateTime fechaHora = request.fechaHora() != null
-            ? request.fechaHora() : viaje != null ? viaje.getFechaHoraSalida() : recurrente.getFechaHoraSalida();
         Persona conductor = viaje != null ? viaje.getPersona() : recurrente.getPersona();
-        String mensaje = crearMensaje(request, reserva.getId(), fechaHora);
-        return notificacionRepository.save(new Notificacion(
-            mensaje, conductor, TipoNotificacion.SOLICITUD_NUEVA_PARADA));
+        List<Reserva> reservasObjetivo = request.todaRecurrencia()
+            ? new ArrayList<>(reservaRepository.findReservasConfirmadasDeRecurrencia(
+                viajePadre.getId(), pasajero.getId(), RESERVAS_CONFIRMADAS))
+            : List.of(reserva);
+
+        if (request.todaRecurrencia()) {
+            Reserva reservaPadre = reserva.getViaje() != null
+                ? reserva
+                : reservaRepository.findByViajeIdAndPersonaIdAndEstadoNot(
+                    viajePadre.getId(), pasajero.getId(), EstadoReserva.CANCELADA).orElse(null);
+
+            if (reservaPadre != null && RESERVAS_CONFIRMADAS.contains(reservaPadre.getEstado())
+                    && reservasObjetivo.stream().noneMatch(item -> item.getId().equals(reservaPadre.getId()))) {
+                reservasObjetivo.add(0, reservaPadre);
+            }
+        }
+
+        if (reservasObjetivo.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "No hay reservas confirmadas para aplicar la solicitud");
+        }
+
+        if (reservasObjetivo.stream().anyMatch(this::tieneSolicitudPendiente)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Ya tienes una solicitud de parada pendiente para uno de los viajes seleccionados");
+        }
+
+        List<Notificacion> solicitudes = reservasObjetivo.stream()
+            .map(reservaObjetivo -> {
+                Viaje viajeObjetivo = reservaObjetivo.getViaje();
+                ViajeRecurrente recurrenteObjetivo = reservaObjetivo.getViajeRecurrente();
+                LocalDateTime fechaHora = request.fechaHora() != null
+                    ? request.fechaHora()
+                    : viajeObjetivo != null ? viajeObjetivo.getFechaHoraSalida() : recurrenteObjetivo.getFechaHoraSalida();
+                String mensaje = crearMensaje(request, reservaObjetivo.getId(), fechaHora, false);
+                return new Notificacion(mensaje, conductor, TipoNotificacion.SOLICITUD_NUEVA_PARADA);
+            })
+            .toList();
+
+        return notificacionRepository.saveAll(solicitudes);
+    }
+
+    @Override
+    public boolean tieneSolicitudNuevaParadaPendiente(String pasajeroEmail, Long reservaId) {
+        Reserva reserva = reservaRepository.findById(reservaId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reserva no encontrada"));
+        Persona pasajero = buscarPersona(pasajeroEmail);
+        if (reserva.getPersona() == null || !reserva.getPersona().getId().equals(pasajero.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La reserva no pertenece al pasajero");
+        }
+        return tieneSolicitudPendiente(reserva);
+    }
+
+    private boolean tieneSolicitudPendiente(Reserva reserva) {
+        Persona conductor = reserva.getViaje() != null
+            ? reserva.getViaje().getPersona()
+            : reserva.getViajeRecurrente().getPersona();
+        if (conductor == null || conductor.getEmail() == null) return false;
+
+        Long viajePadreId = obtenerViajePadreId(reserva);
+
+        return notificacionRepository.findByReceptorEmailAndTipo(
+                conductor.getEmail(), TipoNotificacion.SOLICITUD_NUEVA_PARADA).stream()
+            .map(Notificacion::getMensaje)
+            .map(this::leerMensajeSeguro)
+            .filter(datos -> datos != null)
+            .anyMatch(datos -> datos.reservaId().equals(reserva.getId())
+                || esSolicitudDeLaMismaRecurrencia(datos.reservaId(), reserva, viajePadreId));
+    }
+
+    private boolean esSolicitudDeLaMismaRecurrencia(Long reservaId, Reserva reserva, Long viajePadreId) {
+        if (viajePadreId == null) return false;
+        return reservaRepository.findById(reservaId)
+            .map(otraReserva -> viajePadreId.equals(obtenerViajePadreId(otraReserva))
+                && otraReserva.getPersona() != null
+                && reserva.getPersona() != null
+                && reserva.getPersona().getId().equals(otraReserva.getPersona().getId()))
+            .orElse(false);
+    }
+
+    private Long obtenerViajePadreId(Reserva reserva) {
+        if (reserva.getViajeRecurrente() != null && reserva.getViajeRecurrente().getViajePadre() != null) {
+            return reserva.getViajeRecurrente().getViajePadre().getId();
+        }
+        if (reserva.getViaje() != null
+            && !viajeRecurrenteRepository.findByViajePadreId(reserva.getViaje().getId()).isEmpty()) {
+            return reserva.getViaje().getId();
+        }
+        return null;
     }
 
     @Override
@@ -129,13 +218,7 @@ public class ParadaServiceImpl implements ParadaService {
         validarConductor(reserva, buscarPersona(conductorEmail));
         DatosParada datos = leerMensaje(solicitud.getMensaje());
 
-        if (datos.todaRecurrencia && reserva.getViajeRecurrente() != null) {
-            reservaRepository.findReservasConfirmadasDeRecurrencia(
-                reserva.getViajeRecurrente().getViajePadre().getId(), reserva.getPersona().getId(), RESERVAS_CONFIRMADAS)
-                .forEach(r -> anadirParada(r, datos));
-        } else {
-            anadirParada(reserva, datos);
-        }
+        anadirParada(reserva, datos);
 
         solicitud.setTipo(TipoNotificacion.SOLICITUD_NUEVA_PARADA_ACEPTADA);
         solicitud.setLeida(true);
@@ -163,11 +246,43 @@ public class ParadaServiceImpl implements ParadaService {
     private void anadirParada(Reserva reserva, DatosParada datos) {
         if (reserva.getViaje() != null) {
             insertarParada(reserva.getViaje().getParadas(), datos, reserva.getViaje().getFechaHoraSalida(), reserva.getViaje(), null);
+            recalcularKilometros(reserva.getViaje());
             viajeRepository.save(reserva.getViaje());
         } else if (reserva.getViajeRecurrente() != null) {
             insertarParada(reserva.getViajeRecurrente().getParadas(), datos, reserva.getViajeRecurrente().getFechaHoraSalida(), null, reserva.getViajeRecurrente());
+            recalcularKilometros(reserva.getViajeRecurrente());
             viajeRecurrenteRepository.save(reserva.getViajeRecurrente());
         }
+    }
+
+    private void recalcularKilometros(com.compicar.viajeBase.ViajeBase viaje) {
+        List<Parada> paradas = viaje instanceof Viaje viajeNormal
+            ? viajeNormal.getParadas()
+            : ((ViajeRecurrente) viaje).getParadas();
+
+        List<Parada> paradasConCoordenadas = paradas.stream()
+            .filter(parada -> parada.getLatitud() != null && parada.getLongitud() != null)
+            .sorted(Comparator.comparing(Parada::getOrden))
+            .toList();
+
+        if (paradasConCoordenadas.size() < 2) return;
+
+        double kilometros = 0;
+        for (int i = 1; i < paradasConCoordenadas.size(); i++) {
+            kilometros += distanciaEnKilometros(paradasConCoordenadas.get(i - 1), paradasConCoordenadas.get(i));
+        }
+        viaje.setKilometrosRecorridos((int) Math.round(kilometros));
+    }
+
+    private double distanciaEnKilometros(Parada origen, Parada destino) {
+        double latitudOrigen = Math.toRadians(origen.getLatitud().doubleValue());
+        double latitudDestino = Math.toRadians(destino.getLatitud().doubleValue());
+        double diferenciaLatitud = latitudDestino - latitudOrigen;
+        double diferenciaLongitud = Math.toRadians(destino.getLongitud().doubleValue() - origen.getLongitud().doubleValue());
+        double a = Math.sin(diferenciaLatitud / 2) * Math.sin(diferenciaLatitud / 2)
+            + Math.cos(latitudOrigen) * Math.cos(latitudDestino)
+            * Math.sin(diferenciaLongitud / 2) * Math.sin(diferenciaLongitud / 2);
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     private void insertarParada(List<Parada> paradas, DatosParada datos, LocalDateTime fecha,
@@ -190,10 +305,11 @@ public class ParadaServiceImpl implements ParadaService {
         paradaRepository.save(parada);
     }
 
-    private String crearMensaje(SolicitudNuevaParadaRequest request, Long reservaId, LocalDateTime fechaHora) {
+        private String crearMensaje(SolicitudNuevaParadaRequest request, Long reservaId,
+            LocalDateTime fechaHora, boolean todaRecurrencia) {
         try {
             return objectMapper.writeValueAsString(new DatosParada(
-                reservaId, request.localizacion().trim(), fechaHora, request.latitud(), request.longitud(), request.todaRecurrencia()));
+                reservaId, request.localizacion().trim(), fechaHora, request.latitud(), request.longitud(), todaRecurrencia));
         } catch (JsonProcessingException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo crear la solicitud");
         }
@@ -207,6 +323,14 @@ public class ParadaServiceImpl implements ParadaService {
                 decimal(json, "latitud"), decimal(json, "longitud"), json.path("todaRecurrencia").asBoolean(false));
         } catch (Exception exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La solicitud de parada no tiene un mensaje valido");
+        }
+    }
+
+    private DatosParada leerMensajeSeguro(String mensaje) {
+        try {
+            return leerMensaje(mensaje);
+        } catch (ResponseStatusException exception) {
+            return null;
         }
     }
 

@@ -13,7 +13,9 @@ public interface ParadaService {
 
     List<Parada> obtenerParadasPorViaje(Viaje viaje);
 
-    Notificacion solicitarNuevaParada(String pasajeroEmail, SolicitudNuevaParadaRequest request);
+    List<Notificacion> solicitarNuevaParada(String pasajeroEmail, SolicitudNuevaParadaRequest request);
+
+    boolean tieneSolicitudNuevaParadaPendiente(String pasajeroEmail, Long reservaId);
 
     Notificacion aceptarSolicitudNuevaParada(String conductorEmail, Long notificacionId);
 

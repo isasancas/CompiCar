@@ -5,5 +5,6 @@ import java.util.List;
 
 public interface NotificacionRepository extends JpaRepository<Notificacion, Long> {
     List<Notificacion> findByReceptorEmailOrderByFechaCreacionDesc(String email);
+    List<Notificacion> findByReceptorEmailAndTipo(String email, TipoNotificacion tipo);
     long countByReceptorEmailAndLeidaFalse(String email);
 }

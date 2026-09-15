@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
 
@@ -48,9 +49,14 @@ public class ParadaController {
     }
 
     @PostMapping("/solicitud-nueva-parada")
-    public Notificacion solicitarNuevaParada(
+    public List<Notificacion> solicitarNuevaParada(
             @RequestBody SolicitudNuevaParadaRequest request, Principal principal) {
         return paradaService.solicitarNuevaParada(principal.getName(), request);
+    }
+
+    @GetMapping("/solicitud-pendiente")
+    public boolean solicitudNuevaParadaPendiente(@RequestParam Long reservaId, Principal principal) {
+        return paradaService.tieneSolicitudNuevaParadaPendiente(principal.getName(), reservaId);
     }
 
     @PutMapping("/{id}/aceptar-solicitud-parada")

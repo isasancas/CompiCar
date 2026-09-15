@@ -1,10 +1,14 @@
 package com.compicar.parada.dto;
 
+import java.math.BigDecimal;
+
 public class ParadaDTO {
     private Long id;
     private String localizacion;
     private String tipo;
     private Integer orden;
+    private BigDecimal latitud;
+    private BigDecimal longitud;
 
     public ParadaDTO() {
     }
@@ -14,6 +18,13 @@ public class ParadaDTO {
         this.localizacion = localizacion;
         this.tipo = tipo;
         this.orden = orden;
+    }
+
+    public ParadaDTO(Long id, String localizacion, String tipo, Integer orden,
+            BigDecimal latitud, BigDecimal longitud) {
+        this(id, localizacion, tipo, orden);
+        this.latitud = latitud;
+        this.longitud = longitud;
     }
 
     // Getters and setters
@@ -47,5 +58,21 @@ public class ParadaDTO {
 
     public void setOrden(Integer orden) {
         this.orden = orden;
+    }
+
+    public BigDecimal getLatitud() {
+        return latitud;
+    }
+
+    public void setLatitud(BigDecimal latitud) {
+        this.latitud = latitud;
+    }
+
+    public BigDecimal getLongitud() {
+        return longitud;
+    }
+
+    public void setLongitud(BigDecimal longitud) {
+        this.longitud = longitud;
     }
 }
