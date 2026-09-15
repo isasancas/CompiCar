@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Set;
@@ -27,6 +28,7 @@ import com.compicar.viaje.Viaje;
 import com.compicar.viaje.ViajeRepository;
 import com.compicar.viajeRecurrente.ViajeRecurrente;
 import com.compicar.viajeRecurrente.ViajeRecurrenteRepository;
+import com.compicar.correo.CorreoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -46,17 +48,19 @@ public class ParadaServiceImpl implements ParadaService {
     private final ReservaRepository reservaRepository;
     private final ViajeRecurrenteRepository viajeRecurrenteRepository;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    private final CorreoService correoService;
 
     @Autowired
     public ParadaServiceImpl(ParadaRepository paradaRepository, ViajeRepository viajeRepository,
             NotificacionRepository notificacionRepository, PersonaRepository personaRepository,
-            ReservaRepository reservaRepository, ViajeRecurrenteRepository viajeRecurrenteRepository) {
+            CorreoService correoService, ReservaRepository reservaRepository, ViajeRecurrenteRepository viajeRecurrenteRepository) {
         this.paradaRepository = paradaRepository;
         this.viajeRepository = viajeRepository;
         this.notificacionRepository = notificacionRepository;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
         this.viajeRecurrenteRepository = viajeRecurrenteRepository;
+        this.correoService = correoService;
     }
 
     @Override
@@ -158,6 +162,53 @@ public class ParadaServiceImpl implements ParadaService {
                 return new Notificacion(mensaje, conductor, TipoNotificacion.SOLICITUD_NUEVA_PARADA);
             })
             .toList();
+        
+        // 1. Extraer origen y destino desde las paradas de la reserva
+        String origen = "Origen";
+        if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+            String origenRaw = reserva.getParadaSubida().getLocalizacion();
+            origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+        }
+
+        String destino = "Destino";
+        if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+            String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+            destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+        }
+
+        // 2. Extraer localización desde el DTO 'request'
+        String ubicacionParada = "Ubicación no especificada";
+        if (request.localizacion() != null) {
+            String paradaRaw = request.localizacion();
+            ubicacionParada = paradaRaw.contains(",") ? paradaRaw.split(",")[0].trim() : paradaRaw.trim();
+        }
+
+        // 3. Obtener fecha y hora según tipo de viaje
+        LocalDateTime fechaHoraSalida = null;
+        if (reserva.getViaje() != null) {
+            fechaHoraSalida = reserva.getViaje().getFechaHoraSalida();
+        } else if (reserva.getViajeRecurrente() != null) {
+            fechaHoraSalida = reserva.getViajeRecurrente().getFechaHoraSalida();
+        }
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "Fecha no especificada";
+
+        // 4. Envío de correo
+        if (conductor != null && conductor.getEmail() != null) {
+            String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "Conductor";
+            String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Un pasajero";
+
+            correoService.sendSolicitudNuevaParadaConductor(
+                conductor.getEmail(),
+                nombreConductor,
+                nombrePasajero,
+                origen,
+                destino,
+                ubicacionParada,
+                fechaFormateada
+            );
+        }
 
         return notificacionRepository.saveAll(solicitudes);
     }
@@ -177,7 +228,8 @@ public class ParadaServiceImpl implements ParadaService {
     public Notificacion aceptarSolicitudNuevaParada(String conductorEmail, Long notificacionId) {
         Notificacion solicitud = obtenerSolicitudPendiente(notificacionId);
         Reserva reserva = obtenerReserva(solicitud);
-        validarConductor(reserva, buscarPersona(conductorEmail));
+        Persona conductor = buscarPersona(conductorEmail);
+        validarConductor(reserva, conductor);
         DatosParada datos = leerMensaje(solicitud.getMensaje());
 
         anadirParada(reserva, datos);
@@ -187,6 +239,52 @@ public class ParadaServiceImpl implements ParadaService {
         notificacionRepository.save(solicitud);
         notificarPasajero(reserva.getPersona(), TipoNotificacion.SOLICITUD_NUEVA_PARADA_ACEPTADA,
             "El conductor ha aceptado la nueva parada " + datos.localizacion + ".");
+
+        // Envío de correo al pasajero
+        Persona pasajero = reserva.getPersona();
+        if (pasajero != null && pasajero.getEmail() != null) {
+            String origen = "Origen";
+            if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String ubicacionParada = "Ubicación no especificada";
+            if (datos != null && datos.localizacion != null) {
+                String paradaRaw = datos.localizacion;
+                ubicacionParada = paradaRaw.contains(",") ? paradaRaw.split(",")[0].trim() : paradaRaw.trim();
+            }
+
+            LocalDateTime fechaHoraSalida = null;
+            if (reserva.getViaje() != null) {
+                fechaHoraSalida = reserva.getViaje().getFechaHoraSalida();
+            } else if (reserva.getViajeRecurrente() != null) {
+                fechaHoraSalida = reserva.getViajeRecurrente().getFechaHoraSalida();
+            }
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+            String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "Fecha no especificada";
+
+            String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+            String nombreConductor = (conductor != null && conductor.getNombre() != null) ? conductor.getNombre() : "El conductor";
+
+            correoService.sendSolicitudParadaAceptadaPasajero(
+                pasajero.getEmail(),
+                nombrePasajero,
+                nombreConductor,
+                origen,
+                destino,
+                ubicacionParada,
+                fechaFormateada
+            );
+        }
+
         return solicitud;
     }
 
@@ -194,7 +292,8 @@ public class ParadaServiceImpl implements ParadaService {
     public Notificacion rechazarSolicitudNuevaParada(String conductorEmail, Long notificacionId) {
         Notificacion solicitud = obtenerSolicitudPendiente(notificacionId);
         Reserva reserva = obtenerReserva(solicitud);
-        validarConductor(reserva, buscarPersona(conductorEmail));
+        Persona conductor = buscarPersona(conductorEmail);
+        validarConductor(reserva, conductor);
         DatosParada datos = leerMensaje(solicitud.getMensaje());
 
         solicitud.setTipo(TipoNotificacion.SOLICITUD_NUEVA_PARADA_RECHAZADA);
@@ -202,6 +301,52 @@ public class ParadaServiceImpl implements ParadaService {
         notificacionRepository.save(solicitud);
         notificarPasajero(reserva.getPersona(), TipoNotificacion.SOLICITUD_NUEVA_PARADA_RECHAZADA,
             "El conductor ha rechazado la nueva parada " + datos.localizacion + ".");
+
+        // Envío de correo al pasajero
+        Persona pasajero = reserva.getPersona();
+        if (pasajero != null && pasajero.getEmail() != null) {
+            String origen = "Origen";
+            if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String ubicacionParada = "Ubicación no especificada";
+            if (datos != null && datos.localizacion != null) {
+                String paradaRaw = datos.localizacion;
+                ubicacionParada = paradaRaw.contains(",") ? paradaRaw.split(",")[0].trim() : paradaRaw.trim();
+            }
+
+            LocalDateTime fechaHoraSalida = null;
+            if (reserva.getViaje() != null) {
+                fechaHoraSalida = reserva.getViaje().getFechaHoraSalida();
+            } else if (reserva.getViajeRecurrente() != null) {
+                fechaHoraSalida = reserva.getViajeRecurrente().getFechaHoraSalida();
+            }
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+            String fechaFormateada = fechaHoraSalida != null ? fechaHoraSalida.format(formatter) : "Fecha no especificada";
+
+            String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+            String nombreConductor = (conductor != null && conductor.getNombre() != null) ? conductor.getNombre() : "El conductor";
+
+            correoService.sendSolicitudParadaRechazadaPasajero(
+                pasajero.getEmail(),
+                nombrePasajero,
+                nombreConductor,
+                origen,
+                destino,
+                ubicacionParada,
+                fechaFormateada
+            );
+        }
+
         return solicitud;
     }
 
