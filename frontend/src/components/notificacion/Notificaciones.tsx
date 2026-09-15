@@ -13,7 +13,6 @@ const Notificaciones: React.FC = () => {
   const fetchTodo = async () => {
     try {
       setLoading(true);
-      // Lanzamos ambas peticiones en paralelo
       const [resReservas, resAvisos] = await Promise.all([
         fetch(buildApiUrl('/api/reservas/pendientes-conductor'), {
           headers: { Authorization: `Bearer ${token}` }
@@ -71,9 +70,28 @@ const Notificaciones: React.FC = () => {
     }
   };
 
-  const formatFecha = (fecha: string) => {
+  const formatFecha = (fecha: any) => {
     if (!fecha) return '';
-    return new Date(fecha).toLocaleString('es-ES', {
+    let dateObj: Date;
+
+    if (Array.isArray(fecha)) {
+      const [year, month, day, hour = 0, minute = 0] = fecha;
+      // Usamos Date.UTC para interpretar los datos recibidos como UTC
+      dateObj = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    } else if (typeof fecha === 'string') {
+      // Si el string no incluye 'Z' ni '+', asumimos que viene en UTC
+      const isoFecha = (fecha.includes('T') && !fecha.endsWith('Z') && !fecha.includes('+'))
+        ? `${fecha}Z`
+        : fecha;
+      dateObj = new Date(isoFecha);
+    } else {
+      dateObj = new Date(fecha);
+    }
+
+    if (isNaN(dateObj.getTime())) return '';
+
+    // toLocaleString convierte la hora UTC a la zona horaria local del navegador (ej. Europe/Madrid UTC+2)
+    return dateObj.toLocaleString('es-ES', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -82,13 +100,36 @@ const Notificaciones: React.FC = () => {
     });
   };
 
-  const detalleSolicitudParada = (mensaje: string) => {
+  const detalleSolicitudParada = (aviso: any) => {
     try {
-      const solicitud = JSON.parse(mensaje) as { localizacion?: string; fechaHora?: string };
-      return `El pasajero solicita añadir una parada en ${solicitud.localizacion || 'una ubicación indicada'}.${solicitud.fechaHora ? ` Hora prevista: ${formatFecha(solicitud.fechaHora)}.` : ''}`;
+      const mensaje = aviso.mensaje;
+      const solicitud = typeof mensaje === 'string' && mensaje.trim().startsWith('{')
+        ? JSON.parse(mensaje)
+        : mensaje;
+
+      if (typeof solicitud === 'object' && solicitud !== null && solicitud.localizacion) {
+        const loc = solicitud.localizacion;
+        const fecha = solicitud.fechaHora ? ` Hora prevista: ${formatFecha(solicitud.fechaHora)}.` : '';
+
+        if (aviso.tipo === 'SOLICITUD_NUEVA_PARADA_ACEPTADA') {
+          return `Solicitud de nueva parada aceptada en ${loc}.${fecha}`;
+        }
+        if (aviso.tipo === 'SOLICITUD_NUEVA_PARADA_RECHAZADA') {
+          return `Solicitud de nueva parada rechazada en ${loc}.${fecha}`;
+        }
+        return `El pasajero solicita añadir una parada en ${loc}.${fecha}`;
+      }
     } catch {
-      return mensaje;
+      // Si falla la deserialización se devuelve el mensaje tal cual
     }
+    return aviso.mensaje;
+  };
+
+  const getIconoAviso = (tipo: string) => {
+    if (tipo === 'VIAJE_CANCELADO' || tipo === 'RESERVA_CANCELADA') return '⚠️ Viaje cancelado: ';
+    if (tipo === 'SOLICITUD_NUEVA_PARADA_ACEPTADA') return '✅ ';
+    if (tipo === 'SOLICITUD_NUEVA_PARADA_RECHAZADA') return '❌ ';
+    return 'ℹ️ ';
   };
 
   // Filtrar notificaciones con menos de 7 días de antigüedad
@@ -118,7 +159,6 @@ const Notificaciones: React.FC = () => {
               ) : (
                 <div className="space-y-4">
                   {reservas.map((reserva) => {
-                    // Comprobamos todas las posibles rutas donde el backend podría enviar la fecha del viaje
                     const fechaViaje = 
                       reserva.viaje?.fechaHoraSalida || 
                       reserva.viajeRecurrente?.fechaHoraSalida || 
@@ -134,7 +174,6 @@ const Notificaciones: React.FC = () => {
                             </div>
                             <p className="text-sm text-slate-600 italic">Reserva para {reserva.cantidadPlazas} plazas</p>
                             
-                            {/* Fecha del viaje correspondiente (ya sea normal o recurrente) */}
                             {fechaViaje && (
                               <p className="text-xs font-semibold text-green-700 mt-1.5 flex items-center gap-1">
                                 📅 Fecha del viaje: {formatFecha(fechaViaje)}
@@ -185,14 +224,14 @@ const Notificaciones: React.FC = () => {
                       <div className="flex-1">
                         <p className={`text-sm ${aviso.tipo?.includes('CANCELADA') ? 'text-red-900' : 'text-slate-700'}`}>
                           <span className="font-bold">
-                            {aviso.tipo === 'VIAJE_CANCELADO' ? '⚠️ Viaje cancelado: ' : 'ℹ️ '}
+                            {getIconoAviso(aviso.tipo)}
                           </span>
-                          {aviso.tipo === 'SOLICITUD_NUEVA_PARADA'
-                            ? detalleSolicitudParada(aviso.mensaje)
+                          {aviso.tipo?.includes('SOLICITUD_NUEVA_PARADA') || (typeof aviso.mensaje === 'string' && aviso.mensaje.trim().startsWith('{'))
+                            ? detalleSolicitudParada(aviso)
                             : aviso.mensaje}
                         </p>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
-                          {new Date(aviso.fechaCreacion).toLocaleDateString()}
+                          {formatFecha(aviso.fechaCreacion)}
                         </p>
                         {aviso.tipo === 'SOLICITUD_NUEVA_PARADA' && (
                           <div className="mt-3 flex gap-2">
