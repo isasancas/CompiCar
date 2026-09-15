@@ -29,9 +29,6 @@ public class CorreoService {
         this.templateEngine = templateEngine;
     }
 
-    // =========================================================================
-    // MÉTODO PRIVADO AUXILIAR (Centraliza MimeMessage, Logo y Envío)
-    // =========================================================================
     private void enviarCorreoHtml(String toEmail, String asunto, String nombrePlantilla, Context context) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -52,10 +49,6 @@ public class CorreoService {
             System.err.println("Error enviando correo [" + nombrePlantilla + "] a " + toEmail + ": " + e.getMessage());
         }
     }
-
-    // =========================================================================
-    // MÉTODOS PÚBLICOS ASÍNCRONOS
-    // =========================================================================
 
     @Async
     public void sendCheckInCode(String toEmail, String nombreUsuario, String origen, String destino, String fechaHora, String codigoCheckIn) {
@@ -217,5 +210,47 @@ public class CorreoService {
         context.setVariable("fechaHora", fechaHora);
 
         enviarCorreoHtml(toEmail, "CompiCar - ¡Fondos liberados por tu viaje!", "pago-liberado-conductor", context);
+    }
+
+    @Async
+    public void sendSolicitudNuevaParadaConductor(String toEmail, String nombreConductor, String nombrePasajero, 
+                                                 String origen, String destino, String ubicacionParada, String fechaHora) {
+        Context context = new Context();
+        context.setVariable("nombreConductor", nombreConductor);
+        context.setVariable("nombrePasajero", nombrePasajero);
+        context.setVariable("origen", origen);
+        context.setVariable("destino", destino);
+        context.setVariable("ubicacionParada", ubicacionParada);
+        context.setVariable("fechaHora", fechaHora);
+
+        enviarCorreoHtml(toEmail, "CompiCar - Solicitud de nueva parada en tu viaje", "solicitud-nueva-parada-conductor", context);
+    }
+
+    @Async
+    public void sendSolicitudParadaAceptadaPasajero(String toEmail, String nombrePasajero, String nombreConductor, 
+                                                   String origen, String destino, String ubicacionParada, String fechaHora) {
+        Context context = new Context();
+        context.setVariable("nombrePasajero", nombrePasajero);
+        context.setVariable("nombreConductor", nombreConductor);
+        context.setVariable("origen", origen);
+        context.setVariable("destino", destino);
+        context.setVariable("ubicacionParada", ubicacionParada);
+        context.setVariable("fechaHora", fechaHora);
+
+        enviarCorreoHtml(toEmail, "CompiCar - ¡Tu solicitud de nueva parada ha sido aceptada!", "solicitud-parada-aceptada-pasajero", context);
+    }
+
+    @Async
+    public void sendSolicitudParadaRechazadaPasajero(String toEmail, String nombrePasajero, String nombreConductor, 
+                                                    String origen, String destino, String ubicacionParada, String fechaHora) {
+        Context context = new Context();
+        context.setVariable("nombrePasajero", nombrePasajero);
+        context.setVariable("nombreConductor", nombreConductor);
+        context.setVariable("origen", origen);
+        context.setVariable("destino", destino);
+        context.setVariable("ubicacionParada", ubicacionParada);
+        context.setVariable("fechaHora", fechaHora);
+
+        enviarCorreoHtml(toEmail, "CompiCar - Tu solicitud de nueva parada ha sido rechazada", "solicitud-parada-rechazada-pasajero", context);
     }
 }
