@@ -20,5 +20,7 @@ public interface ParadaService {
     Notificacion aceptarSolicitudNuevaParada(String conductorEmail, Long notificacionId);
 
     Notificacion rechazarSolicitudNuevaParada(String conductorEmail, Long notificacionId);
+
+    List<Object[]> obtenerTop5Localizaciones();
 }
 

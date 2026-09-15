@@ -28,5 +28,6 @@ public interface ReservaService {
     void cancelarOcurrenciaPorConductor(Long viajeRecurrenteId, String conductorEmail) throws StripeException;
     ReservaCreadaResponse crearReservaLote(String usuarioEmail, Long viajeId, List<Long> viajeRecurrenteIds, 
                                        Integer plazasSolicitadas, Long paradaSubidaId, Long paradaBajadaId);
+    Double ratioExitoReservas(String usuarioEmail);
 
 }

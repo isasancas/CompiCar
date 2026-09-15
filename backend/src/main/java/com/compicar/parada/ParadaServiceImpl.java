@@ -172,6 +172,43 @@ public class ParadaServiceImpl implements ParadaService {
         }
         return tieneSolicitudPendiente(reserva);
     }
+    
+    @Override
+    public Notificacion aceptarSolicitudNuevaParada(String conductorEmail, Long notificacionId) {
+        Notificacion solicitud = obtenerSolicitudPendiente(notificacionId);
+        Reserva reserva = obtenerReserva(solicitud);
+        validarConductor(reserva, buscarPersona(conductorEmail));
+        DatosParada datos = leerMensaje(solicitud.getMensaje());
+
+        anadirParada(reserva, datos);
+
+        solicitud.setTipo(TipoNotificacion.SOLICITUD_NUEVA_PARADA_ACEPTADA);
+        solicitud.setLeida(true);
+        notificacionRepository.save(solicitud);
+        notificarPasajero(reserva.getPersona(), TipoNotificacion.SOLICITUD_NUEVA_PARADA_ACEPTADA,
+            "El conductor ha aceptado la nueva parada " + datos.localizacion + ".");
+        return solicitud;
+    }
+
+    @Override
+    public Notificacion rechazarSolicitudNuevaParada(String conductorEmail, Long notificacionId) {
+        Notificacion solicitud = obtenerSolicitudPendiente(notificacionId);
+        Reserva reserva = obtenerReserva(solicitud);
+        validarConductor(reserva, buscarPersona(conductorEmail));
+        DatosParada datos = leerMensaje(solicitud.getMensaje());
+
+        solicitud.setTipo(TipoNotificacion.SOLICITUD_NUEVA_PARADA_RECHAZADA);
+        solicitud.setLeida(true);
+        notificacionRepository.save(solicitud);
+        notificarPasajero(reserva.getPersona(), TipoNotificacion.SOLICITUD_NUEVA_PARADA_RECHAZADA,
+            "El conductor ha rechazado la nueva parada " + datos.localizacion + ".");
+        return solicitud;
+    }
+
+    @Override
+    public List<Object[]> obtenerTop5Localizaciones() {
+        return paradaRepository.findTop5Localizaciones();
+    }
 
     private boolean tieneSolicitudPendiente(Reserva reserva) {
         Persona conductor = reserva.getViaje() != null
@@ -209,38 +246,6 @@ public class ParadaServiceImpl implements ParadaService {
             return reserva.getViaje().getId();
         }
         return null;
-    }
-
-    @Override
-    public Notificacion aceptarSolicitudNuevaParada(String conductorEmail, Long notificacionId) {
-        Notificacion solicitud = obtenerSolicitudPendiente(notificacionId);
-        Reserva reserva = obtenerReserva(solicitud);
-        validarConductor(reserva, buscarPersona(conductorEmail));
-        DatosParada datos = leerMensaje(solicitud.getMensaje());
-
-        anadirParada(reserva, datos);
-
-        solicitud.setTipo(TipoNotificacion.SOLICITUD_NUEVA_PARADA_ACEPTADA);
-        solicitud.setLeida(true);
-        notificacionRepository.save(solicitud);
-        notificarPasajero(reserva.getPersona(), TipoNotificacion.SOLICITUD_NUEVA_PARADA_ACEPTADA,
-            "El conductor ha aceptado la nueva parada " + datos.localizacion + ".");
-        return solicitud;
-    }
-
-    @Override
-    public Notificacion rechazarSolicitudNuevaParada(String conductorEmail, Long notificacionId) {
-        Notificacion solicitud = obtenerSolicitudPendiente(notificacionId);
-        Reserva reserva = obtenerReserva(solicitud);
-        validarConductor(reserva, buscarPersona(conductorEmail));
-        DatosParada datos = leerMensaje(solicitud.getMensaje());
-
-        solicitud.setTipo(TipoNotificacion.SOLICITUD_NUEVA_PARADA_RECHAZADA);
-        solicitud.setLeida(true);
-        notificacionRepository.save(solicitud);
-        notificarPasajero(reserva.getPersona(), TipoNotificacion.SOLICITUD_NUEVA_PARADA_RECHAZADA,
-            "El conductor ha rechazado la nueva parada " + datos.localizacion + ".");
-        return solicitud;
     }
 
     private void anadirParada(Reserva reserva, DatosParada datos) {
@@ -305,8 +310,8 @@ public class ParadaServiceImpl implements ParadaService {
         paradaRepository.save(parada);
     }
 
-        private String crearMensaje(SolicitudNuevaParadaRequest request, Long reservaId,
-            LocalDateTime fechaHora, boolean todaRecurrencia) {
+    private String crearMensaje(SolicitudNuevaParadaRequest request, Long reservaId,
+        LocalDateTime fechaHora, boolean todaRecurrencia) {
         try {
             return objectMapper.writeValueAsString(new DatosParada(
                 reservaId, request.localizacion().trim(), fechaHora, request.latitud(), request.longitud(), todaRecurrencia));
@@ -377,5 +382,4 @@ public class ParadaServiceImpl implements ParadaService {
 
     private record DatosParada(Long reservaId, String localizacion, LocalDateTime fechaHora,
             BigDecimal latitud, BigDecimal longitud, boolean todaRecurrencia) { }
-    
 }

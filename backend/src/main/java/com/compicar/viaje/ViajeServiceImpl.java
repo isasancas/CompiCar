@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.compicar.config.SlugUtils;
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.notificacion.TipoNotificacion;
@@ -67,6 +68,7 @@ public class ViajeServiceImpl implements ViajeService {
     private final StripeService stripeService;
     private final ViajeRecurrenteService viajeRecurrenteService;
     private final ViajeRecurrenteRepository viajeRecurrenteRepository;
+    private final CorreoService correoService;
 
     @Value("${pricing.fallback.fuel-price-eur-per-liter:1.65}")
     private BigDecimal fallbackFuelPrice;
@@ -75,7 +77,8 @@ public class ViajeServiceImpl implements ViajeService {
             VehiculoRepository vehiculoRepository, CalculoPrecioIA calculoPrecioIA,
             ReservaRepository reservaRepository, PagoRepository pagoRepository, 
             NotificacionRepository notificacionRepository, StripeService stripeService,
-            ViajeRecurrenteService viajeRecurrenteService, ViajeRecurrenteRepository viajeRecurrenteRepository) {
+            ViajeRecurrenteService viajeRecurrenteService, ViajeRecurrenteRepository viajeRecurrenteRepository,
+            CorreoService correoService) {
         this.viajeRepository = viajeRepository;
         this.personaRepository = personaRepository;
         this.vehiculoRepository = vehiculoRepository;
@@ -86,6 +89,7 @@ public class ViajeServiceImpl implements ViajeService {
         this.stripeService = stripeService;
         this.viajeRecurrenteService = viajeRecurrenteService;
         this.viajeRecurrenteRepository = viajeRecurrenteRepository;
+        this.correoService = correoService;
     }
 
     public boolean tieneReservasActivas(Viaje viaje) {
@@ -293,7 +297,9 @@ public class ViajeServiceImpl implements ViajeService {
         return reservas != null && reservas.stream()
             .filter(reserva -> reserva.getPersona() != null
                     && personaId.equals(reserva.getPersona().getId()))
-            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.PRESENTE
+            .anyMatch(reserva -> reserva.getEstado() == EstadoReserva.PAGADA
+                || reserva.getEstado() == EstadoReserva.CONFIRMADA
+                || reserva.getEstado() == EstadoReserva.PRESENTE
                     || reserva.getEstado() == EstadoReserva.NO_PRESENTADO
                     || estaCanceladoDentroDeLas12Horas(
                         reserva.getFechaCancelacion(), fechaHoraSalida));
@@ -313,6 +319,12 @@ public class ViajeServiceImpl implements ViajeService {
     @Override
     @Transactional(readOnly = true)
     public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha) {
+        return buscarViajesPublicos(origen, destino, fecha, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha, String conductor) {
         LocalDateTime inicio = fecha != null ? fecha.atStartOfDay() : null;
         LocalDateTime fin = fecha != null ? fecha.plusDays(1).atStartOfDay() : null;
 
@@ -330,10 +342,12 @@ public class ViajeServiceImpl implements ViajeService {
 
         String origenNorm = normalizar(origen);
         String destinoNorm = normalizar(destino);
+        String conductorNorm = normalizar(conductor);
 
         // 3. Procesar y convertir viajes normales a DTO
         List<ViajeDTO> resultadosNormales = base.stream()
             .filter(v -> coincideEnParadas(v, origenNorm, destinoNorm))
+            .filter(v -> coincideConductor(v.getPersona(), conductorNorm))
             .map(this::convertirADTO) // Asegúrate de que esRecurrente sea false o null aquí
             .toList();
 
@@ -341,6 +355,7 @@ public class ViajeServiceImpl implements ViajeService {
         // (Asegúrate de marcar esRecurrente = true en tu conversor o método de mapeo)
         List<ViajeDTO> resultadosRecurrentes = baseRecurrentes.stream()
             .filter(vr -> coincideEnParadasRecurrente(vr, origenNorm, destinoNorm)) // O tu método de paradas adaptado
+            .filter(vr -> coincideConductor(vr.getPersona(), conductorNorm))
             .map(this::convertirRecurrenteADTO) 
             .toList();
 
@@ -441,16 +456,16 @@ public class ViajeServiceImpl implements ViajeService {
                 continue;
             }
 
-            // Obtener reservas activas del viaje recurrente (lógica similar a tu método cancelarViajeRecurrente)
+            // Obtener reservas activas del viaje recurrente
             List<Reserva> reservasActivasRecurrente = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
             if (!reservasActivasRecurrente.isEmpty()) {
                 penalizaConductor = true;
             }
 
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
             String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
                     ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
-                    : "";
+                    : "Fecha no especificada";
 
             // Procesar reembolsos y notificaciones de cada reserva recurrente
             for (Reserva reserva : reservasActivasRecurrente) {
@@ -493,10 +508,39 @@ public class ViajeServiceImpl implements ViajeService {
                     }
                 }
 
-                // Notificar al pasajero
+                // 1. Notificación en la aplicación
                 String msj = "El viaje recurrente del " + fechaSalida + " ha sido cancelado conjuntamente por el conductor.";
                 Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
                 notificacionRepository.save(noti);
+
+                // 2. Envío de correo electrónico al pasajero
+                Persona pasajero = reserva.getPersona();
+                if (pasajero != null && pasajero.getEmail() != null) {
+                    String origen = "Origen";
+                    if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                        String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                        origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                    }
+
+                    String destino = "Destino";
+                    if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                        String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                        destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                    }
+
+                    String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+                    String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+                    correoService.sendViajeRecurrenteCanceladoPasajero(
+                        pasajero.getEmail(),
+                        nombrePasajero,
+                        nombreConductor,
+                        origen,
+                        destino,
+                        fechaSalida,
+                        reserva.getCantidadPlazas()
+                    );
+                }
             }
 
             viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
@@ -628,20 +672,17 @@ public class ViajeServiceImpl implements ViajeService {
         }
 
         // 4. Actualización de Precio (Protección contra NULL)
-        // Solo actualizamos si el valor enviado no es nulo y es mayor que 0
         if (viajeEditado.getPrecio() != null && viajeEditado.getPrecio().compareTo(BigDecimal.ZERO) > 0) {
             viajeExistente.setPrecio(viajeEditado.getPrecio());
         }
 
         // 5. Lógica de Plazas Disponibles
         if (viajeEditado.getPlazasDisponibles() != null) {
-            // Contamos plazas ocupadas actualmente
             int plazasOcupadas = reservaRepository.findByViajeAndEstadoNot(viajeExistente, EstadoReserva.CANCELADA)
                     .stream()
                     .mapToInt(Reserva::getCantidadPlazas)
                     .sum();
 
-            // Interpretamos el valor del Front como "Capacidad Total"
             int nuevoTotal = viajeEditado.getPlazasDisponibles();
 
             if (nuevoTotal < plazasOcupadas) {
@@ -649,7 +690,6 @@ public class ViajeServiceImpl implements ViajeService {
                     "El total de plazas no puede ser inferior a las plazas ya reservadas: " + plazasOcupadas);
             }
 
-            // Seteamos la disponibilidad real (Total - Ocupadas)
             viajeExistente.setPlazasDisponibles(nuevoTotal - plazasOcupadas);
         }
 
@@ -659,7 +699,13 @@ public class ViajeServiceImpl implements ViajeService {
         
         List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(guardado, EstadoReserva.CANCELADA);
 
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = guardado.getFechaHoraSalida() != null 
+                ? guardado.getFechaHoraSalida().format(formatter) 
+                : "Fecha no especificada";
+
         for (Reserva r : reservasActivas) {
+            // 1. Notificación en la aplicación
             String msj = "Se han modificado los detalles del viaje " + guardado.getSlug() + ". Revisa el nuevo horario o número de plazas disponibles.";
             
             Notificacion noti = new Notificacion(
@@ -668,16 +714,40 @@ public class ViajeServiceImpl implements ViajeService {
                 TipoNotificacion.VIAJE_MODIFICADO
             );
             notificacionRepository.save(noti);
+
+            // 2. Envío de correo electrónico al pasajero
+            Persona pasajero = r.getPersona();
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (r.getParadaSubida() != null && r.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = r.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (r.getParadaBajada() != null && r.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = r.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+                String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+                correoService.sendViajeModificadoPasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaFormateada,
+                    guardado.getPrecio()
+                );
+            }
         }
 
         return convertirADTO(guardado);
     }
 
-    /**
-     * FINALIZAR VIAJE:
-     * Captura los pagos en Stripe de cada reserva activa, actualiza los estados
-     * e incrementa los fondos del conductor (fondosActuales y fondosTotales).
-     */
     @Override
     @Transactional
     public ViajeDTO finalizarViaje(String usuarioEmail, String slug) {
@@ -697,6 +767,11 @@ public class ViajeServiceImpl implements ViajeService {
 
         BigDecimal totalGanadoEnEsteViaje = BigDecimal.ZERO;
         List<Reserva> reservasActivas = reservaRepository.findByViajeAndEstadoNot(viaje, EstadoReserva.CANCELADA);
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = viaje.getFechaHoraSalida() != null 
+                ? viaje.getFechaHoraSalida().format(formatter) 
+                : "Fecha no especificada";
 
         for (Reserva reserva : reservasActivas) {
             Pago pago = reserva.getPago();
@@ -731,17 +806,45 @@ public class ViajeServiceImpl implements ViajeService {
                 totalGanadoEnEsteViaje = totalGanadoEnEsteViaje.add(gananciaEstaReserva);
             }
 
-            // 5. Notificar al pasajero
+            // 5. Notificación en la aplicación
             String msj = "El viaje a " + viaje.getSlug() + " ha finalizado. ¡Gracias por viajar!";
             Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO);
             notificacionRepository.save(noti);
+
+            // 6. Envío de correo electrónico al pasajero
+            Persona pasajero = reserva.getPersona();
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+                String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+                correoService.sendViajeFinalizadoPasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaFormateada
+                );
+            }
         }
 
-        // 6. Cambiar estado del viaje
+        // 7. Cambiar estado del viaje
         viaje.setEstado(EstadoViaje.FINALIZADO);
         viajeRepository.save(viaje);
 
-        // 7. Liberar saldo al conductor progresivamente
+        // 8. Liberar saldo al conductor progresivamente
         BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
         BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
 
@@ -752,11 +855,6 @@ public class ViajeServiceImpl implements ViajeService {
         return convertirADTO(viaje);
     }
 
-    /**
-     * INICIAR VIAJE:
-     * Verifica que sea el conductor y que haya llegado la fecha/hora de salida
-     * para cambiar su estado a INICIADO.
-     */
     @Override
     public ViajeDTO iniciarViaje(String usuarioEmail, String slug) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
@@ -798,10 +896,6 @@ public class ViajeServiceImpl implements ViajeService {
         return convertirADTO(viaje);
     }
 
-    /**
-     * CONFIRMAR CHECK-IN:
-     * Solo permite pasar de INICIADO a EN_CURSO si el código es correcto.
-     */
     @Override
     public ViajeDTO confirmarCheckin(String usuarioEmail, String slug, String checkin) {
         Persona conductor = personaRepository.findByEmail(usuarioEmail)
@@ -1067,6 +1161,20 @@ public class ViajeServiceImpl implements ViajeService {
             .anyMatch(locNorm -> locNorm.contains(destinoNorm));
 
         return origenOk && destinoOk;
+    }
+
+    private boolean coincideConductor(Persona conductor, String conductorNorm) {
+        if (conductorNorm.isBlank()) {
+            return true;
+        }
+        if (conductor == null) {
+            return false;
+        }
+
+        return Stream.of(conductor.getNombre(), conductor.getPrimerApellido(), conductor.getSegundoApellido(), conductor.getSlug())
+            .filter(Objects::nonNull)
+            .map(this::normalizar)
+            .anyMatch(valor -> valor.contains(conductorNorm));
     }
 
     private boolean coincideEnParadasRecurrente(ViajeRecurrente viaje, String origenNorm, String destinoNorm) {

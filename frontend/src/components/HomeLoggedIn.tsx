@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildApiUrl } from '../apiConfig';
+import EstadisticasPortada from './EstadisticasPortada';
 
 interface PerfilData {
   id?: number;
@@ -50,6 +51,7 @@ const HomeLoggedIn: React.FC = () => {
   const [origen, setOrigen] = useState('');
   const [destino, setDestino] = useState('');
   const [fecha, setFecha] = useState('');
+  const [conductor, setConductor] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -101,6 +103,7 @@ const HomeLoggedIn: React.FC = () => {
     if (origen.trim()) params.set('origen', origen.trim());
     if (destino.trim()) params.set('destino', destino.trim());
     if (fecha) params.set('fecha', fecha);
+    if (conductor.trim()) params.set('conductor', conductor.trim());
 
     navigate('/buscar?' + params.toString());
   };
@@ -139,7 +142,8 @@ const HomeLoggedIn: React.FC = () => {
   const nombreMostrado = perfil?.nombre?.trim() || 'usuario';
 
   return (
-    <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
+    <>
+      <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Hola, {nombreMostrado}</h1>
 
@@ -147,7 +151,7 @@ const HomeLoggedIn: React.FC = () => {
         <div className="mt-4 rounded-2xl border border-slate-400 bg-gray-100 p-5 shadow-sm">
           <h2 className="text-3xl md:text-4xl font-medium text-slate-900">¿A dónde quieres ir?</h2>
 
-          <form onSubmit={handleBuscar} className="mt-5 grid gap-3 md:grid-cols-4">
+          <form onSubmit={handleBuscar} className="mt-5 grid gap-3 md:grid-cols-5">
             <input
               placeholder="Origen"
               className="rounded-xl border border-slate-500 px-4 py-2 text-base placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -165,6 +169,12 @@ const HomeLoggedIn: React.FC = () => {
               className="rounded-xl border border-slate-500 px-4 py-2 text-base text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
+            />
+            <input
+              placeholder="Conductor"
+              className="rounded-xl border border-slate-500 px-4 py-2 text-base placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              value={conductor}
+              onChange={(e) => setConductor(e.target.value)}
             />
             <button
               type="submit"
@@ -303,7 +313,9 @@ const HomeLoggedIn: React.FC = () => {
 
         </div>
       </div>
-    </section>
+      </section>
+      <EstadisticasPortada />
+    </>
   );
 };
 

@@ -68,4 +68,9 @@ public class ParadaController {
     public Notificacion rechazarSolicitudNuevaParada(@PathVariable Long id, Principal principal) {
         return paradaService.rechazarSolicitudNuevaParada(principal.getName(), id);
     }
+
+    @GetMapping("/top5-localizaciones")
+    public List<Object[]> obtenerTop5Localizaciones() {
+        return paradaService.obtenerTop5Localizaciones();
+    }
 }
