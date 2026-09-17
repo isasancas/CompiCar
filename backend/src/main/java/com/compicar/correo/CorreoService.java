@@ -24,6 +24,9 @@ public class CorreoService {
     @Value("${compicar.mail.from:no-reply@compicar.com}")
     private String fromEmail;
 
+    @Value("${compicar.mail.feedback-to:${compicar.mail.from:no-reply@compicar.com}}")
+    private String feedbackToEmail;
+
     public CorreoService(JavaMailSender mailSender, SpringTemplateEngine templateEngine) {
         this.mailSender = mailSender;
         this.templateEngine = templateEngine;
@@ -198,6 +201,16 @@ public class CorreoService {
         context.setVariable("comentario", comentario);
 
         enviarCorreoHtml(toEmail, "CompiCar - ¡Has recibido una nueva valoración!", "nueva-valoracion", context);
+    }
+
+    @Async
+    public void sendSugerencia(String emailUsuario, String nombreUsuario, String mensaje) {
+        Context context = new Context();
+        context.setVariable("emailUsuario", emailUsuario);
+        context.setVariable("nombreUsuario", nombreUsuario);
+        context.setVariable("mensaje", mensaje);
+
+        enviarCorreoHtml(feedbackToEmail, "CompiCar - Nueva sugerencia o pregunta", "sugerencia", context);
     }
 
     @Async

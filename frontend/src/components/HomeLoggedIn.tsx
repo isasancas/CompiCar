@@ -52,6 +52,9 @@ const HomeLoggedIn: React.FC = () => {
   const [destino, setDestino] = useState('');
   const [fecha, setFecha] = useState('');
   const [conductor, setConductor] = useState('');
+  const [sugerencia, setSugerencia] = useState('');
+  const [enviandoSugerencia, setEnviandoSugerencia] = useState(false);
+  const [estadoSugerencia, setEstadoSugerencia] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -106,6 +109,37 @@ const HomeLoggedIn: React.FC = () => {
     if (conductor.trim()) params.set('conductor', conductor.trim());
 
     navigate('/buscar?' + params.toString());
+  };
+
+  const handleEnviarSugerencia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    if (!token || !sugerencia.trim()) return;
+
+    setEnviandoSugerencia(true);
+    setEstadoSugerencia('');
+    try {
+      const response = await fetch(buildApiUrl('/api/sugerencias'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mensaje: sugerencia.trim() })
+      });
+
+      if (response.ok) {
+        setSugerencia('');
+        setEstadoSugerencia('Mensaje enviado. Gracias por ayudarnos a mejorar.');
+      } else {
+        const body = await response.json().catch(() => ({}));
+        setEstadoSugerencia(body.error || 'No se ha podido enviar el mensaje.');
+      }
+    } catch {
+      setEstadoSugerencia('Error de conexión. Inténtalo de nuevo.');
+    } finally {
+      setEnviandoSugerencia(false);
+    }
   };
 
   // Helper para extraer origen y destino del array de paradas
@@ -315,6 +349,37 @@ const HomeLoggedIn: React.FC = () => {
       </div>
       </section>
       <EstadisticasPortada />
+      <section className="bg-gray-100 px-4 pb-10 pt-2 md:px-8">
+        <div className="mx-auto max-w-6xl rounded-2xl border border-slate-400 bg-gray-100 p-6 shadow-sm">
+          <h2 className="text-2xl font-medium text-slate-900">¿Tienes una sugerencia o pregunta?</h2>
+          <p className="mt-2 text-slate-600">Puedes enviarnos hasta 3 mensajes al día.</p>
+          <form onSubmit={handleEnviarSugerencia} className="mt-4">
+            <label htmlFor="sugerencia" className="sr-only">Sugerencia o pregunta</label>
+            <textarea
+              id="sugerencia"
+              aria-label="Sugerencia o pregunta"
+              maxLength={2000}
+              rows={4}
+              placeholder="Escribe aquí tu mensaje..."
+              className="w-full rounded-xl border border-slate-500 px-4 py-3 text-base placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              value={sugerencia}
+              onChange={(e) => setSugerencia(e.target.value)}
+              required
+            />
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm text-slate-600">{sugerencia.length}/2000</span>
+              <button
+                type="submit"
+                disabled={enviandoSugerencia || !sugerencia.trim()}
+                className="rounded-full bg-gradient-compi px-6 py-2 text-sm font-bold text-white shadow transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {enviandoSugerencia ? 'Enviando...' : 'Enviar mensaje'}
+              </button>
+            </div>
+            {estadoSugerencia && <p role="status" className="mt-3 text-sm text-slate-700">{estadoSugerencia}</p>}
+          </form>
+        </div>
+      </section>
     </>
   );
 };
