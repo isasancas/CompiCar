@@ -617,7 +617,6 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
                 .header("Authorization", "Bearer " + driverToken))
                 .andExpect(status().isOk());
 
-        // Petición corregida enviando reservaId como RequestParam
         mockMvc.perform(put("/api/reservas/noPresentado")
                 .param("reservaId", reservaId.toString())
                 .header("Authorization", "Bearer " + driverToken))
@@ -625,5 +624,85 @@ class ViajeIntegrationTest extends BaseIntegrationTest {
 
         Reserva reservaActualizada = reservaRepository.findById(reservaId).orElseThrow();
         assertEquals(EstadoReserva.NO_PRESENTADO, reservaActualizada.getEstado());
+    }
+
+    @Test
+    void contarViajesExitososPorConductor_ok() throws Exception {
+        String token = registerAndLogin();
+
+        MvcResult personaResult = mockMvc.perform(get("/api/personas/perfil")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        String slug = JsonPath.read(personaResult.getResponse().getContentAsString(), "$.slug");
+
+        mockMvc.perform(get("/api/viajes/publicos/conductor/" + slug + "/exitosos"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void contarViajesParticipadosPorConductor_ok() throws Exception {
+        String token = registerAndLogin();
+
+        MvcResult personaResult = mockMvc.perform(get("/api/personas/perfil")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        String slug = JsonPath.read(personaResult.getResponse().getContentAsString(), "$.slug");
+
+        mockMvc.perform(get("/api/viajes/publicos/conductor/" + slug + "/participados"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void obtenerViajesExitosos_ok() throws Exception {
+        String token = registerAndLogin();
+
+        mockMvc.perform(get("/api/viajes/exitosos")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void obtenerViajesExitosos_sinToken_401() throws Exception {
+        mockMvc.perform(get("/api/viajes/exitosos"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void contarKilometrosRecorridosPorUsuario_ok() throws Exception {
+        String token = registerAndLogin();
+
+        mockMvc.perform(get("/api/viajes/kilometros")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void contarKilometrosRecorridosPorUsuario_sinToken_401() throws Exception {
+        mockMvc.perform(get("/api/viajes/kilometros"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void contarViajesParticipadosPorUsuario_ok() throws Exception {
+        String token = registerAndLogin();
+
+        mockMvc.perform(get("/api/viajes/contador-participados")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isNumber());
+    }
+
+    @Test
+    void contarViajesParticipadosPorUsuario_sinToken_401() throws Exception {
+        mockMvc.perform(get("/api/viajes/contador-participados"))
+            .andExpect(status().isForbidden());
     }
 }

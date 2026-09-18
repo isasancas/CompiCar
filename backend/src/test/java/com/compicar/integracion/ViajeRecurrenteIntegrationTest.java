@@ -177,4 +177,18 @@ class ViajeRecurrenteIntegrationTest extends BaseIntegrationTest {
             .param("checkin", "VALOR_INCORRECTO"))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void finalizarViajeRecurrente_conductorValido_actualizaAFinalizado() throws Exception {
+        viajeRecurrenteTest.setEstado(EstadoViaje.EN_CURSO);
+        viajeRecurrenteRepository.save(viajeRecurrenteTest);
+
+        mockMvc.perform(put("/api/viajes-recurrentes/" + viajeRecurrenteTest.getSlug() + "/finalizar")
+            .header("Authorization", "Bearer " + tokenConductor))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("FINALIZADO"));
+
+        ViajeRecurrente actualizado = viajeRecurrenteRepository.findById(viajeRecurrenteTest.getId()).orElseThrow();
+        assertEquals(EstadoViaje.FINALIZADO, actualizado.getEstado());
+    }
 }

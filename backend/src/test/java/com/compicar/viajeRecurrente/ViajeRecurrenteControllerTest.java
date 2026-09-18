@@ -41,8 +41,6 @@ class ViajeRecurrenteControllerTest {
         return new TestingAuthenticationToken(email, null);
     }
 
-    // --- GET /api/viajes-recurrentes/{slug} ---
-
     @Test
     void obtenerViajeRecurrentePorSlug_ok() throws Exception {
         ViajeRecurrenteDTO dto = new ViajeRecurrenteDTO();
@@ -65,8 +63,6 @@ class ViajeRecurrenteControllerTest {
         mockMvc.perform(get("/api/viajes-recurrentes/no-existe"))
                 .andExpect(status().isNotFound());
     }
-
-    // --- PUT /api/viajes-recurrentes/{slug}/iniciar ---
 
     @Test
     void iniciarViajeRecurrente_ok_autenticado() throws Exception {
@@ -92,8 +88,6 @@ class ViajeRecurrenteControllerTest {
                 .principal(crearAuth("otro@compicar.com")))
                 .andExpect(status().isForbidden());
     }
-
-    // --- PUT /api/viajes-recurrentes/{slug}/checkin ---
 
     @Test
     void confirmarCheckinRecurrente_ok_autenticado() throws Exception {
@@ -122,8 +116,6 @@ class ViajeRecurrenteControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // --- PUT /api/viajes-recurrentes/{slug}/finalizar ---
-
     @Test
     void finalizarViajeRecurrente_ok_autenticado() throws Exception {
         ViajeRecurrenteDTO dto = new ViajeRecurrenteDTO();
@@ -138,8 +130,6 @@ class ViajeRecurrenteControllerTest {
 
         verify(viajeRecurrenteService).finalizarViajeRecurrente("driver@compicar.com", "viaje-rec-1");
     }
-
-    // --- PUT /api/viajes-recurrentes/{slug}/cancelar ---
 
     @Test
     void cancelarViajeRecurrente_ok_autenticado() throws Exception {
