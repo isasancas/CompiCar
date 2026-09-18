@@ -102,5 +102,13 @@ export const handlers = [
 
   http.post('*/api/logout', () => {
     return HttpResponse.json({ success: true }, { status: 200 });
+  }),
+
+  http.put('http://localhost:8080/api/viajes/:slug/en-curso', () => {
+    return HttpResponse.json({ mensaje: 'Viaje iniciado correctamente' }, { status: 200 });
+  }),
+
+  http.get('http://localhost:8080/api/reservas/mis-reservas', () => {
+    return HttpResponse.json([], { status: 200 });
   })
 ];
