@@ -34,13 +34,13 @@ beforeEach(() => {
     http.get('*/api/valoraciones/valorado/2', () => {
       return HttpResponse.json([]);
     }),
-    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/exitosos', () => {
+    http.get('*/api/viajes/publicos/conductor/*/exitosos', () => {
       return HttpResponse.json(0);
     }),
-    http.get('*/api/viajes/publicos/conductor/laura-martinez-2/participados', () => {
+    http.get('*/api/viajes/publicos/conductor/*/participados', () => {
       return HttpResponse.json(0);
     }),
-    http.get('*/api/reservas/ratio-exito', () => {
+    http.get('*/api/reservas/ratio-exito*', () => {
       return HttpResponse.json(0);
     })
   );
