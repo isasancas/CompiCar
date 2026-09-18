@@ -62,110 +62,101 @@ const PerfilPublico: React.FC = () => {
   const volver = () => navigate(-1);
 
   useEffect(() => {
-    const fetchPerfilPublico = async () => {
+    const fetchValoraciones = async (personaId: number) => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/valoraciones/valorado/${personaId}`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const valoraciones = await res.json();
+          const recibidas = Array.isArray(valoraciones) ? valoraciones : [];
+          setValoracionesRecibidas(recibidas);
+          setTotalValoracionesRecibidas(recibidas.length);
+        }
+      } catch {
+        // No bloqueamos por fallo de valoraciones
+      }
+    };
+
+    const fetchViajesExitosos = async () => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}/exitosos`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const total = Number(await res.json());
+          setTotalViajesExitosos(Number.isFinite(total) ? total : 0);
+        }
+      } catch {
+        // No bloqueamos por fallo de estadisticas
+      }
+    };
+
+    const fetchViajesParticipados = async () => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}/participados`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const total = Number(await res.json());
+          setTotalViajesParticipados(Number.isFinite(total) ? total : 0);
+        }
+      } catch {
+        // No bloqueamos por fallo de estadisticas
+      }
+    };
+
+    const fetchRatioExitoReservas = async () => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/reservas/ratio-exito?slug=${encodeURIComponent(slug!)}`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const ratio = Number(await res.json());
+          setRatioExitoReservas(Number.isFinite(ratio) ? Math.round(ratio) : 0);
+        }
+      } catch {
+        // No bloqueamos por fallo de estadisticas
+      }
+    };
+
+    const cargarPerfilCompleto = async () => {
       if (!slug) {
         setError('Perfil no encontrado');
+        setLoading(false);
         return;
       }
 
       try {
         const response = await fetch(buildApiUrl(`/api/personas/${slug}/perfil-publico`), {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Content-Type': 'application/json' }
         });
 
         if (!response.ok) {
           setError('No se pudo cargar el perfil público');
+          setLoading(false);
           return;
         }
 
         const data = await response.json();
         setPerfil(data);
 
-        try {
-          const valoracionesResponse = await fetch(buildApiUrl(`/api/valoraciones/valorado/${data.id}`), {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-          });
-
-          if (valoracionesResponse.ok) {
-            const valoraciones = await valoracionesResponse.json();
-            const recibidas = Array.isArray(valoraciones) ? valoraciones : [];
-            setValoracionesRecibidas(recibidas);
-            setTotalValoracionesRecibidas(recibidas.length);
-          }
+        // Solo cargamos estadísticas si el perfil existe
+        await Promise.all([
+          fetchValoraciones(data.id),
+          fetchViajesExitosos(),
+          fetchViajesParticipados(),
+          fetchRatioExitoReservas()
+        ]);
       } catch {
-          setError('Error de conexión al cargar el perfil');
-        }
-      }
-      catch {
         setError('Error de conexión al cargar el perfil');
+      } finally {
+        setLoading(false);
       }
     };
 
-    const fetchViajesExitosos = async () => {
-      if (!slug) {
-        return;
-      }
-
-      try {
-        const response = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}/exitosos`), {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const total = Number(await response.json());
-        setTotalViajesExitosos(Number.isFinite(total) ? total : 0);
-      } catch {
-        // No bloqueamos la carga del perfil si fallan estadisticas.
-      }
-    };
-
-    const fetchViajesParticipados = async () => {
-      if (!slug) return;
-
-      try {
-        const response = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}/participados`), {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (response.ok) {
-          const total = Number(await response.json());
-          setTotalViajesParticipados(Number.isFinite(total) ? total : 0);
-        }
-      } catch {
-        // No bloqueamos la carga del perfil si fallan estadisticas.
-      }
-    };
-
-    const fetchRatioExitoReservas = async () => {
-      if (!slug) return;
-
-      try {
-        const response = await fetch(buildApiUrl(`/api/reservas/ratio-exito?slug=${encodeURIComponent(slug)}`), {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (response.ok) {
-          const ratio = Number(await response.json());
-          setRatioExitoReservas(Number.isFinite(ratio) ? Math.round(ratio) : 0);
-        }
-      } catch {
-        // No bloqueamos la carga del perfil si fallan estadisticas.
-      }
-    };
-
-    Promise.all([fetchPerfilPublico(), fetchViajesExitosos(), fetchViajesParticipados(), fetchRatioExitoReservas()]).finally(() => setLoading(false));
+    cargarPerfilCompleto();
   }, [slug]);
 
   if (loading) {
