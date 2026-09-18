@@ -43,7 +43,8 @@ const server = setupServer(
   http.get('*/api/reservas/pendientes-conductor', () => HttpResponse.json(mockReservas)),
   http.get('*/api/notificaciones/mis-notificaciones', () => HttpResponse.json(mockAvisos)),
   http.put('*/api/reservas/confirmar', () => new HttpResponse(null, { status: 200 })),
-  http.put('*/api/reservas/rechazar', () => new HttpResponse(null, { status: 200 }))
+  http.put('*/api/reservas/rechazar', () => new HttpResponse(null, { status: 200 })),
+  http.put('*/api/paradas/*/*-solicitud-parada', () => new HttpResponse(null, { status: 200 }))
 );
 
 beforeAll(() => server.listen());
@@ -73,8 +74,10 @@ test('Carga y muestra correctamente las solicitudes de reserva y avisos reciente
   expect(screen.getByText(/el viaje a madrid ha sido cancelado/i)).toBeInTheDocument();
 });
 
-test('Permite aceptar una solicitud de reserva correctamente', async () => {
+test('Permite aceptar una solicitud de reserva correctamente y dispara authChange', async () => {
   const user = userEvent.setup();
+  const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
+
   renderComponent();
 
   const botonAceptar = await screen.findByRole('button', { name: /^aceptar$/i });
@@ -85,6 +88,7 @@ test('Permite aceptar una solicitud de reserva correctamente', async () => {
   });
 
   expect(screen.getByText(/no hay solicitudes pendientes/i)).toBeInTheDocument();
+  expect(dispatchEventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'authChange' }));
 });
 
 test('Permite rechazar una solicitud de reserva correctamente', async () => {
@@ -111,7 +115,7 @@ test('Navega al perfil del usuario al hacer clic en "Ver perfil"', async () => {
   expect(mockNavigate).toHaveBeenCalledWith('/usuarios/ana-gomez/perfil');
 });
 
-test('Muestra fechas de viaje desde reserva.viajeRecurrente o fechaHoraSalida directa', async () => {
+test('Muestra fechas de viaje desde reserva.viajeRecurrente o fechaHoraSalida directa, incluyendo arreglos de fecha', async () => {
   server.use(
     http.get('*/api/reservas/pendientes-conductor', () =>
       HttpResponse.json([
@@ -125,12 +129,19 @@ test('Muestra fechas de viaje desde reserva.viajeRecurrente o fechaHoraSalida di
           id: 3,
           cantidadPlazas: 3,
           persona: { nombre: 'Marta Sánchez', slug: 'marta-sanchez' },
-          fechaHoraSalida: '2026-08-15T12:00:00Z',
+          fechaHoraSalida: '2026-08-15T12:00:00',
         },
         {
           id: 4,
           cantidadPlazas: 1,
+          persona: { nombre: 'Juan Array', slug: 'juan-array' },
+          fechaHoraSalida: [2026, 9, 20, 14, 30],
+        },
+        {
+          id: 5,
+          cantidadPlazas: 1,
           persona: { nombre: 'Sin Fecha', slug: 'sin-fecha' },
+          fechaHoraSalida: 'fecha-invalida',
         },
       ])
     )
@@ -140,6 +151,7 @@ test('Muestra fechas de viaje desde reserva.viajeRecurrente o fechaHoraSalida di
 
   expect(await screen.findByText(/carlos vives quiere viajar contigo/i)).toBeInTheDocument();
   expect(screen.getByText(/marta sánchez quiere viajar contigo/i)).toBeInTheDocument();
+  expect(screen.getByText(/juan array quiere viajar contigo/i)).toBeInTheDocument();
   expect(screen.getByText(/sin fecha quiere viajar contigo/i)).toBeInTheDocument();
 });
 
@@ -187,6 +199,123 @@ test('Filtra notificaciones antiguas de más de 7 días y renderiza varios tipos
   expect(screen.getByText(/bienvenido a la plataforma/i)).toBeInTheDocument();
   expect(screen.getByText(/aviso sin fecha de creación/i)).toBeInTheDocument();
   expect(screen.queryByText(/aviso muy antiguo que debe filtrarse/i)).not.toBeInTheDocument();
+});
+
+test('Permite aceptar y rechazar solicitudes de nuevas paradas', async () => {
+  const user = userEvent.setup();
+  const hace1Dia = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+
+  server.use(
+    http.get('*/api/notificaciones/mis-notificaciones', () =>
+      HttpResponse.json([
+        {
+          id: 301,
+          tipo: 'SOLICITUD_NUEVA_PARADA',
+          mensaje: JSON.stringify({ localizacion: 'Atocha', fechaHora: '2026-10-01T10:00:00Z' }),
+          fechaCreacion: hace1Dia,
+          leida: false,
+        },
+        {
+          id: 302,
+          tipo: 'SOLICITUD_NUEVA_PARADA',
+          mensaje: JSON.stringify({ localizacion: 'Moncloa' }),
+          fechaCreacion: hace1Dia,
+          leida: false,
+        },
+      ])
+    )
+  );
+
+  renderComponent();
+
+  expect(await screen.findByText(/el pasajero solicita añadir una parada en atocha/i)).toBeInTheDocument();
+
+  // Aceptar parada
+  const botonesAceptar = screen.getAllByRole('button', { name: /aceptar parada/i });
+  await user.click(botonesAceptar[0]);
+
+  expect(await screen.findByText(/solicitud de nueva parada aceptada en atocha/i)).toBeInTheDocument();
+
+  // Rechazar parada
+  const botonesRechazar = screen.getAllByRole('button', { name: /rechazar parada/i });
+  await user.click(botonesRechazar[0]);
+
+  expect(await screen.findByText(/solicitud de nueva parada rechazada en moncloa/i)).toBeInTheDocument();
+});
+
+test('Maneja mensajes de solicitud de parada como objeto directo o con JSON malformado', async () => {
+  const hace1Dia = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+
+  server.use(
+    http.get('*/api/notificaciones/mis-notificaciones', () =>
+      HttpResponse.json([
+        {
+          id: 401,
+          tipo: 'SOLICITUD_NUEVA_PARADA_ACEPTADA',
+          mensaje: { localizacion: 'Getafe', fechaHora: '2026-11-01T12:00:00Z' },
+          fechaCreacion: hace1Dia,
+          leida: true,
+        },
+        {
+          id: 402,
+          tipo: 'SOLICITUD_NUEVA_PARADA_RECHAZADA',
+          mensaje: { localizacion: 'Leganés' },
+          fechaCreacion: hace1Dia,
+          leida: true,
+        },
+        {
+          id: 403,
+          tipo: 'SOLICITUD_NUEVA_PARADA',
+          mensaje: '{jsonInvalido:',
+          fechaCreacion: hace1Dia,
+          leida: false,
+        },
+      ])
+    )
+  );
+
+  renderComponent();
+
+  expect(await screen.findByText(/solicitud de nueva parada aceptada en getafe/i)).toBeInTheDocument();
+  expect(screen.getByText(/solicitud de nueva parada rechazada en leganés/i)).toBeInTheDocument();
+  expect(screen.getByText('{jsonInvalido:')).toBeInTheDocument();
+});
+
+test('Captura errores al resolver solicitud de parada y los registra en consola', async () => {
+  const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const user = userEvent.setup();
+  const hace1Dia = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+
+  server.use(
+    http.get('*/api/notificaciones/mis-notificaciones', () =>
+      HttpResponse.json([
+        {
+          id: 501,
+          tipo: 'SOLICITUD_NUEVA_PARADA',
+          mensaje: JSON.stringify({ localizacion: 'Valdemoro' }),
+          fechaCreacion: hace1Dia,
+          leida: false,
+        },
+      ])
+    ),
+    http.put('*/api/paradas/501/aceptar-solicitud-parada', () =>
+      new HttpResponse(null, { status: 500 })
+    )
+  );
+
+  renderComponent();
+
+  const botonAceptar = await screen.findByRole('button', { name: /aceptar parada/i });
+  await user.click(botonAceptar);
+
+  await waitFor(() => {
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Error resolviendo solicitud de parada',
+      expect.any(Error)
+    );
+  });
+
+  consoleSpy.mockRestore();
 });
 
 test('Muestra avisos de listas vacías cuando no hay datos', async () => {
