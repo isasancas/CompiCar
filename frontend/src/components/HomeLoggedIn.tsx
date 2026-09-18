@@ -177,7 +177,7 @@ const HomeLoggedIn: React.FC = () => {
 
   return (
     <>
-      <section className="min-h-[calc(100vh-96px)] bg-gray-100 px-4 py-8 md:px-8">
+      <section className="bg-gray-100 px-4 pt-8 pb-10 md:px-8">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-3xl md:text-4xl font-semibold text-slate-900">Hola, {nombreMostrado}</h1>
 
@@ -349,7 +349,7 @@ const HomeLoggedIn: React.FC = () => {
       </div>
       </section>
       <EstadisticasPortada />
-      <section className="bg-gray-100 px-4 pb-10 pt-2 md:px-8">
+      <section className="bg-gray-100 px-4 pb-10 pt-10 md:px-8">
         <div className="mx-auto max-w-6xl rounded-2xl border border-slate-400 bg-gray-100 p-6 shadow-sm">
           <h2 className="text-2xl font-medium text-slate-900">¿Tienes una sugerencia o pregunta?</h2>
           <p className="mt-2 text-slate-600">Puedes enviarnos hasta 3 mensajes al día.</p>
