@@ -117,6 +117,22 @@ public class CorreoService {
     }
 
     @Async
+    public void sendReservaSimpleConductor(String toEmail, String nombreConductor, String nombrePasajero, 
+                                            String origen, String destino, String fechaHora, 
+                                            int plazas, BigDecimal total) {
+        Context context = new Context();
+        context.setVariable("nombreConductor", nombreConductor);
+        context.setVariable("nombrePasajero", nombrePasajero);
+        context.setVariable("origen", origen);
+        context.setVariable("destino", destino);
+        context.setVariable("fechaHora", fechaHora);
+        context.setVariable("plazas", plazas);
+        context.setVariable("total", total);
+
+        enviarCorreoHtml(toEmail, "CompiCar - Nueva reserva de un pasajero", "reserva-simple-conductor", context);
+    }
+
+    @Async
     public void sendReservaLoteConductor(String toEmail, String nombreConductor, String nombrePasajero, String origen, String destino, List<String> fechas, int plazas, BigDecimal totalAcumulado) {
         Context context = new Context();
         context.setVariable("nombreConductor", nombreConductor);

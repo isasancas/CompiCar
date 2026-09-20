@@ -213,7 +213,44 @@ public class ReservaServiceImpl implements ReservaService {
         pago = pagoRepository.saveAndFlush(pago);
         reserva.setPago(pago);
 
-        // 7. Llamar a Stripe
+        // 7. Notificación interna y envío de correo al conductor
+        Persona conductor = viaje.getPersona();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = viaje.getFechaHoraSalida() != null ? viaje.getFechaHoraSalida().format(formatter) : "Fecha no especificada";
+
+        String msjNotificacion = String.format("El usuario %s ha reservado %d plaza(s) para tu viaje del %s.",
+                persona.getNombre() != null ? persona.getNombre() : "Un usuario", plazasSolicitadas, fechaFormateada);
+        notificacionRepository.save(new Notificacion(msjNotificacion, conductor, TipoNotificacion.NUEVA_RESERVA));
+
+        if (conductor != null && conductor.getEmail() != null) {
+            String origen = "Origen";
+            if (paradaSubida.getLocalizacion() != null) {
+                String origenRaw = paradaSubida.getLocalizacion();
+                origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+            }
+
+            String destino = "Destino";
+            if (paradaBajada.getLocalizacion() != null) {
+                String destinoRaw = paradaBajada.getLocalizacion();
+                destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+            }
+
+            String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "Conductor";
+            String nombrePasajero = persona.getNombre() != null ? persona.getNombre() : "Un pasajero";
+
+            emailService.sendReservaSimpleConductor(
+                conductor.getEmail(),
+                nombreConductor,
+                nombrePasajero,
+                origen,
+                destino,
+                fechaFormateada,
+                plazasSolicitadas,
+                total
+            );
+        }
+
+        // 8. Llamar a Stripe
         try {
             String clientSecret = pagoService.crearIntentoDePago(reserva);
             return new ReservaCreadaResponse(reserva.getId(), reserva.getSlug(), clientSecret);

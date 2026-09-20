@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva Reserva - CompiCar</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 25px;">
+            <img src="cid:logoCompiCar" alt="CompiCar" style="height: 48px; width: auto; max-width: 100%; display: block; margin: 0 auto;" />
+        </div>
+        <h2 style="color: #2b6cb0; text-align: center; margin-top: 0;">¡Tienes una nueva reserva!</h2>
+        
+        <p>Hola, <b th:text="${nombreConductor}">Conductor</b>:</p>
+        
+        <p>El pasajero <b th:text="${nombrePasajero}">Pasajero</b> ha realizado una reserva para tu viaje de <span th:text="${origen}">Origen</span> a <span th:text="${destino}">Destino</span>.</p>
+        
+        <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 5px 0;"><b>Fecha y hora de salida:</b> <span th:text="${fechaHora}">01/01/2026 a las 10:00</span></p>
+            <p style="margin: 5px 0;"><b>Plazas reservadas:</b> <span th:text="${plazas}">1</span></p>
+            <p style="margin: 5px 0;"><b>Importe total:</b> <span th:text="${total}">0.00</span> €</p>
+        </div>
+        
+        <p style="color: #4a5568; font-size: 14px;">Puedes revisar los detalles completos de la reserva ingresando en la aplicación CompiCar.</p>
+        
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+        <p style="color: #a0aec0; font-size: 12px; text-align: center;">Este es un mensaje automático de CompiCar. Por favor, no respondas a este correo.</p>
+    </div>
+</body>
+</html>
