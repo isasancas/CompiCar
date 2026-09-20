@@ -15,6 +15,7 @@ public interface ViajeService {
     List<ViajeDTO> obtenerViajesParticipados(String email);
     ViajeDTO obtenerViajePorSlug(String slug);
     List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha);
+    List<ViajeDTO> buscarViajesPublicos(String origen, String destino, LocalDate fecha, String conductor);
     List<ViajeDTO> obtenerViajesPublicosPorConductor(String conductorSlug);
     ViajeDTO cancelarViaje(String usuarioEmail, String slug);
     int cancelarViajesPendientesExpirados();
@@ -26,5 +27,9 @@ public interface ViajeService {
     ViajeDTO ponerEnCursoAutomatico(String usuarioEmail, String slug);
     ViajeDTO cancelarViajeIncompareceConductor(String usuarioEmail, String slug);
     ViajeDTO cancelarViajeConjunto(String usuarioEmail, String slug);
+    Integer contarKilometrosRecorridosPorUsuario(String usuarioEmail);
+    List<ViajeDTO> obtenerViajesExitosos(String usuarioEmail);
+    Integer contarViajesExitososPorSlug(String slug);
+    Integer contarViajesParticipadosPorSlug(String slug);
 
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { buildApiUrl } from '../../apiConfig';
 
@@ -14,6 +14,7 @@ interface PerfilData {
   fondosActuales?: number | string;
   fondosTotales?: number | string;
   numeroCancelaciones?: number;
+  fechaAntiguedad?: string;
 }
 
 interface VehiculoData {
@@ -27,19 +28,6 @@ interface VehiculoData {
   tipo: string;
 }
 
-type ViajeActividad = {
-  id: number;
-  fechaHoraSalida: string;
-  estado: string;
-};
-
-type ResumenActividad = {
-  ofrecidosMes: number;
-  completados: number;
-  cancelados: number;
-  tendenciaPct: number;
-};
-
 // Convierte a número seguro cualquier valor (number, string "16", "16.00", "16,00", null, etc.)
 const parseMonto = (val: unknown): number => {
   if (val === null || val === undefined) return 0;
@@ -51,9 +39,28 @@ const parseMonto = (val: unknown): number => {
   return 0;
 };
 
+const formatearFechaAntiguedad = (fecha?: string): string => {
+  if (!fecha) return '-';
+  const fechaCuenta = new Date(`${fecha}T00:00:00`);
+  if (Number.isNaN(fechaCuenta.getTime())) return '-';
+  return fechaCuenta.toLocaleDateString('es-ES');
+};
+
 const Perfil: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilData | null>(null);
   const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
+  const [kilometrosCompartidos, setKilometrosCompartidos] = useState(0);
+  const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
+  const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
+  const [ratioExitoReservas, setRatioExitoReservas] = useState(0);
+
+  const porcentajeViajesCompletados = totalViajesParticipados > 0
+    ? Math.round((totalViajesExitosos / totalViajesParticipados) * 100)
+    : 0;
+  const tasaCancelacion = totalViajesParticipados > 0
+    ? Math.round(((perfil?.numeroCancelaciones ?? 0) / totalViajesParticipados) * 100)
+    : 0;
+  const esUsuarioFiable = totalViajesParticipados > 0 && tasaCancelacion < 5;
   const [vehiculos, setVehiculos] = useState<VehiculoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,31 +97,6 @@ const Perfil: React.FC = () => {
     anio: '',
     tipo: 'COCHE'
   });
-  const [resumenActividad, setResumenActividad] = useState<ResumenActividad>({
-    ofrecidosMes: 0,
-    completados: 0,
-    cancelados: 0,
-    tendenciaPct: 0
-  });
-
-  const misDatosRef = useRef<HTMLDivElement | null>(null);
-  const [misDatosHeight, setMisDatosHeight] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const updateHeight = () => {
-      if (misDatosRef.current) {
-        setMisDatosHeight(misDatosRef.current.offsetHeight);
-      }
-    };
-
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-    };
-  }, [perfil, resumenActividad]);
-
   const navigate = useNavigate();
 
   const getValidToken = () => {
@@ -193,7 +175,7 @@ const Perfil: React.FC = () => {
     }
   }, [clearLocalSession]);
 
-  const fetchResumenActividad = useCallback(async () => {
+  const fetchViajesExitosos = useCallback(async () => {
     const token = getValidToken();
     if (!token) {
       clearLocalSession('/inicio-sesion');
@@ -201,7 +183,59 @@ const Perfil: React.FC = () => {
     }
 
     try {
-      const response = await fetch(buildApiUrl('/api/viajes/mis-viajes'), {
+      const response = await fetch(buildApiUrl('/api/viajes/exitosos'), {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (response.ok) {
+        const total = Number(await response.json());
+        setTotalViajesExitosos(Number.isFinite(total) ? total : 0);
+      }
+    } catch {
+      // Si falla, dejamos el valor por defecto.
+    }
+  }, [clearLocalSession]);
+
+  const fetchViajesParticipados = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/viajes/contador-participados'), {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (response.ok) {
+        const total = Number(await response.json());
+        setTotalViajesParticipados(Number.isFinite(total) ? total : 0);
+      }
+    } catch {
+      // Si falla, dejamos el valor por defecto.
+    }
+  }, [clearLocalSession]);
+
+  const fetchKilometrosCompartidos = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/viajes/kilometros'), {
         method: 'GET',
         headers: {
           Authorization: 'Bearer ' + token,
@@ -218,47 +252,38 @@ const Perfil: React.FC = () => {
         return;
       }
 
-      const viajes = (await response.json()) as ViajeActividad[];
-
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-
-      const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
-      const prevMonth = prevMonthDate.getMonth();
-      const prevYear = prevMonthDate.getFullYear();
-
-      const offeredCurrent = viajes.filter((v) => {
-        const d = new Date(v.fechaHoraSalida);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-      }).length;
-
-      const offeredPrev = viajes.filter((v) => {
-        const d = new Date(v.fechaHoraSalida);
-        return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
-      }).length;
-
-      const completados = viajes.filter((v) =>
-        ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
-      ).length;
-
-      const tendenciaPct =
-        offeredPrev === 0
-          ? offeredCurrent > 0
-            ? 100
-            : 0
-          : Math.round(((offeredCurrent - offeredPrev) / offeredPrev) * 100);
-
-      setResumenActividad({
-        ofrecidosMes: offeredCurrent,
-        completados,
-        cancelados: perfil?.numeroCancelaciones ?? 0,
-        tendenciaPct
-      });
+      const total = Number(await response.json());
+      setKilometrosCompartidos(Number.isFinite(total) ? total : 0);
     } catch {
-      // Si falla, dejamos valores por defecto.
+      // Si falla, dejamos el valor por defecto.
     }
-  }, [clearLocalSession, perfil?.numeroCancelaciones]);
+  }, [clearLocalSession]);
+
+  const fetchRatioExitoReservas = useCallback(async () => {
+    const token = getValidToken();
+    if (!token) {
+      clearLocalSession('/inicio-sesion');
+      return;
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/api/reservas/ratio-exito'), {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        clearLocalSession('/inicio-sesion');
+        return;
+      }
+
+      if (response.ok) {
+        const ratio = Number(await response.json());
+        setRatioExitoReservas(Number.isFinite(ratio) ? Math.round(ratio) : 0);
+      }
+    } catch {
+      // Si falla, dejamos el valor por defecto.
+    }
+  }, [clearLocalSession]);
 
   const fetchTotalValoracionesRecibidas = useCallback(async (personaId: number) => {
     const token = getValidToken();
@@ -345,10 +370,10 @@ const Perfil: React.FC = () => {
   };
 
   useEffect(() => {
-    Promise.all([fetchPerfil(), fetchVehiculos(), fetchResumenActividad()])
+    Promise.all([fetchPerfil(), fetchVehiculos(), fetchViajesExitosos(), fetchViajesParticipados(), fetchKilometrosCompartidos(), fetchRatioExitoReservas()])
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [fetchPerfil, fetchVehiculos, fetchResumenActividad]);
+  }, [fetchPerfil, fetchVehiculos, fetchViajesExitosos, fetchViajesParticipados, fetchKilometrosCompartidos, fetchRatioExitoReservas]);
 
   useEffect(() => {
     if (!perfil?.id) {
@@ -360,6 +385,7 @@ const Perfil: React.FC = () => {
     fetchTotalValoracionesRecibidas(personaId);
 
     const refreshOnFocus = () => {
+      fetchPerfil();
       fetchTotalValoracionesRecibidas(personaId);
     };
 
@@ -367,7 +393,7 @@ const Perfil: React.FC = () => {
     return () => {
       window.removeEventListener('focus', refreshOnFocus);
     };
-  }, [perfil?.id, fetchTotalValoracionesRecibidas]);
+  }, [perfil?.id, fetchPerfil, fetchTotalValoracionesRecibidas]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -818,7 +844,7 @@ const Perfil: React.FC = () => {
         <div className="mt-4 grid gap-4 lg:grid-cols-[240px_1fr]">
           {/* BARRA LATERAL CON FOTO Y FONDOS */}
           <aside className="rounded-xl bg-transparent p-2 space-y-4">
-            <div>
+            <div className="text-center">
               <h2 className="text-4xl font-bold leading-none text-slate-800">Mi perfil</h2>
 
               {/* BLOQUE CENTRADO PARA FOTO Y BOTÓN */}
@@ -847,6 +873,16 @@ const Perfil: React.FC = () => {
                 >
                   {uploading ? 'Subiendo...' : 'Editar foto'}
                 </button>
+
+                {esUsuarioFiable && (
+                  <div className="mt-4 flex items-center gap-2 rounded-full border-2 border-amber-400 bg-gradient-to-b from-amber-100 to-amber-300 px-3 py-2 text-amber-950 shadow-md">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-amber-600 bg-amber-400 text-lg font-black leading-none text-white">✓</span>
+                    <div>
+                      <p className="text-xs font-extrabold uppercase tracking-wide">Perfil fiable</p>
+                      <p className="text-[10px] font-medium">Cancelaciones: {tasaCancelacion}%</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -913,7 +949,7 @@ const Perfil: React.FC = () => {
           {/* GRID PRINCIPAL 2x2 */}
           <section className="grid gap-4 md:grid-cols-2 items-start">
             {/* BLOQUE 1: MIS DATOS Y ACTIVIDAD */}
-            <div ref={misDatosRef} className="self-start rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="self-start rounded-xl border border-slate-500 bg-gray-100 p-5 md:h-[640px]">
               <h3 className="text-3xl font-semibold text-slate-800">Mis datos y actividad</h3>
 
               <div className="mt-3 space-y-1 text-lg text-slate-700">
@@ -926,30 +962,39 @@ const Perfil: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Este mes</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.ofrecidosMes}</p>
-                  <p className="text-sm text-slate-600">viajes ofrecidos</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Antigüedad de la cuenta</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{formatearFechaAntiguedad(perfil?.fechaAntiguedad)}</p>
+                  <p className="text-sm text-slate-600">fecha de registro</p>
                 </div>
 
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Completados</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.completados}</p>
-                  <p className="text-sm text-slate-600">histórico</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Viajes participados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{totalViajesParticipados}</p>
+                  <p className="text-sm text-slate-600">total histórico</p>
                 </div>
 
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Cancelados</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.cancelados}</p>
-                  <p className="text-sm text-slate-600">histórico</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Viajes completados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{totalViajesExitosos}</p>
+                  <p className="text-sm text-slate-600">como conductor o pasajero</p>
                 </div>
 
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Tendencia</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">
-                    {resumenActividad.tendenciaPct > 0 ? '+' : ''}
-                    {resumenActividad.tendenciaPct}%
-                  </p>
-                  <p className="text-sm text-slate-600">vs mes anterior</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito viajes</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{porcentajeViajesCompletados}%</p>
+                  <p className="text-sm text-slate-600">completados sobre participados</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito reservas</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{ratioExitoReservas}%</p>
+                  <p className="text-sm text-slate-600">aceptadas sobre solicitudes</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Kilómetros compartidos</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{kilometrosCompartidos}</p>
+                  <p className="text-sm text-slate-600">total recorrido</p>
                 </div>
               </div>
 
@@ -966,12 +1011,11 @@ const Perfil: React.FC = () => {
 
             {/* BLOQUE 2: MIS VEHÍCULOS */}
             <div
-              className="rounded-xl border border-slate-500 bg-gray-100 p-5 flex flex-col"
-              style={misDatosHeight ? { height: `${misDatosHeight}px` } : undefined}
+              className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-xl border border-slate-500 bg-gray-100 p-5 md:h-[640px]"
             >
               <h3 className="text-3xl font-semibold text-slate-800">Mis vehículos</h3>
 
-              <div className="mt-3 flex-1 min-h-0 text-slate-700">
+              <div className="mt-3 min-h-0 overflow-hidden text-slate-700">
                 {vehiculosError && (
                   <p className="mb-3 text-red-600">{vehiculosError}</p>
                 )}
@@ -982,7 +1026,7 @@ const Perfil: React.FC = () => {
                 {vehiculos.length === 0 && !vehiculosError ? (
                   <p>No tienes vehículos registrados aún.</p>
                 ) : (
-                  <div className="h-full overflow-y-auto pr-2 space-y-4">
+                  <div className="min-h-0 h-full overflow-y-auto pr-2 space-y-4">
                     {vehiculos.map((vehiculo) => (
                       <div key={vehiculo.id} className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm">
                         <p className="font-semibold text-slate-900">
@@ -1024,7 +1068,7 @@ const Perfil: React.FC = () => {
             </div>
 
             {/* BLOQUE 3: PREFERENCIAS DE VIAJE */}
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="self-stretch rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold mb-2 text-slate-800">Preferencias de viaje</h3>
               <div className="flex flex-wrap gap-2 my-3">
                 {preferencias.length > 0 ? (
@@ -1082,7 +1126,7 @@ const Perfil: React.FC = () => {
             </div>
 
             {/* BLOQUE 4: VALORACIONES */}
-            <div className="rounded-xl border border-slate-500 bg-gray-100 p-5">
+            <div className="self-stretch rounded-xl border border-slate-500 bg-gray-100 p-5">
               <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
               <p className="mt-6 text-xl text-slate-700">
                 Puntuación media: {(perfil?.reputacion ?? 0).toFixed(1)} / 5 &nbsp;

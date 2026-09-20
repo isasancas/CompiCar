@@ -63,12 +63,29 @@ export const handlers = [
     return HttpResponse.json([]);
   }),
 
-  // 7. Valoraciones recibidas por defecto
+  // 7. Estadísticas del perfil
+  http.get('*/api/viajes/exitosos', () => {
+    return HttpResponse.json(0);
+  }),
+
+  http.get('*/api/viajes/contador-participados', () => {
+    return HttpResponse.json(0);
+  }),
+
+  http.get('*/api/viajes/kilometros', () => {
+    return HttpResponse.json(0);
+  }),
+
+  http.get('*/api/reservas/ratio-exito', () => {
+    return HttpResponse.json(0);
+  }),
+
+  // 8. Valoraciones recibidas por defecto
   http.get('*/api/valoraciones/valorado/*', () => {
     return HttpResponse.json([]);
   }),
 
-  // 8. Autenticación y Cierre de sesión
+  // 9. Autenticación y Cierre de sesión
   http.post('*/api/login', async ({ request }) => {
     const body = (await request.clone().json()) as { email?: string; contrasena?: string };
 
@@ -85,5 +102,13 @@ export const handlers = [
 
   http.post('*/api/logout', () => {
     return HttpResponse.json({ success: true }, { status: 200 });
+  }),
+
+  http.put('http://localhost:8080/api/viajes/:slug/en-curso', () => {
+    return HttpResponse.json({ mensaje: 'Viaje iniciado correctamente' }, { status: 200 });
+  }),
+
+  http.get('http://localhost:8080/api/reservas/mis-reservas', () => {
+    return HttpResponse.json([], { status: 200 });
   })
 ];

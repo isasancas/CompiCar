@@ -7,6 +7,7 @@ public class ReservaDTO {
     private Long id;
     private String estado;
     private LocalDateTime fechaHoraReserva;
+    private LocalDateTime fechaCancelacion;
     private String nombrePasajero;
     private Long viajeId;
     private Long personaId;
@@ -55,6 +56,14 @@ public class ReservaDTO {
 
     public void setFechaHoraReserva(LocalDateTime fechaHoraReserva) {
         this.fechaHoraReserva = fechaHoraReserva;
+    }
+
+    public LocalDateTime getFechaCancelacion() {
+        return fechaCancelacion;
+    }
+
+    public void setFechaCancelacion(LocalDateTime fechaCancelacion) {
+        this.fechaCancelacion = fechaCancelacion;
     }
 
     public Long getViajeId() {

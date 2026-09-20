@@ -1,5 +1,7 @@
 package com.compicar.pago;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -126,6 +128,15 @@ public class PagoControllerTest {
     }
 
     @Test
+    void testFallarPago_SinAutenticar_Retorna401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/pagos/fallar")
+                .param("pagoId", "10"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void testReembolsarPago_Exito() throws Exception {
         simularAutenticacion("usuario@test.com");
         pagoEjemplo.setEstado(EstadoPago.REEMBOLSADO);
@@ -136,6 +147,15 @@ public class PagoControllerTest {
                 .param("pagoId", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("REEMBOLSADO"));
+    }
+
+    @Test
+    void testReembolsarPago_SinAutenticar_Retorna401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/pagos/reembolsar")
+                .param("pagoId", "10"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -155,6 +175,18 @@ public class PagoControllerTest {
     }
 
     @Test
+    void testActualizarPago_SinAutenticar_Retorna401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(put("/api/pagos/actualizar")
+                .param("usuarioEmail", "usuario@test.com")
+                .param("reservaId", "5")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(pagoEjemplo)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void testObtenerPagoPorId_Exito() throws Exception {
         simularAutenticacion("usuario@test.com");
 
@@ -164,6 +196,14 @@ public class PagoControllerTest {
                 .param("pagoId", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(10));
+    }
+
+    @Test
+    void testObtenerPagoPorId_SinAutenticar_Retorna401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(get("/api/pagos/10"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -177,6 +217,28 @@ public class PagoControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(10));
+    }
+
+    @Test
+    void testObtenerPagosPorPersona_SinAutenticar_Retorna401() throws Exception {
+        SecurityContextHolder.clearContext();
+
+        mockMvc.perform(get("/api/pagos/mis-pagos"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void testObtenerPagosPorPersona_UsuarioNoEncontrado() {
+        simularAutenticacion("inexistente@test.com");
+        when(personaRepository.findByEmail("inexistente@test.com")).thenReturn(Optional.empty());
+
+        Exception exception = org.junit.jupiter.api.Assertions.assertThrows(
+            Exception.class, 
+            () -> mockMvc.perform(get("/api/pagos/mis-pagos"))
+        );
+
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+        assertEquals("Usuario no encontrado con email: inexistente@test.com", exception.getCause().getMessage());
     }
 
     @Test

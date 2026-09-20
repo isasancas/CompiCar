@@ -48,8 +48,8 @@ public class ViajeRecurrente extends ViajeBase {
     }
 
     public ViajeRecurrente(LocalDateTime fechaHoraSalida, EstadoViaje estado, Integer plazasDisponibles, BigDecimal precio, 
-                           Persona persona, Vehiculo vehiculo, Viaje viajePadre, String slug, String checkin) {
-        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug, checkin);
+                           Persona persona, Vehiculo vehiculo, Viaje viajePadre, String slug, String checkin, Integer kilometrosRecorridos) {
+        super(fechaHoraSalida, estado, plazasDisponibles, precio, persona, vehiculo, slug, checkin, kilometrosRecorridos);
         this.viajePadre = viajePadre;
     }
 

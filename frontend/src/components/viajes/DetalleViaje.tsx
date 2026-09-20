@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   MapContainer,
   TileLayer,
   CircleMarker,
   Polyline,
-  Tooltip
+  Tooltip,
+  useMap
 } from 'react-leaflet';
 import { buildApiUrl } from '../../apiConfig';
 import { Elements } from '@stripe/react-stripe-js';
@@ -17,6 +18,8 @@ interface Parada {
   localizacion: string;
   tipo: string;
   orden: number;
+  latitud?: number;
+  longitud?: number;
 }
 
 interface ParadaConCoordenadas extends Parada {
@@ -61,6 +64,22 @@ interface Reserva {
   fechaHoraReserva?: string;
 }
 
+function MapBoundsFitter({ coords }: { coords: Array<{ lat?: number; lng?: number }> }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const validCoords = coords
+      .filter((coord): coord is { lat: number; lng: number } => coord.lat !== undefined && coord.lng !== undefined)
+      .map((coord) => [coord.lat, coord.lng] as [number, number]);
+
+    if (validCoords.length > 0) {
+      map.fitBounds(validCoords, { padding: [40, 40], maxZoom: 14 });
+    }
+  }, [coords, map]);
+
+  return null;
+}
+
 const DetalleViaje: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -86,6 +105,7 @@ const DetalleViaje: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [paradasConCoordenadas, setParadasConCoordenadas] = useState<ParadaConCoordenadas[]>([]);
   const [routeLine, setRouteLine] = useState<Array<[number, number]>>([]);
+  const routeRequestId = useRef(0);
   const [mapCenter, setMapCenter] = useState<[number, number]>([40.4168, -3.7038]);
   const token = localStorage.getItem('token') || '';
   const [cantidadPlazas, setCantidadPlazas] = useState(1);
@@ -138,8 +158,14 @@ const DetalleViaje: React.FC = () => {
 
   const isLoggedIn = !!token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
 
-  const usuarioActual = JSON.parse(localStorage.getItem('perfil') || '{}');
-  const usuarioIdActual = usuarioActual.id;
+  const usuarioActual = navState.usuarioActual || JSON.parse(localStorage.getItem('perfil') || '{}');
+  const usuarioIdActual = navState.usuarioId ?? usuarioActual.id;
+
+  const esConductor = navState.rol?.toUpperCase() === 'CONDUCTOR' || (
+    viaje?.conductorId != null &&
+    usuarioIdActual != null &&
+    Number(viaje.conductorId) === Number(usuarioIdActual)
+  );
 
   const esInstanciaRecurrente = Boolean(navState.esInstanciaRecurrente);
 
@@ -190,10 +216,24 @@ const DetalleViaje: React.FC = () => {
   useEffect(() => {
     if (!viaje || viaje.paradas.length === 0) return;
 
+    let cancelled = false;
+    routeRequestId.current += 1;
+    setParadasConCoordenadas([]);
+    setRouteLine([]);
+
     const obtenerCoordenadas = async () => {
       const paradasActualizadas: ParadaConCoordenadas[] = [];
 
       for (const parada of viaje.paradas) {
+        if (parada.latitud !== undefined && parada.longitud !== undefined) {
+          paradasActualizadas.push({
+            ...parada,
+            lat: Number(parada.latitud),
+            lng: Number(parada.longitud)
+          });
+          continue;
+        }
+
         try {
           const response = await fetch(
             `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
@@ -221,6 +261,7 @@ const DetalleViaje: React.FC = () => {
         }
       }
 
+      if (cancelled) return;
       setParadasConCoordenadas(paradasActualizadas);
 
       // Calcular centro del mapa y ruta
@@ -237,6 +278,10 @@ const DetalleViaje: React.FC = () => {
     };
 
     obtenerCoordenadas();
+
+    return () => {
+      cancelled = true;
+    };
   }, [viaje]);
 
   const fetchMiReserva = async () => {
@@ -574,6 +619,8 @@ const DetalleViaje: React.FC = () => {
   const calcularRutaReal = async (paradas: ParadaConCoordenadas[]) => {
     if (paradas.length < 2) return;
 
+    const requestId = ++routeRequestId.current;
+
     const paradasOrdenadas = paradas.sort((a, b) => a.orden - b.orden);
     const coords = paradasOrdenadas.map((p) => `${p.lng},${p.lat}`).join(';');
     const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
@@ -582,7 +629,7 @@ const DetalleViaje: React.FC = () => {
       const response = await fetch(url);
       if (!response.ok) {
         const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
-        setRouteLine(ruta);
+        if (requestId === routeRequestId.current) setRouteLine(ruta);
         return;
       }
 
@@ -590,17 +637,17 @@ const DetalleViaje: React.FC = () => {
       const route = data?.routes?.[0];
       if (!route?.geometry?.coordinates) {
         const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
-        setRouteLine(ruta);
+        if (requestId === routeRequestId.current) setRouteLine(ruta);
         return;
       }
 
       const routeCoords: Array<[number, number]> = route.geometry.coordinates.map(
         (pair: [number, number]) => [pair[1], pair[0]]
       );
-      setRouteLine(routeCoords);
+      if (requestId === routeRequestId.current) setRouteLine(routeCoords);
     } catch {
       const ruta: Array<[number, number]> = paradasOrdenadas.map((p) => [p.lat!, p.lng!]);
-      setRouteLine(ruta);
+      if (requestId === routeRequestId.current) setRouteLine(ruta);
     }
   };
 
@@ -1025,7 +1072,7 @@ const DetalleViaje: React.FC = () => {
           </div>
 
           {/* Lista de Pasajeros (Solo visible para el conductor) */}
-          {navState.rol === 'conductor' && viaje.reservas && viaje.reservas.length > 0 && (
+          {esConductor && viaje.reservas && viaje.reservas.length > 0 && (
             <div className="mb-6 border-t border-slate-100 pt-6">
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <span className="bg-blue-100 text-blue-600 p-1 rounded-md">👤</span>
@@ -1217,7 +1264,7 @@ const DetalleViaje: React.FC = () => {
 
           {/* SECCIÓN DE BOTONES DINÁMICOS */}
           <div className="space-y-3">
-            {navState.rol !== 'conductor' && (
+            {!esConductor && (
               <>
                 {viaje.estado === 'FINALIZADO' ? (
                   <div className="text-center p-4 bg-slate-100 rounded-xl text-slate-600 text-sm italic border border-slate-200">
@@ -1281,6 +1328,16 @@ const DetalleViaje: React.FC = () => {
                       </div>
                     )}
 
+                    {miReserva.estado === 'CONFIRMADA' && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/viajes/${viaje.slug}/solicitar-parada`)}
+                        className="w-full rounded-lg border-2 border-indigo-600 bg-white px-6 py-3 text-base font-bold text-indigo-700 transition-all hover:bg-indigo-50"
+                      >
+                        📍 Solicitar una nueva parada
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => {
@@ -1322,7 +1379,7 @@ const DetalleViaje: React.FC = () => {
             )}
 
 
-            {navState.rol === 'conductor' && (
+            {esConductor && (
               <div className="space-y-3">
                 {viaje.estado !== 'CANCELADO' && viaje.estado !== 'FINALIZADO' && viaje.estado !== 'INICIADO' && viaje.estado !== 'EN_CURSO' && (
                   <div>
@@ -1508,6 +1565,7 @@ const DetalleViaje: React.FC = () => {
               zoom={6}
               style={{ height: '100%', width: '100%' }}
             >
+              <MapBoundsFitter coords={paradasConCoordenadas} />
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; OpenStreetMap contributors'

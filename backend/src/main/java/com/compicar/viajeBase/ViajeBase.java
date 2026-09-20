@@ -28,6 +28,8 @@ public abstract class ViajeBase {
     @Column(nullable = false)
     private LocalDateTime fechaHoraSalida;
 
+    private LocalDateTime fechaCancelacion;
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private EstadoViaje estado;
@@ -44,6 +46,9 @@ public abstract class ViajeBase {
     @Column(nullable = false, length = 6)
     private String checkin;
 
+    @Column(name = "kilometros_recorridos", nullable = true)
+    private Integer kilometrosRecorridos;
+
     @ManyToOne
     @JoinColumn(name = "persona_id", nullable = false)
     @JsonIgnoreProperties({"viajes", "reservas", "vehiculos"})
@@ -57,7 +62,7 @@ public abstract class ViajeBase {
     }
 
     public ViajeBase(LocalDateTime fechaHoraSalida, EstadoViaje estado, Integer plazasDisponibles, BigDecimal precio, Persona persona, Vehiculo vehiculo,
-        String slug, String checkin) {
+        String slug, String checkin, Integer kilometrosRecorridos) {
         this.fechaHoraSalida = fechaHoraSalida;
         this.estado = estado;
         this.plazasDisponibles = plazasDisponibles;
@@ -66,6 +71,7 @@ public abstract class ViajeBase {
         this.checkin = checkin;
         this.vehiculo = vehiculo;
         this.slug = slug;
+        this.kilometrosRecorridos = kilometrosRecorridos;
     }
 
     // Getters
@@ -75,6 +81,10 @@ public abstract class ViajeBase {
 
     public LocalDateTime getFechaHoraSalida() {
         return fechaHoraSalida;
+    }
+
+    public LocalDateTime getFechaCancelacion() {
+        return fechaCancelacion;
     }
 
     public EstadoViaje getEstado() {
@@ -101,6 +111,10 @@ public abstract class ViajeBase {
         return persona;
     }
 
+    public Integer getKilometrosRecorridos() {
+        return kilometrosRecorridos;
+    }
+
     public Vehiculo getVehiculo() {
         return vehiculo;
     }
@@ -112,6 +126,10 @@ public abstract class ViajeBase {
     
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
         this.fechaHoraSalida = fechaHoraSalida;
+    }
+
+    public void setFechaCancelacion(LocalDateTime fechaCancelacion) {
+        this.fechaCancelacion = fechaCancelacion;
     }
 
     public void setEstado(EstadoViaje estado) {
@@ -140,5 +158,9 @@ public abstract class ViajeBase {
 
     public void setVehiculo(Vehiculo vehiculo) {
         this.vehiculo = vehiculo;
+    }
+
+    public void setKilometrosRecorridos(Integer kilometrosRecorridos) {
+        this.kilometrosRecorridos = kilometrosRecorridos;
     }
 }

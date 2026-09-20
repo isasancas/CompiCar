@@ -2,6 +2,7 @@ package com.compicar.viajeRecurrente;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.pago.EstadoPago;
@@ -56,6 +58,8 @@ class ViajeRecurrenteServiceTest {
     private NotificacionRepository notificacionRepository;
     @Mock
     private StripeService stripeService;
+    @Mock
+    private CorreoService correoService;
 
     @InjectMocks
     private ViajeRecurrenteServiceImpl viajeRecurrenteService;
@@ -369,6 +373,9 @@ class ViajeRecurrenteServiceTest {
         verify(stripeService).confirmarCaptura("pi_123");
         verify(pagoRepository).save(pago);
         verify(notificacionRepository).save(any(Notificacion.class));
+        verify(correoService).sendViajeRecurrenteFinalizadoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
     }
 
     @Test
@@ -464,6 +471,9 @@ class ViajeRecurrenteServiceTest {
         assertEquals(EstadoPago.REEMBOLSADO, pago.getEstado());
         verify(stripeService).liberarFondos("pi_123");
         verify(pagoRepository).save(pago);
+        verify(correoService).sendViajeRecurrenteCanceladoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -495,6 +505,9 @@ class ViajeRecurrenteServiceTest {
         assertNotNull(dto);
         verify(stripeService).reembolsarParcial(eq("pi_123"), eq(new BigDecimal("15.00")));
         verify(pagoRepository).save(pago);
+        verify(correoService).sendViajeRecurrenteCanceladoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyInt()
+        );
     }
 
     @Test
@@ -647,6 +660,9 @@ class ViajeRecurrenteServiceTest {
         assertEquals(EstadoViaje.CANCELADO.toString(), dto.getEstado());
         verify(stripeService).liberarFondos("pi_456");
         verify(personaRepository).save(conductor);
+        verify(correoService).sendIncomparecenciaConductorRecurrentePasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
     }
 
     @Test
@@ -696,6 +712,9 @@ class ViajeRecurrenteServiceTest {
         assertEquals(new BigDecimal("20.00"), dto.getPrecio());
         assertEquals(4, dto.getPlazasDisponibles());
         verify(notificacionRepository).save(any(Notificacion.class));
+        verify(correoService).sendViajeRecurrenteModificadoPasajero(
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), any(BigDecimal.class)
+        );
     }
 
     @Test
@@ -730,5 +749,97 @@ class ViajeRecurrenteServiceTest {
                 () -> viajeRecurrenteService.actualizarViajeRecurrente("conductor@test.com", "viaje-recurrente-slug", viajeEditado));
 
         assertEquals(400, ex.getStatusCode().value());
+    }
+
+    // --- CONTAR KILOMETROS RECORRIDOS POR USUARIO ---
+
+    @Test
+    void contarKilometrosRecorridosPorUsuario_ok() {
+        Persona usuario = new Persona();
+        ReflectionTestUtils.setField(usuario, "id", 1L);
+        usuario.setEmail("usuario@test.com");
+
+        ViajeRecurrente vr1 = new ViajeRecurrente();
+        vr1.setKilometrosRecorridos(120);
+
+        ViajeRecurrente vr2 = new ViajeRecurrente();
+        vr2.setKilometrosRecorridos(80);
+
+        ViajeRecurrente vr3 = new ViajeRecurrente();
+        vr3.setKilometrosRecorridos(null);
+
+        when(personaRepository.findByEmail("usuario@test.com")).thenReturn(Optional.of(usuario));
+        when(viajeRecurrenteRepository.findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(1L))
+                .thenReturn(List.of(vr1, vr2, vr3));
+
+        Integer resultado = viajeRecurrenteService.contarKilometrosRecorridosPorUsuario("usuario@test.com");
+
+        assertEquals(200, resultado);
+    }
+
+    @Test
+    void contarKilometrosRecorridosPorUsuario_usuarioNoEncontrado_lanza404() {
+        when(personaRepository.findByEmail("inexistente@test.com")).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> viajeRecurrenteService.contarKilometrosRecorridosPorUsuario("inexistente@test.com"));
+
+        assertEquals(404, ex.getStatusCode().value());
+    }
+
+    @Test
+    void obtenerViajesRecurrentesExitosos_ok() {
+        Persona usuario = new Persona();
+        ReflectionTestUtils.setField(usuario, "id", 1L);
+        usuario.setEmail("usuario@test.com");
+
+        ViajeRecurrente vr1 = new ViajeRecurrente();
+        ReflectionTestUtils.setField(vr1, "id", 10L);
+        vr1.setSlug("vr-10");
+        vr1.setEstado(EstadoViaje.FINALIZADO);
+
+        when(personaRepository.findByEmail("usuario@test.com")).thenReturn(Optional.of(usuario));
+        when(viajeRecurrenteRepository.findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(1L))
+                .thenReturn(List.of(vr1));
+
+        List<ViajeRecurrenteDTO> resultado = viajeRecurrenteService.obtenerViajesRecurrentesExitosos("usuario@test.com");
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.size());
+        assertEquals("vr-10", resultado.get(0).getSlug());
+    }
+
+    @Test
+    void obtenerViajesRecurrentesExitosos_usuarioNoEncontrado_lanza404() {
+        when(personaRepository.findByEmail("inexistente@test.com")).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> viajeRecurrenteService.obtenerViajesRecurrentesExitosos("inexistente@test.com"));
+
+        assertEquals(404, ex.getStatusCode().value());
+    }
+
+    @Test
+    void generarOcurrencias_fechaFinRecurrenciaNull_retornaVacio() {
+        viajePadre.setFechaFinRecurrencia(null);
+        assertTrue(viajeRecurrenteService.generarOcurrencias(viajePadre).isEmpty());
+    }
+
+    @Test
+    void actualizarViajeRecurrente_noEsConductor_lanza403() {
+        Persona otroUsuario = new Persona();
+        ReflectionTestUtils.setField(otroUsuario, "id", 99L);
+        otroUsuario.setEmail("otro@test.com");
+
+        viajeRecurrente.setFechaHoraSalida(LocalDateTime.now().plusDays(2));
+        Viaje viajeEditado = new Viaje();
+
+        when(personaRepository.findByEmail("otro@test.com")).thenReturn(Optional.of(otroUsuario));
+        when(viajeRecurrenteRepository.findBySlug("viaje-recurrente-slug")).thenReturn(Optional.of(viajeRecurrente));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> viajeRecurrenteService.actualizarViajeRecurrente("otro@test.com", "viaje-recurrente-slug", viajeEditado));
+
+        assertEquals(403, ex.getStatusCode().value());
     }
 }

@@ -1002,4 +1002,75 @@ class ViajeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("EN_CURSO"));
         }
+
+        @Test
+        void contarViajesExitososPorConductor_ok() throws Exception {
+                when(viajeService.contarViajesExitososPorSlug("conductor-slug")).thenReturn(5);
+
+                mockMvc.perform(get("/api/viajes/publicos/conductor/conductor-slug/exitosos"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").value(5));
+        }
+
+        @Test
+        void contarViajesParticipadosPorConductor_ok() throws Exception {
+                when(viajeService.contarViajesParticipadosPorSlug("conductor-slug")).thenReturn(8);
+
+                mockMvc.perform(get("/api/viajes/publicos/conductor/conductor-slug/participados"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").value(8));
+        }
+
+        @Test
+        void obtenerViajesExitosos_ok() throws Exception {
+                when(viajeRouterService.obtenerViajesExitosos("driver@compicar.com")).thenReturn(List.of());
+
+                mockMvc.perform(get("/api/viajes/exitosos")
+                        .principal(new org.springframework.security.authentication.TestingAuthenticationToken("driver@compicar.com", null)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").isArray());
+        }
+
+        @Test
+        void contarKilometrosRecorridosPorUsuario_ok_autenticado() throws Exception {
+                autenticar("driver@compicar.com");
+
+                when(viajeRouterService.contarKilometrosRecorridosPorUsuario("driver@compicar.com")).thenReturn(450);
+
+                mockMvc.perform(get("/api/viajes/kilometros"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").value(450));
+        }
+
+        @Test
+        void contarKilometrosRecorridosPorUsuario_noAutenticado_401() throws Exception {
+                SecurityContextHolder.clearContext();
+
+                mockMvc.perform(get("/api/viajes/kilometros"))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(viajeRouterService);
+        }
+
+        @Test
+        void contarViajesParticipadosPorUsuario_ok_autenticado() throws Exception {
+                autenticar("driver@compicar.com");
+
+                when(viajeService.obtenerViajesParticipados("driver@compicar.com"))
+                        .thenReturn(List.of(new ViajeDTO(), new ViajeDTO()));
+
+                mockMvc.perform(get("/api/viajes/contador-participados"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$").value(2));
+        }
+
+        @Test
+        void contarViajesParticipadosPorUsuario_noAutenticado_401() throws Exception {
+                SecurityContextHolder.clearContext();
+
+                mockMvc.perform(get("/api/viajes/contador-participados"))
+                        .andExpect(status().isUnauthorized());
+
+                verifyNoInteractions(viajeService);
+        }
 }

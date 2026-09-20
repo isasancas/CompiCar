@@ -10,22 +10,30 @@ interface PerfilPublicoData {
   email: string;
   telefono: string;
   reputacion?: number;
+  numeroCancelaciones?: number;
   slug: string;
   preferenciasViaje?: string[];
-
+  fechaAntiguedad?: string;
 }
 
-type ViajeActividad = {
-  id: number;
-  fechaHoraSalida: string;
-  estado: string;
-};
+/*interface ViajeActividad {
+  fechaHoraSalida?: string;
+  estado?: string;
+}*/
 
-type ResumenActividad = {
-  ofrecidosMes: number;
-  completados: number;
-  cancelados: number;
-  tendenciaPct: number;
+interface ValoracionRecibida {
+  id: number;
+  puntuacion: number;
+  comentario?: string;
+  fecha?: string;
+  autorNombre?: string;
+}
+
+const formatearFechaAntiguedad = (fecha?: string): string => {
+  if (!fecha) return '-';
+  const fechaCuenta = new Date(`${fecha}T00:00:00`);
+  if (Number.isNaN(fechaCuenta.getTime())) return '-';
+  return fechaCuenta.toLocaleDateString('es-ES');
 };
 
 const PerfilPublico: React.FC = () => {
@@ -35,106 +43,120 @@ const PerfilPublico: React.FC = () => {
   const [perfil, setPerfil] = useState<PerfilPublicoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [resumenActividad, setResumenActividad] = useState<ResumenActividad>({
-    ofrecidosMes: 0,
-    completados: 0,
-    cancelados: 0,
-    tendenciaPct: 0
-  });
+  const [totalValoracionesRecibidas, setTotalValoracionesRecibidas] = useState(0);
+  const [valoracionesRecibidas, setValoracionesRecibidas] = useState<ValoracionRecibida[]>([]);
+  const [mostrarValoraciones, setMostrarValoraciones] = useState(false);
+  const [totalViajesExitosos, setTotalViajesExitosos] = useState(0);
+  const [totalViajesParticipados, setTotalViajesParticipados] = useState(0);
+  ///const [tendenciaActividad, setTendenciaActividad] = useState<number | null>(null);
+  const [ratioExitoReservas, setRatioExitoReservas] = useState(0);
+
+  const porcentajeViajesCompletados = totalViajesParticipados > 0
+    ? Math.round((totalViajesExitosos / totalViajesParticipados) * 100)
+    : 0;
+  const tasaCancelacion = totalViajesParticipados > 0
+    ? Math.round(((perfil?.numeroCancelaciones ?? 0) / totalViajesParticipados) * 100)
+    : 0;
+  const esUsuarioFiable = totalViajesParticipados > 0 && tasaCancelacion < 5;
 
   const volver = () => navigate(-1);
 
   useEffect(() => {
-    const fetchPerfilPublico = async () => {
+    const fetchValoraciones = async (personaId: number) => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/valoraciones/valorado/${personaId}`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const valoraciones = await res.json();
+          const recibidas = Array.isArray(valoraciones) ? valoraciones : [];
+          setValoracionesRecibidas(recibidas);
+          setTotalValoracionesRecibidas(recibidas.length);
+        }
+      } catch {
+        // No bloqueamos por fallo de valoraciones
+      }
+    };
+
+    const fetchViajesExitosos = async () => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}/exitosos`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const total = Number(await res.json());
+          setTotalViajesExitosos(Number.isFinite(total) ? total : 0);
+        }
+      } catch {
+        // No bloqueamos por fallo de estadisticas
+      }
+    };
+
+    const fetchViajesParticipados = async () => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}/participados`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const total = Number(await res.json());
+          setTotalViajesParticipados(Number.isFinite(total) ? total : 0);
+        }
+      } catch {
+        // No bloqueamos por fallo de estadisticas
+      }
+    };
+
+    const fetchRatioExitoReservas = async () => {
+      try {
+        const res = await fetch(buildApiUrl(`/api/reservas/ratio-exito?slug=${encodeURIComponent(slug!)}`), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const ratio = Number(await res.json());
+          setRatioExitoReservas(Number.isFinite(ratio) ? Math.round(ratio) : 0);
+        }
+      } catch {
+        // No bloqueamos por fallo de estadisticas
+      }
+    };
+
+    const cargarPerfilCompleto = async () => {
       if (!slug) {
         setError('Perfil no encontrado');
+        setLoading(false);
         return;
       }
 
       try {
         const response = await fetch(buildApiUrl(`/api/personas/${slug}/perfil-publico`), {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Content-Type': 'application/json' }
         });
 
         if (!response.ok) {
           setError('No se pudo cargar el perfil público');
+          setLoading(false);
           return;
         }
 
         const data = await response.json();
         setPerfil(data);
+
+        // Solo cargamos estadísticas si el perfil existe
+        await Promise.all([
+          fetchValoraciones(data.id),
+          fetchViajesExitosos(),
+          fetchViajesParticipados(),
+          fetchRatioExitoReservas()
+        ]);
       } catch {
         setError('Error de conexión al cargar el perfil');
+      } finally {
+        setLoading(false);
       }
     };
 
-    const fetchResumenActividad = async () => {
-      if (!slug) {
-        return;
-      }
-
-      try {
-        const response = await fetch(buildApiUrl(`/api/viajes/publicos/conductor/${slug}`), {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const viajes = (await response.json()) as ViajeActividad[];
-
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
-
-        const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
-        const prevMonth = prevMonthDate.getMonth();
-        const prevYear = prevMonthDate.getFullYear();
-
-        const offeredCurrent = viajes.filter((v) => {
-          const d = new Date(v.fechaHoraSalida);
-          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        }).length;
-
-        const offeredPrev = viajes.filter((v) => {
-          const d = new Date(v.fechaHoraSalida);
-          return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
-        }).length;
-
-        const completados = viajes.filter((v) =>
-          ['FINALIZADO', 'COMPLETADO'].includes((v.estado || '').toUpperCase())
-        ).length;
-
-        const cancelados = viajes.filter((v) =>
-          ['CANCELADO', 'CANCELADA'].includes((v.estado || '').toUpperCase())
-        ).length;
-
-        const tendenciaPct =
-          offeredPrev === 0
-            ? offeredCurrent > 0
-              ? 100
-              : 0
-            : Math.round(((offeredCurrent - offeredPrev) / offeredPrev) * 100);
-
-        setResumenActividad({
-          ofrecidosMes: offeredCurrent,
-          completados,
-          cancelados,
-          tendenciaPct
-        });
-      } catch {
-        // No bloqueamos la carga del perfil si fallan estadisticas.
-      }
-    };
-
-    Promise.all([fetchPerfilPublico(), fetchResumenActividad()]).finally(() => setLoading(false));
+    cargarPerfilCompleto();
   }, [slug]);
 
   if (loading) {
@@ -184,14 +206,24 @@ const PerfilPublico: React.FC = () => {
         </button>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
-          <aside className="rounded-xl bg-transparent p-2">
+          <aside className="rounded-xl bg-transparent p-2 text-center">
             <h2 className="text-4xl font-bold leading-none text-slate-800">
               {nombreCompleto}
             </h2>
 
-            <div className="mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
+            <div className="mx-auto mt-4 flex h-28 w-28 items-center justify-center rounded-full border-4 border-slate-800 bg-white text-4xl text-slate-700 overflow-hidden">
               <span>{perfil?.nombre?.charAt(0).toUpperCase()}</span>
             </div>
+
+            {esUsuarioFiable && (
+              <div className="mx-auto mt-4 flex w-fit items-center gap-2 rounded-full border-2 border-amber-400 bg-gradient-to-b from-amber-100 to-amber-300 px-3 py-2 text-amber-950 shadow-md">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-amber-600 bg-amber-400 text-lg font-black leading-none text-white">✓</span>
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-wide">Perfil fiable</p>
+                  <p className="text-[10px] font-medium">Cancelaciones: {tasaCancelacion}%</p>
+                </div>
+              </div>
+            )}
           </aside>
 
           <section className="grid gap-4 md:grid-cols-2 items-start">
@@ -203,29 +235,31 @@ const PerfilPublico: React.FC = () => {
                 <p>Teléfono: {perfil.telefono || '-'}</p>
               </div>
               <div className="my-4 h-px bg-slate-300" />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Este mes</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.ofrecidosMes}</p>
-                  <p className="text-sm text-slate-600">viajes ofrecidos</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Antigüedad de la cuenta</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{formatearFechaAntiguedad(perfil.fechaAntiguedad)}</p>
+                  <p className="text-sm text-slate-600">fecha de registro</p>
                 </div>
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Completados</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.completados}</p>
-                  <p className="text-sm text-slate-600">histórico</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Viajes participados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{totalViajesParticipados}</p>
+                  <p className="text-sm text-slate-600">total histórico</p>
                 </div>
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Cancelados</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">{resumenActividad.cancelados}</p>
-                  <p className="text-sm text-slate-600">histórico</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Viajes completados</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{totalViajesExitosos}</p>
+                  <p className="text-sm text-slate-600">como conductor o pasajero</p>
                 </div>
                 <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Tendencia</p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">
-                    {resumenActividad.tendenciaPct > 0 ? '+' : ''}
-                    {resumenActividad.tendenciaPct}%
-                  </p>
-                  <p className="text-sm text-slate-600">vs mes anterior</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito viajes</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{porcentajeViajesCompletados}%</p>
+                  <p className="text-sm text-slate-600">completados sobre participados</p>
+                </div>
+                <div className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ratio de éxito reservas</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{ratioExitoReservas}%</p>
+                  <p className="text-sm text-slate-600">aceptadas sobre solicitudes</p>
                 </div>
               </div>
             </div>
@@ -246,9 +280,48 @@ const PerfilPublico: React.FC = () => {
             <div className="rounded-xl border border-slate-500 bg-gray-100 p-5 md:col-span-2">
               <h3 className="text-3xl font-semibold text-slate-800">Valoraciones</h3>
               <p className="mt-6 text-xl text-slate-700">
-                Puntuación media: {Number(perfil.reputacion ?? 0).toFixed(1)} / 5 &nbsp; (0 reseñas)
+                Puntuación media: {Number(perfil.reputacion ?? 0).toFixed(1)} / 5 &nbsp;
+                ({totalValoracionesRecibidas} {totalValoracionesRecibidas === 1 ? 'reseña' : 'reseñas'})
               </p>
+              <button
+                type="button"
+                className="mt-4 rounded-full bg-gradient-compi px-5 py-2 text-sm font-semibold text-white shadow hover:opacity-90"
+                onClick={() => setMostrarValoraciones((visible) => !visible)}
+              >
+                {mostrarValoraciones ? 'Ocultar valoraciones' : 'Ver valoraciones recibidas'}
+              </button>
+
+              {mostrarValoraciones && (
+                <div className="mt-4 space-y-3">
+                  {valoracionesRecibidas.length === 0 ? (
+                    <p className="text-sm italic text-slate-500">Todavía no tiene valoraciones recibidas.</p>
+                  ) : (
+                    valoracionesRecibidas.map((valoracion) => (
+                      <article key={valoracion.id} className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-800">
+                            {valoracion.autorNombre || 'Usuario'}
+                          </p>
+                          <p className="font-semibold text-amber-600" aria-label={`${valoracion.puntuacion} de 5 estrellas`}>
+                            {'★'.repeat(Math.max(0, Math.min(5, valoracion.puntuacion)))}
+                            <span className="ml-1 text-slate-600">{valoracion.puntuacion}/5</span>
+                          </p>
+                        </div>
+                        {valoracion.comentario && (
+                          <p className="mt-2 text-slate-700">{valoracion.comentario}</p>
+                        )}
+                        {valoracion.fecha && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            {new Date(valoracion.fecha).toLocaleDateString('es-ES')}
+                          </p>
+                        )}
+                      </article>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
+
           </section>
           </div>
       </div>

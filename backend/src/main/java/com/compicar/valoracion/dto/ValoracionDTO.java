@@ -48,8 +48,23 @@ public class ValoracionDTO {
         this.valoradoId = valoracion.getValorado() != null ? valoracion.getValorado().getId() : null;
         this.slug = valoracion.getSlug();
         this.viajeId = valoracion.getViaje() != null ? valoracion.getViaje().getId() : null;
-        this.autorNombre = valoracion.getAutor() != null ? valoracion.getAutor().getNombre() : null;
-        this.valoradoNombre = valoracion.getValorado() != null ? valoracion.getValorado().getNombre() : null;
+        this.autorNombre = nombreCompleto(valoracion.getAutor());
+        this.valoradoNombre = nombreCompleto(valoracion.getValorado());
+    }
+
+    private static String nombreCompleto(com.compicar.persona.Persona persona) {
+        if (persona == null) {
+            return null;
+        }
+
+        return java.util.stream.Stream.of(
+                persona.getNombre(),
+                persona.getPrimerApellido(),
+                persona.getSegundoApellido())
+            .filter(java.util.Objects::nonNull)
+            .map(String::trim)
+            .filter(nombre -> !nombre.isEmpty())
+            .collect(java.util.stream.Collectors.joining(" "));
     }
 
     public ValoracionDTO(Long id, Integer puntuacion, String comentario, LocalDateTime fecha, Long autorId,

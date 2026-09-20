@@ -33,13 +33,10 @@ class PersonaIntegrationTest extends BaseIntegrationTest {
     void retirarFondos_ok() throws Exception {
         String token = registerAndLogin();
 
-        // 1. Buscamos al usuario en la base de datos (puedes extraer el email del token o buscar por el último creado)
-        // O si tienes acceso a la entidad, le asignamos fondos directamente:
         Persona persona = personaRepository.findAll().stream().findFirst().orElseThrow();
         persona.setFondosActuales(BigDecimal.valueOf(50.00));
         personaRepository.save(persona);
 
-        // 2. Ahora intentamos retirar una cantidad menor al saldo disponible
         Map<String, Object> payload = Map.of(
                 "cantidad", 10.00
         );
@@ -55,7 +52,6 @@ class PersonaIntegrationTest extends BaseIntegrationTest {
     void retirarFondos_sinSaldo_400() throws Exception {
         String token = registerAndLogin();
         
-        // Al nacer con 0 de saldo, retirar 9999 disparará correctamente el error de saldo insuficiente
         Map<String, Object> payload = Map.of(
                 "cantidad", 9999.00
         );

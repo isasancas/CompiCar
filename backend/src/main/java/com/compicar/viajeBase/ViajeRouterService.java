@@ -91,4 +91,16 @@ public class ViajeRouterService {
         }
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Viaje no encontrado");
     }
+
+    public Object contarKilometrosRecorridosPorUsuario(String usuarioEmail) {
+        Integer kilometrosRecorridos = viajeService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
+        Integer kilometrosRecorridosRecurrentes = viajeRecurrenteService.contarKilometrosRecorridosPorUsuario(usuarioEmail);
+        return kilometrosRecorridos + kilometrosRecorridosRecurrentes;
+    }
+
+    public Object obtenerViajesExitosos(String usuarioEmail) {
+        Integer countViajesExitosos = viajeService.obtenerViajesExitosos(usuarioEmail).size();
+        Integer countViajesRecurrentesExitosos = viajeRecurrenteService.obtenerViajesRecurrentesExitosos(usuarioEmail).size();
+        return countViajesExitosos + countViajesRecurrentesExitosos;
+    }
 }

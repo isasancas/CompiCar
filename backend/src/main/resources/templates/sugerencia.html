@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Nueva sugerencia o pregunta - CompiCar</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        
+        <!-- Logo -->
+        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 25px;">
+            <img src="cid:logoCompiCar" alt="CompiCar" style="height: 48px; width: auto; max-width: 100%; display: block; margin: 0 auto;" />
+        </div>
+
+        <!-- Título -->
+        <h2 style="color: #2b6cb0; text-align: center; margin-top: 0; margin-bottom: 20px;">Nueva sugerencia o pregunta</h2>
+
+        <!-- Datos del remitente -->
+        <div style="background-color: #ebf8ff; border-left: 4px solid #3182ce; padding: 12px 16px; border-radius: 4px; margin-bottom: 20px;">
+            <p style="margin: 0 0 6px 0; color: #2d3748; font-size: 15px;">
+                <strong>Usuario:</strong> <span th:text="${nombreUsuario}">Nombre del usuario</span>
+            </p>
+            <p style="margin: 0; color: #2d3748; font-size: 15px;">
+                <strong>Email:</strong> <a th:href="'mailto:' + ${emailUsuario}" th:text="${emailUsuario}" style="color: #2b6cb0; text-decoration: none;">email@ejemplo.com</a>
+            </p>
+        </div>
+
+        <!-- Contenido del mensaje -->
+        <p style="color: #4a5568; font-size: 14px; font-weight: bold; margin-bottom: 8px;">Mensaje recibido:</p>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; color: #2d3748; font-size: 15px; line-height: 1.6; white-space: pre-wrap;" th:text="${mensaje}">
+            Aquí se mostrará el mensaje enviado por el usuario.
+        </div>
+
+        <!-- Pie de página -->
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0 20px 0;">
+        <p style="color: #a0aec0; font-size: 12px; text-align: center; margin: 0;">Este es un mensaje automático del sistema de sugerencias de CompiCar.</p>
+    </div>
+</body>
+</html>

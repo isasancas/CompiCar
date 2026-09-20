@@ -18,6 +18,7 @@ import PerfilPublico from './components/autenticacion/PerfilPublico';
 import Notificaciones from './components/notificacion/Notificaciones';
 import Valoraciones from './components/autenticacion/Valoraciones';
 import ViajesAsociadosScreen from './components/viajes/ViajesAsociadosScreen';
+import SolicitarNuevaParada from './components/viajes/SolicitarNuevaParada';
 
 const hasValidToken = () => {
   const token = localStorage.getItem('token');
@@ -65,6 +66,7 @@ function App() {
             <Route path="/mis-viajes" element={<MisViajes />} />
             <Route path="/ofrecer-trayecto" element={<CrearViaje />} />
             <Route path="/viajes/:slug" element={<DetalleViaje />} />
+            <Route path="/viajes/:slug/solicitar-parada" element={isLoggedIn ? <SolicitarNuevaParada /> : <Navigate to="/inicio-sesion" replace />} />
             <Route path="/ofrecer-trayecto" element={isLoggedIn ? <CrearViaje /> : <Navigate to="/inicio-sesion" replace />} />
             <Route path="/buscar" element={<ResultadosBusquedaViajes />} />
             <Route path="/explorar" element={<TodosLosViajes />} />

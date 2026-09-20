@@ -13,6 +13,7 @@ public class ViajeDTO {
 
     private Long id;
     private LocalDateTime fechaHoraSalida;
+    private LocalDateTime fechaCancelacion;
     private String estado;
     private Integer plazasDisponibles;
     private BigDecimal precio;
@@ -68,6 +69,14 @@ public class ViajeDTO {
 
     public void setFechaHoraSalida(LocalDateTime fechaHoraSalida) {
         this.fechaHoraSalida = fechaHoraSalida;
+    }
+
+    public LocalDateTime getFechaCancelacion() {
+        return fechaCancelacion;
+    }
+
+    public void setFechaCancelacion(LocalDateTime fechaCancelacion) {
+        this.fechaCancelacion = fechaCancelacion;
     }
 
     public String getEstado() {

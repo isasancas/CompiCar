@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.compicar.correo.CorreoService;
 import com.compicar.notificacion.Notificacion;
 import com.compicar.notificacion.NotificacionRepository;
 import com.compicar.notificacion.TipoNotificacion;
@@ -49,15 +50,18 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
     private final PagoRepository pagoRepository;
     private final NotificacionRepository notificacionRepository;
     private final StripeService stripeService;
+    private final CorreoService correoService;
 
     public ViajeRecurrenteServiceImpl(ViajeRecurrenteRepository viajeRecurrenteRepository, PersonaRepository personaRepository, 
-        ReservaRepository reservaRepository, PagoRepository pagoRepository, NotificacionRepository notificacionRepository, StripeService stripeService) {
+        ReservaRepository reservaRepository, PagoRepository pagoRepository, NotificacionRepository notificacionRepository, StripeService stripeService,
+         CorreoService correoService) {
         this.viajeRecurrenteRepository = viajeRecurrenteRepository;
         this.personaRepository = personaRepository;
         this.reservaRepository = reservaRepository;
         this.pagoRepository = pagoRepository;
         this.notificacionRepository = notificacionRepository;
         this.stripeService = stripeService;
+        this.correoService = correoService;
     }
 
     @Override
@@ -76,7 +80,9 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 parada.getId(),
                 parada.getLocalizacion(),
                 parada.getTipo().toString(),
-                parada.getOrden()
+                    parada.getOrden(),
+                    parada.getLatitud(),
+                    parada.getLongitud()
             ))
             .toList() : List.of();
 
@@ -100,6 +106,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         dto.setSlug(vr.getSlug());
         dto.setCheckin(vr.getCheckin());
         dto.setFechaHoraSalida(vr.getFechaHoraSalida());
+        dto.setFechaCancelacion(vr.getFechaCancelacion());
         dto.setFechaHoraFin(vr.getFechaHoraFin());
         dto.setEstado(vr.getEstado() != null ? vr.getEstado().toString() : null);
         dto.setPlazasDisponibles(vr.getPlazasDisponibles());
@@ -150,6 +157,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 vr.setEstado(EstadoViaje.PENDIENTE);
                 vr.setPlazasDisponibles(viajePadre.getPlazasDisponibles());
                 vr.setPrecio(viajePadre.getPrecio());
+                vr.setKilometrosRecorridos(viajePadre.getKilometrosRecorridos());
                 vr.setPersona(viajePadre.getPersona());
                 vr.setVehiculo(viajePadre.getVehiculo());
                 vr.setCheckin(generarCheckin());
@@ -183,11 +191,6 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         return viajeRecurrenteRepository.saveAll(ocurrencias);
     }
 
-    /**
-     * FINALIZAR VIAJE RECURRENTE:
-     * Captura en Stripe el pago total (si es la primera fecha del paquete en finalizar),
-     * libera los fondos proporcionales de esta fecha al conductor y actualiza estados.
-     */
     @Override
     @Transactional
     public ViajeRecurrenteDTO finalizarViajeRecurrente(String usuarioEmail, String slug) {
@@ -207,6 +210,11 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
 
         BigDecimal totalGanadoEnEsteViaje = BigDecimal.ZERO;
         List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
+                ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
+                : "Fecha no especificada";
 
         for (Reserva reserva : reservasActivas) {
             Pago pago = reserva.getPago();
@@ -241,22 +249,45 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 totalGanadoEnEsteViaje = totalGanadoEnEsteViaje.add(gananciaEstaReserva);
             }
 
-            // 5. Notificar al pasajero
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-            String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
-                    ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
-                    : "";
-
+            // 5. Notificación en la aplicación
             String msj = "El viaje del " + fechaSalida + " ha finalizado. ¡Gracias por viajar!";
             Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_MODIFICADO);
             notificacionRepository.save(noti);
+
+            // 6. Envío de correo electrónico al pasajero
+            Persona pasajero = reserva.getPersona();
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+                String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+                correoService.sendViajeRecurrenteFinalizadoPasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaSalida
+                );
+            }
         }
 
-        // 6. Cambiar estado del viaje recurrente
+        // 7. Cambiar estado del viaje recurrente
         viajeRecurrente.setEstado(EstadoViaje.FINALIZADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
-        // 7. Liberar saldo al conductor solo por la ganancia correspondiente a este día
+        // 8. Liberar saldo al conductor solo por la ganancia correspondiente a este día
         BigDecimal actuales = conductor.getFondosActuales() != null ? conductor.getFondosActuales() : BigDecimal.ZERO;
         BigDecimal totales = conductor.getFondosTotales() != null ? conductor.getFondosTotales() : BigDecimal.ZERO;
 
@@ -287,12 +318,13 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
         boolean teniaReservasActivas = !reservasActivas.isEmpty();
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
         String fechaSalida = viajeRecurrente.getFechaHoraSalida() != null 
                 ? viajeRecurrente.getFechaHoraSalida().format(formatter) 
-                : "";
+                : "Fecha no especificada";
 
         for (Reserva reserva : reservasActivas) {
+            reserva.setFechaCancelacion(LocalDateTime.now());
             reserva.setEstado(EstadoReserva.CANCELADA);
             reservaRepository.save(reserva);
 
@@ -335,12 +367,42 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 }
             }
 
-            // Notificar al pasajero
+            // 1. Notificación en la aplicación
             String msj = "El viaje del " + fechaSalida + " ha sido cancelado por el conductor.";
             Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
             notificacionRepository.save(noti);
+
+            // 2. Envío de correo electrónico al pasajero
+            Persona pasajero = reserva.getPersona();
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+                String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+                correoService.sendViajeRecurrenteCanceladoPasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaSalida,
+                    reserva.getCantidadPlazas()
+                );
+            }
         }
 
+        viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
         viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
@@ -369,7 +431,6 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         // 2. Validar que este pasajero tenga una reserva activa en este viaje recurrente
         List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeRecurrente.getId(), EstadoReserva.CANCELADA);
         
-        // Buscamos si el usuario actual posee una reserva con estado CONFIRMADA
         boolean tieneReservaConfirmadaElUsuario = reservasActivas.stream()
                 .anyMatch(r -> r.getPersona().getId().equals(usuario.getId()) 
                             && r.getEstado() == EstadoReserva.CONFIRMADA);
@@ -387,7 +448,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El viaje ya ha sido cancelado");
         }
 
-        // 4. Validar el tiempo de espera (Ej: Que haya salido y hayan pasado al menos 15 minutos)
+        // 4. Validar el tiempo de espera
         LocalDateTime ahora = LocalDateTime.now();
         LocalDateTime salida = viajeRecurrente.getFechaHoraSalida();
 
@@ -405,11 +466,15 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
 
         boolean teniaReservasActivas = !reservasActivas.isEmpty();
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-        String fechaSalida = salida != null ? salida.format(formatter) : "";
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaSalida = salida != null ? salida.format(formatter) : "Fecha no especificada";
 
-        // 5. Iterar y reembolsar a los pasajeros (tu lógica original de Stripe que está perfecta)
+        Persona conductor = viajeRecurrente.getPersona();
+        String nombreConductor = (conductor != null && conductor.getNombre() != null) ? conductor.getNombre() : "El conductor";
+
+        // 5. Iterar y reembolsar a los pasajeros
         for (Reserva reserva : reservasActivas) {
+            reserva.setFechaCancelacion(LocalDateTime.now());
             reserva.setEstado(EstadoReserva.CANCELADA);
             reservaRepository.save(reserva);
 
@@ -449,17 +514,45 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 }
             }
 
+            // Notificación en la aplicación
             String msj = "El viaje del " + fechaSalida + " ha sido cancelado por incomparecencia del conductor.";
             Notificacion noti = new Notificacion(msj, reserva.getPersona(), TipoNotificacion.VIAJE_CANCELADO);
             notificacionRepository.save(noti);
+
+            // Envío de correo electrónico al pasajero
+            Persona pasajero = reserva.getPersona();
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (reserva.getParadaSubida() != null && reserva.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = reserva.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (reserva.getParadaBajada() != null && reserva.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = reserva.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+
+                correoService.sendIncomparecenciaConductorRecurrentePasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaSalida
+                );
+            }
         }
 
+        viajeRecurrente.setFechaCancelacion(LocalDateTime.now());
         viajeRecurrente.setEstado(EstadoViaje.CANCELADO);
         viajeRecurrenteRepository.save(viajeRecurrente);
 
         // 6. Penalizar al verdadero conductor del viaje
-        Persona conductor = viajeRecurrente.getPersona();
-        if (teniaReservasActivas) {
+        if (teniaReservasActivas && conductor != null) {
             conductor.incrementarCancelaciones();
             personaRepository.save(conductor);
         }
@@ -551,6 +644,7 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         }
 
         for (ViajeRecurrente viaje : viajesExpirados) {
+            viaje.setFechaCancelacion(LocalDateTime.now());
             viaje.setEstado(EstadoViaje.CANCELADO);
         }
 
@@ -589,13 +683,11 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
 
         // 5. Lógica de Plazas Disponibles
         if (viajeEditado.getPlazasDisponibles() != null) {
-            // Contamos plazas ocupadas actualmente en este viaje recurrente
             int plazasOcupadas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(viajeExistente.getId(), EstadoReserva.CANCELADA)
                     .stream()
                     .mapToInt(Reserva::getCantidadPlazas)
                     .sum();
 
-            // Interpretamos el valor del Front como "Capacidad Total"
             int nuevoTotal = viajeEditado.getPlazasDisponibles();
 
             if (nuevoTotal < plazasOcupadas) {
@@ -603,7 +695,6 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                     "El total de plazas no puede ser inferior a las plazas ya reservadas: " + plazasOcupadas);
             }
 
-            // Seteamos la disponibilidad real (Total - Ocupadas)
             viajeExistente.setPlazasDisponibles(nuevoTotal - plazasOcupadas);
         }
 
@@ -612,7 +703,13 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         
         List<Reserva> reservasActivas = reservaRepository.findByViajeRecurrenteIdAndEstadoNot(guardado.getId(), EstadoReserva.CANCELADA);
 
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy 'a las' HH:mm");
+        String fechaFormateada = guardado.getFechaHoraSalida() != null 
+                ? guardado.getFechaHoraSalida().format(formatter) 
+                : "Fecha no especificada";
+
         for (Reserva r : reservasActivas) {
+            // Notificación en la aplicación
             String msj = "Se han modificado los detalles del viaje " + guardado.getSlug() + ". Revisa el nuevo horario o número de plazas disponibles.";
             
             Notificacion noti = new Notificacion(
@@ -621,6 +718,35 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
                 TipoNotificacion.VIAJE_MODIFICADO
             );
             notificacionRepository.save(noti);
+
+            // Envío de correo electrónico al pasajero
+            Persona pasajero = r.getPersona();
+            if (pasajero != null && pasajero.getEmail() != null) {
+                String origen = "Origen";
+                if (r.getParadaSubida() != null && r.getParadaSubida().getLocalizacion() != null) {
+                    String origenRaw = r.getParadaSubida().getLocalizacion();
+                    origen = origenRaw.contains(",") ? origenRaw.split(",")[0].trim() : origenRaw.trim();
+                }
+
+                String destino = "Destino";
+                if (r.getParadaBajada() != null && r.getParadaBajada().getLocalizacion() != null) {
+                    String destinoRaw = r.getParadaBajada().getLocalizacion();
+                    destino = destinoRaw.contains(",") ? destinoRaw.split(",")[0].trim() : destinoRaw.trim();
+                }
+
+                String nombrePasajero = pasajero.getNombre() != null ? pasajero.getNombre() : "Pasajero";
+                String nombreConductor = conductor.getNombre() != null ? conductor.getNombre() : "El conductor";
+
+                correoService.sendViajeRecurrenteModificadoPasajero(
+                    pasajero.getEmail(),
+                    nombrePasajero,
+                    nombreConductor,
+                    origen,
+                    destino,
+                    fechaFormateada,
+                    guardado.getPrecio()
+                );
+            }
         }
 
         return mapearADTO(guardado);
@@ -660,5 +786,32 @@ public class ViajeRecurrenteServiceImpl implements ViajeRecurrenteService {
         }
         return candidato;
     }
+
+    public Integer contarKilometrosRecorridosPorUsuario(String usuarioEmail) {
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesRecurrentes = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId());
+        
+        Integer totalKilometros = 0;
+        for (ViajeRecurrente viaje : viajesRecurrentes) {
+            if (viaje.getKilometrosRecorridos() != null) {
+                totalKilometros += viaje.getKilometrosRecorridos();
+            }
+        }
+        return totalKilometros;
+    }
     
+    public List<ViajeRecurrenteDTO> obtenerViajesRecurrentesExitosos(String usuarioEmail) {
+        Persona persona = personaRepository.findByEmail(usuarioEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        List<ViajeRecurrente> viajesExitosos = viajeRecurrenteRepository
+            .findViajesRecurrentesFinalizadosPorUsuarioIncluyendoConductor(persona.getId());
+
+        return viajesExitosos.stream()
+            .map(this::mapearADTO)
+            .toList();
+    }
 }

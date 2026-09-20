@@ -1,14 +1,13 @@
 package com.compicar.persona;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -69,6 +68,7 @@ public class PersonaServiceImpl implements PersonaService {
         persona.setSegundoApellido(registro.getSegundoApellido());
         persona.setEmail(registro.getEmail());
         persona.setTelefono(registro.getNumTelefono());
+        persona.setFechaAntiguedad(LocalDate.now());
 
         String contrasenaEncriptada = passwordEncoder.encode(registro.getContrasena());
         persona.setContrasena(contrasenaEncriptada);
