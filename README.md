@@ -11,8 +11,9 @@ Instala las siguientes herramientas antes de continuar:
 | Herramienta | Versión mínima | Descarga |
 |---|---|---|
 | Java JDK | 21 | https://adoptium.net/ |
-| Node.js | LTS | https://nodejs.org/ |
+| Node.js | v22+ (LTS) | https://nodejs.org/ |
 | PostgreSQL | 15+ (probado en 18.3) | https://www.postgresql.org/download/ |
+| Android Studio | Última versión | https://developer.android.com/studio |
 
 Verifica que estén correctamente instaladas:
 
@@ -127,6 +128,54 @@ También existe un archivo llamado **run-dev.bat** para Windows, el cual se pued
 
 ---
 
+## Generar APK para Android (Capacitor)
+
+Para compilar y generar la aplicación ejecutable (`.apk`) de Android conectada al backend desplegado en producción:
+
+### 1. Archivos de entorno (`frontend/`)
+
+Asegúrate de contar con los siguientes archivos en la raíz de `frontend/` para diferenciar los entornos:
+
+- **`.env.development`** (usado automáticamente con `npm run dev`):
+  ```env
+  VITE_API_BASE_URL=http://localhost:8080
+  ```
+- **`.env.production`** (usado automáticamente con `npm run build` para la APK):
+  ```env
+  VITE_API_BASE_URL=https://tu-aplicacion.koyeb.app
+  ```
+
+### 2. Secuencia de comandos
+
+Ejecuta los siguientes comandos desde la carpeta `frontend/`:
+
+```bash
+# 1. Compilar los activos estáticos de React para producción
+npm run build
+
+# 2. Copiar los archivos compilados al proyecto nativo Android
+npx cap sync android
+
+# 3. Abrir el proyecto en Android Studio
+npx cap open android
+```
+
+### 3. Generación del ejecutable en Android Studio
+
+1. Espera a que Android Studio finalice la sincronización inicial de Gradle.
+2. Ve al menú superior **Build** > **Generate App Bundles or APKs** > **Build APK(s)** (o **Build** > **Build Bundle(s) / APK(s)** > **Build APK(s)**).
+3. Tras finalizar la compilación, aparecerá un aviso emergente abajo a la derecha. Haz clic en **locate**.
+
+### 4. Ubicación de la APK compilada
+
+El archivo ejecutable estará ubicado en:
+
+```text
+frontend/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
 ## Tests E2E con Selenium
 
 El proyecto incluye una base de tests E2E en Java (JUnit 5 + Selenium) en:
@@ -153,7 +202,7 @@ cd backend
 .\mvnw.cmd -Pe2e test
 ```
 
-Por defecto (`.\\mvnw.cmd test`) los E2E quedan excluidos para no romper CI.
+Por defecto (`.\mvnw.cmd test`) los E2E quedan excluidos para no romper CI.
 
 Si quieres ejecutar todos los tests (unitarios + E2E), usa:
 
@@ -162,4 +211,3 @@ cd backend
 .\mvnw.cmd test
 .\mvnw.cmd -Pe2e test
 ```
-

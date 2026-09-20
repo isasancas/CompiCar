@@ -57,7 +57,11 @@ public class SecurityConfig {
         // Permitir producción y desarrollo local
         configuration.setAllowedOriginPatterns(List.of(
             "https://compicar.koyeb.app",
+            "https://*.koyeb.app",
+            "https://localhost",
+            "https://localhost:*",
             "http://localhost:*",
+            "capacitor://localhost",
             "http://127.0.0.1:*"
         ));
         
