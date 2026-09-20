@@ -168,6 +168,34 @@ class ParadaControllerTest {
             .andExpect(status().isNotFound());
     }
 
+    @Test
+    void obtenerTop5Localizaciones_ok_devuelveLista() throws Exception {
+        Object[] loc1 = new Object[]{"Madrid", 15};
+        Object[] loc2 = new Object[]{"Barcelona", 10};
+        when(paradaService.obtenerTop5Localizaciones()).thenReturn(List.of(loc1, loc2));
+
+        mockMvc.perform(get("/api/paradas/top5-localizaciones"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0][0]").value("Madrid"))
+            .andExpect(jsonPath("$[0][1]").value(15))
+            .andExpect(jsonPath("$[1][0]").value("Barcelona"))
+            .andExpect(jsonPath("$[1][1]").value(10));
+
+        verify(paradaService).obtenerTop5Localizaciones();
+    }
+
+    @Test
+    void obtenerTop5Localizaciones_vacio_devuelveListaVacia() throws Exception {
+        when(paradaService.obtenerTop5Localizaciones()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/paradas/top5-localizaciones"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$.length()").value(0));
+
+        verify(paradaService).obtenerTop5Localizaciones();
+    }
+
     private Parada parada(String localizacion, TipoParada tipo, Integer orden) {
         Parada p = new Parada();
         p.setLocalizacion(localizacion);

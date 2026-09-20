@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 class ParadaIntegrationTest extends BaseIntegrationTest {
 
@@ -93,5 +94,29 @@ class ParadaIntegrationTest extends BaseIntegrationTest {
     void obtenerParadasPorViaje_sinToken_401() throws Exception {
         mockMvc.perform(get("/api/paradas/viaje/1"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void obtenerTop5Localizaciones_ok() throws Exception {
+        String token = registerAndLogin();
+        Long vehiculoId = crearVehiculo(token);
+        crearViaje(token, vehiculoId);
+
+        mockMvc.perform(get("/api/paradas/top5-localizaciones")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$[0][0]").exists())
+            .andExpect(jsonPath("$[0][1]").exists());
+    }
+
+    @Test
+    void obtenerTop5Localizaciones_sinDatos_devuelveListaVacia() throws Exception {
+        String token = registerAndLogin();
+
+        mockMvc.perform(get("/api/paradas/top5-localizaciones")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray());
     }
 }
